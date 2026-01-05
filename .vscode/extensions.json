@@ -1,5 +1,18 @@
 {
   "recommendations": [
-    "ms-kubernetes-tools.vscode-kubernetes-tools"
+    "ms-kubernetes-tools.vscode-kubernetes-tools",
+    "docker.docker",
+    "redhat.vscode-yaml",
+    "sonarsource.sonarlint-vscode",
+    "editorconfig.editorconfig",
+    "vivaxy.vscode-conventional-commits",
+    "esbenp.prettier-vscode",
+    "timonwong.shellcheck",
+    "foxundermoon.shell-format",
+    "zainchen.json",
+    "yzhang.markdown-all-in-one",
+    "davidanson.vscode-markdownlint",
+    "alefragnani.project-manager",
+    "tsandall.opa"
   ]
 }
