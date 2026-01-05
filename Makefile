@@ -72,8 +72,8 @@ k8s-teardown:
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
 	@echo ""
-	@read -r -p "Confirm: Proceed with 'Kubernetes' in '$(ENV)'$(if $(K8S_STACK_DIR), targeting '$(K8S_STACK_DIR)',)? [yes $(ENV)/no] " confirm; \
-		if [[ "$$confirm" != "yes $(ENV)" ]]; then \
+	@read -r -p "Confirm: Proceed with 'Kubernetes' in '$(K8S_ENV)'$(if $(K8S_STACK_DIR), targeting '$(K8S_STACK_DIR)',)? [yes $(K8S_ENV)/no] " confirm; \
+		if [[ "$$confirm" != "yes $(K8S_ENV)" ]]; then \
 			echo "Aborted."; \
 			exit 1; \
 		fi
