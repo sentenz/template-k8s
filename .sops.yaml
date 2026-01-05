@@ -18,7 +18,7 @@ creation_rules:
           - "EB46708C781B80024FC2A17F270E6358E03EC01E" # sops-k8s
           - "4A88DC2628DC86414D12825A4BCB923204FF3992" # sops-sentenz
 
-  # 3. Kubernetes YAML: encrypt only secret payloads 
+  # 3. Kubernetes YAML: encrypt only secret payloads
   - path_regex: .*.yaml
     encrypted_regex: ^(data|stringData)$
     key_groups:
