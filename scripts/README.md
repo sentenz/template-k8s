@@ -1,9 +1,5 @@
 # `scripts/`
 
-- [1. Linux](#1-linux)
-
-## 1. Linux
-
 1. Files and Folders
 
     - `shell/`
