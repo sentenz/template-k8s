@@ -11,13 +11,27 @@
   - [2.2. Cryptographic](#22-cryptographic)
     - [2.2.1. TLS Certificates and Private Keys](#221-tls-certificates-and-private-keys)
     - [2.2.2. CA-Signed Certificates from CSRs](#222-ca-signed-certificates-from-csrs)
-  - [2.3. Secret Manager](#23-secret-manager)
-    - [2.3.1. SOPS](#231-sops)
-  - [2.4. Task Runner](#24-task-runner)
-    - [2.4.1. Makefile](#241-makefile)
-- [3. Troubleshoot](#3-troubleshoot)
-  - [3.1. TODO](#31-todo)
-- [4. References](#4-references)
+- [3. Contribute](#3-contribute)
+  - [3.1. Task Runner](#31-task-runner)
+    - [3.1.1. Make](#311-make)
+  - [3.2. Bootstrap](#32-bootstrap)
+    - [3.2.1. Scripts](#321-scripts)
+  - [3.3. Release Manager](#33-release-manager)
+    - [3.3.1. Semantic-Release](#331-semantic-release)
+  - [3.4. Update Manager](#34-update-manager)
+    - [3.4.1. Renovate](#341-renovate)
+    - [3.4.2. Dependabot](#342-dependabot)
+  - [3.5. Secrets Manager](#35-secrets-manager)
+    - [3.5.1. SOPS](#351-sops)
+  - [3.6. Container Manager](#36-container-manager)
+    - [3.6.1. Docker](#361-docker)
+  - [3.7. Policy Manager](#37-policy-manager)
+    - [3.7.1. Conftest](#371-conftest)
+  - [3.8. Supply Chain Manager](#38-supply-chain-manager)
+    - [3.8.1. Trivy](#381-trivy)
+- [4. Troubleshoot](#4-troubleshoot)
+  - [4.1. TODO](#41-todo)
+- [5. References](#5-references)
 
 ## 1. Details
 
@@ -65,8 +79,8 @@ flowchart TD
             end
         end
 
-        ingressController --> |Routes<br/>host foo.example.com<br/>path /| serviceA
-        ingressController --> |Routes<br/>host foo.example.com<br/>path /api| serviceB
+        ingressController --> |Routes<br/>host foo.example.com<br/>path `/` | serviceA
+        ingressController --> |Routes<br/>host foo.example.com<br/>path `/api`| serviceB
     end
 ```
 
@@ -139,88 +153,291 @@ TODO
 
 TODO
 
-### 2.3. Secret Manager
+## 3. Contribute
 
-#### 2.3.1. SOPS
+Contribution guidelines and project management tools.
 
-1. GPG Key Pair Generation
+### 3.1. Task Runner
 
-    - Task Runner
-      > Generate a new key pair to be used with SOPS.
+#### 3.1.1. Make
+
+[Make](https://www.gnu.org/software/make/) is a automation tool that defines and manages tasks to streamline development workflows.
+
+1. Insights and Details
+
+    - [Makefile](Makefile)
+      > Makefile defining tasks for building, testing, and managing the project.
+
+2. Usage and Instructions
+
+    - Tasks
+
+      ```bash
+      make help
+      ```
 
       > [!NOTE]
-      > The UID can be customized via the `SOPS_UID` variable (defaults to `sops-k8s`).
+      > - Each task description must begin with `##` to be included in the task list.
 
-      ```sh
-      make secret-gpg-generate SOPS_UID=<uid>
+      ```plaintext
+      $ make help
+
+      Tasks
+              A collection of tasks used in the current project.
+
+      Usage
+              make <task>
+
+              bootstrap         Initialize a software development workspace with requisites
+              setup             Install and configure all dependencies essential for development
+              teardown          Remove development artifacts and restore the host to its pre-setup state
       ```
 
-2. GPG Public Key Fingerprint
+### 3.2. Bootstrap
 
-    - Task Runner
-      > Print the  GPG Public Key fingerprint associated with a given UID.
+#### 3.2.1. Scripts
 
-      ```sh
-      make secret-gpg-show SOPS_UID=<uid>
+[scripts/](scripts/README.md) provides scripts to bootstrap, setup, and teardown a software development workspace with requisites.
+
+1. Insights and Details
+
+    - [bootstrap.sh](scripts/bootstrap.sh)
+      > Initializes a software development workspace with requisites.
+
+    - [setup.sh](scripts/setup.sh)
+      > Installs and configures all dependencies essential for development.
+
+    - [teardown.sh](scripts/teardown.sh)
+      > Removes development artifacts and restores the host to its pre-setup state.
+
+2. Usage and Instructions
+
+    - Tasks
+
+      ```bash
+      make bootstrap
       ```
 
-    - [.sops.yaml](.sops.yaml)
-      > The GPG UID is required for populating in `.sops.yaml`.
+      ```bash
+      make setup
+      ```
+
+      ```bash
+      make teardown
+      ```
+
+### 3.3. Release Manager
+
+#### 3.3.1. Semantic-Release
+
+[Semantic-Release](https://github.com/semantic-release/semantic-release) automates the release process by analyzing commit messages to determine the next version number, generating changelog and release notes, and publishing the release.
+
+1. Insights and Details
+
+    - [.releaserc.json](.releaserc.json)
+      > Configuration file for Semantic-Release specifying release rules and plugins.
+
+2. Usage and Instructions
+
+    - CI/CD
 
       ```yaml
-      creation_rules:
-        - pgp: "<fingerprint>" # <uid>
+      uses: sentenz/actions/semantic-release@latest
       ```
 
-3. SOPS Encrypt/Decrypt
+### 3.4. Update Manager
 
-    - Task Runner
-      > Encrypt/decrypt one or more files in place using SOPS.
+#### 3.4.1. Renovate
 
-      ```sh
-      make secret-sops-encrypt <files>
-      make secret-sops-decrypt <files>
+[Renovate](https://github.com/renovatebot/renovate) automates dependency updates by creating merge requests for outdated dependencies, libraries and packages.
+
+1. Insights and Details
+
+    - [renovate.json](renovate.json)
+      > Configuration file for Renovate specifying update rules and schedules.
+
+2. Usage and Instructions
+
+    - CI/CD
+
+      ```yaml
+      uses: sentenz/actions/renovate@latest
       ```
 
-### 2.4. Task Runner
+#### 3.4.2. Dependabot
 
-#### 2.4.1. Makefile
+[Dependabot](https://github.com/dependabot/dependabot-core) automates dependency updates by creating pull requests for outdated dependencies, libraries and packages.
 
-- [Makefile](Makefile)
-  > The Makefile serves as the task runner.
+1. Insights and Details
 
-  > [!NOTE]
-  > - Run the `make help` command in the terminal to list the tasks used for the project.
-  > - Targets **must** have a leading comment line starting with `##` to be included in the task list.
+    - [.github/dependabot.yml](.github/dependabot.yml)
+      > Configuration file for Dependabot specifying update rules and schedules.
 
-  ```plaintext
-  $ make help
+### 3.5. Secrets Manager
 
-  Task Runner
-          A collection of tasks used in the current project.
+#### 3.5.1. SOPS
 
-  Usage
-          make <task>
+[SOPS (Secrets OPerationS)](https://github.com/getsops/sops) is a tool for managing and encrypting sensitive data such as passwords, API keys, and other secrets.
 
-          bootstrap                       Initialize a software development workspace with requisites
-          setup                           Install and configure all dependencies essential for development
-          teardown                        Remove development artifacts and restore the host to its pre-setup state
-          k8s-setup                       Set up the development environment using Docker Compose
-          k8s-teardown                    Tear down the development environment using Docker Compose
-          k8s-deploy-dependency-track     Deploy Kubernetes manifests for Dependency-Track
-          k8s-destroy-dependency-track    Destroy Kubernetes manifests for Dependency-Track
-          k8s-render-manifests            Render all Kubernetes manifests
-          k8s-monitor-status              Monitor the status of all Kubernetes resources
-          helm-vendor-charts              Vendor all Helm charts
-          helm-render-charts              Render all Helm charts
-  ```
+1. Insights and Details
 
-## 3. Troubleshoot
+    - [.sops.yaml](.sops.yaml)
+      > Configuration file for SOPS specifying encryption rules and key management.
 
-### 3.1. TODO
+2. Usage and Instructions
+
+    - GPG Key Pair Generation
+
+      - Tasks
+        > Generate a new key pair to be used with SOPS.
+
+        > [!NOTE]
+        > The UID can be customized via the `SECRETS_SOPS_UID` variable (defaults to `sops-k8s`).
+
+        ```bash
+        make secrets-gpg-generate SECRETS_SOPS_UID=<uid>
+        ```
+
+    - GPG Public Key Fingerprint
+
+      - Tasks
+        > Print the  GPG Public Key fingerprint associated with a given UID.
+
+        ```bash
+        make secrets-gpg-show SECRETS_SOPS_UID=<uid>
+        ```
+
+      - [.sops.yaml](.sops.yaml)
+        > The GPG UID is required for populating in `.sops.yaml`.
+
+        ```yaml
+        creation_rules:
+          - pgp: "<fingerprint>" # <uid>
+        ```
+
+    - SOPS Encrypt/Decrypt
+
+      - Tasks
+        > Encrypt/decrypt one or more files in place using SOPS.
+
+        ```bash
+        make secrets-sops-encrypt <files>
+        ```
+
+        ```bash
+        make secrets-sops-decrypt <files>
+        ```
+
+### 3.6. Container Manager
+
+#### 3.6.1. Docker
+
+[Docker](https://github.com/docker) containerization tool to run applications in isolated container environments and execute container-based tasks.
+
+1. Insights and Details
+
+    - [Dockerfile](Dockerfile)
+      > Dockerfile defining the container image for the project.
+
+2. Usage and Instructions
+
+    - CI/CD
+
+      ```yaml
+      # TODO
+      ```
+
+    - Tasks
+
+      ```bash
+      # TODO
+      ```
+
+### 3.7. Policy Manager
+
+#### 3.7.1. Conftest
+
+[Conftest](https://www.conftest.dev/) is a **Policy as Code (PaC)** tool to streamline policy management for improved development, security and audit capability.
+
+1. Insights and Details
+
+    - [conftest.toml](conftest.toml)
+      > Configuration file for Conftest specifying policy paths and output formats.
+
+    - [tests/policy](tests/policy/)
+      > Directory contains Rego policies for Conftest to enforce best practices and compliance standards.
+
+2. Usage and Instructions
+
+    - CI/CD
+
+      ```yaml
+      uses: sentenz/actions/regal@latest
+      ```
+
+      ```yaml
+      uses: sentenz/actions/conftest@latest
+      ```
+
+    - Tasks
+
+      ```bash
+      make policy-lint-regal <filepath>
+      ```
+
+      ```bash
+      make policy-analysis-conftest <filepath>
+      ```
+
+### 3.8. Supply Chain Manager
+
+#### 3.8.1. Trivy
+
+[Trivy](https://github.com/aquasecurity/trivy) is a comprehensive security scanner for vulnerabilities, misconfigurations, and compliance issues in container images, filesystems, and source code.
+
+1. Insights and Details
+
+    - [trivy.yaml](trivy.yaml)
+      > Configuration file for Trivy specifying scan settings and options.
+
+    - [.trivyignore](.trivyignore)
+      > File specifying vulnerabilities to ignore during Trivy scans.
+
+2. Usage and Instructions
+
+    - CI/CD
+
+      ```yaml
+      uses: sentenz/actions/trivy@latest
+      ```
+
+    - Tasks
+
+      ```bash
+      make sast-trivy-fs <path>
+      ```
+
+      ```bash
+      make sast-trivy-sbom-cyclonedx-fs <path>
+      ```
+
+      ```bash
+      make sast-trivy-sbom-scan <sbom_path>
+      ```
+
+      ```bash
+      make sast-trivy-sbom-license <sbom_path>
+      ```
+
+## 4. Troubleshoot
+
+### 4.1. TODO
 
 TODO
 
-## 4. References
+## 5. References
 
 - Sentenz [Kubernetes](TODO) article.
+- Sentenz [Template DX](https://github.com/sentenz/template-dx) repository.
+- Sentenz [Actions](https://github.com/sentenz/actions) repository.
+- Sentenz [Manager Tools](https://github.com/sentenz/convention/issues/392) article.
