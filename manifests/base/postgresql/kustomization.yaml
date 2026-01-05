@@ -12,7 +12,7 @@ helmGlobals:
 
 helmCharts:
   - name: postgresql
-    version: 16.7.27
+    version: 18.1.11
     repo: https://charts.bitnami.com/bitnami
     releaseName: postgresql
     namespace: postgresql
