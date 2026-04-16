@@ -12,23 +12,6 @@
     - [2.2.1. TLS Certificates and Private Keys](#221-tls-certificates-and-private-keys)
     - [2.2.2. CA-Signed Certificates from CSRs](#222-ca-signed-certificates-from-csrs)
 - [3. Contribute](#3-contribute)
-  - [3.1. Task Runner](#31-task-runner)
-    - [3.1.1. Make](#311-make)
-  - [3.2. Bootstrap](#32-bootstrap)
-    - [3.2.1. Scripts](#321-scripts)
-  - [3.3. Release Manager](#33-release-manager)
-    - [3.3.1. Semantic-Release](#331-semantic-release)
-  - [3.4. Update Manager](#34-update-manager)
-    - [3.4.1. Renovate](#341-renovate)
-    - [3.4.2. Dependabot](#342-dependabot)
-  - [3.5. Secrets Manager](#35-secrets-manager)
-    - [3.5.1. SOPS](#351-sops)
-  - [3.6. Container Manager](#36-container-manager)
-    - [3.6.1. Docker](#361-docker)
-  - [3.7. Policy Manager](#37-policy-manager)
-    - [3.7.1. Conftest](#371-conftest)
-  - [3.8. Supply Chain Manager](#38-supply-chain-manager)
-    - [3.8.1. Trivy](#381-trivy)
 - [4. Troubleshoot](#4-troubleshoot)
   - [4.1. TODO](#41-todo)
 - [5. References](#5-references)
@@ -155,279 +138,40 @@ TODO
 
 ## 3. Contribute
 
-Contribution guidelines and project management tools.
+[CONTRIBUTING.md](CONTRIBUTING.md) provides guidens and instructions for contributing to the project.
 
-### 3.1. Task Runner
+- [AI Agents](CONTRIBUTING.md#1-ai-agents)
+  > Automated tools that assist in various development tasks such as code generation, testing, and documentation.
 
-#### 3.1.1. Make
+- [Skills Manager](CONTRIBUTING.md#2-skills-manager)
+  > CLI tool for managing AI agent skills in development projects.
 
-[Make](https://www.gnu.org/software/make/) is a automation tool that defines and manages tasks to streamline development workflows.
+- [Task Runner](CONTRIBUTING.md#3-task-runner)
+  > Make automation tool that defines and manages tasks to streamline development workflows.
 
-1. Insights and Details
+- [Bootstrap](CONTRIBUTING.md#4-bootstrap)
+  > Scripts to bootstrap, setup, and teardown a software development workspace with requisites.
 
-    - [Makefile](Makefile)
-      > Makefile defining tasks for building, testing, and managing the project.
+- [Dev Containers](CONTRIBUTING.md#5-dev-containers)
+  > Consistent development environments using Docker containers.
 
-2. Usage and Instructions
+- [Release Manager](CONTRIBUTING.md#6-release-manager)
+  > Semantic-Release automates the release process by analyzing commit messages.
 
-    - Tasks
+- [Update Manager](CONTRIBUTING.md#7-update-manager)
+  > Renovate and Dependabot automate dependency updates by creating pull requests.
 
-      ```bash
-      make help
-      ```
+- [Secrets Manager](CONTRIBUTING.md#8-secrets-manager)
+  > SOPS for managing and encrypting sensitive data such as passwords, API keys, and other secrets.
 
-      > [!NOTE]
-      > - Each task description must begin with `##` to be included in the task list.
+- [Container Manager](CONTRIBUTING.md#9-container-manager)
+  > Docker containerization tool to run applications in isolated container environments.
 
-      ```plaintext
-      $ make help
+- [Policy Manager](CONTRIBUTING.md#10-policy-manager)
+  > Conftest for policy-as-code enforcement.
 
-      Tasks
-              A collection of tasks used in the current project.
-
-      Usage
-              make <task>
-
-              bootstrap         Initialize a software development workspace with requisites
-              setup             Install and configure all dependencies essential for development
-              teardown          Remove development artifacts and restore the host to its pre-setup state
-      ```
-
-### 3.2. Bootstrap
-
-#### 3.2.1. Scripts
-
-[scripts/](scripts/README.md) provides scripts to bootstrap, setup, and teardown a software development workspace with requisites.
-
-1. Insights and Details
-
-    - [bootstrap.sh](scripts/bootstrap.sh)
-      > Initializes a software development workspace with requisites.
-
-    - [setup.sh](scripts/setup.sh)
-      > Installs and configures all dependencies essential for development.
-
-    - [teardown.sh](scripts/teardown.sh)
-      > Removes development artifacts and restores the host to its pre-setup state.
-
-2. Usage and Instructions
-
-    - Tasks
-
-      ```bash
-      make bootstrap
-      ```
-
-      ```bash
-      make setup
-      ```
-
-      ```bash
-      make teardown
-      ```
-
-### 3.3. Release Manager
-
-#### 3.3.1. Semantic-Release
-
-[Semantic-Release](https://github.com/semantic-release/semantic-release) automates the release process by analyzing commit messages to determine the next version number, generating changelog and release notes, and publishing the release.
-
-1. Insights and Details
-
-    - [.releaserc.json](.releaserc.json)
-      > Configuration file for Semantic-Release specifying release rules and plugins.
-
-2. Usage and Instructions
-
-    - CI/CD
-
-      ```yaml
-      uses: sentenz/actions/semantic-release@latest
-      ```
-
-### 3.4. Update Manager
-
-#### 3.4.1. Renovate
-
-[Renovate](https://github.com/renovatebot/renovate) automates dependency updates by creating merge requests for outdated dependencies, libraries and packages.
-
-1. Insights and Details
-
-    - [renovate.json](renovate.json)
-      > Configuration file for Renovate specifying update rules and schedules.
-
-2. Usage and Instructions
-
-    - CI/CD
-
-      ```yaml
-      uses: sentenz/actions/renovate@latest
-      ```
-
-#### 3.4.2. Dependabot
-
-[Dependabot](https://github.com/dependabot/dependabot-core) automates dependency updates by creating pull requests for outdated dependencies, libraries and packages.
-
-1. Insights and Details
-
-    - [.github/dependabot.yml](.github/dependabot.yml)
-      > Configuration file for Dependabot specifying update rules and schedules.
-
-### 3.5. Secrets Manager
-
-#### 3.5.1. SOPS
-
-[SOPS (Secrets OPerationS)](https://github.com/getsops/sops) is a tool for managing and encrypting sensitive data such as passwords, API keys, and other secrets.
-
-1. Insights and Details
-
-    - [.sops.yaml](.sops.yaml)
-      > Configuration file for SOPS specifying encryption rules and key management.
-
-2. Usage and Instructions
-
-    - GPG Key Pair Generation
-
-      - Tasks
-        > Generate a new key pair to be used with SOPS.
-
-        > [!NOTE]
-        > The UID can be customized via the `SECRETS_SOPS_UID` variable (defaults to `sops-k8s`).
-
-        ```bash
-        make secrets-gpg-generate SECRETS_SOPS_UID=<uid>
-        ```
-
-    - GPG Public Key Fingerprint
-
-      - Tasks
-        > Print the  GPG Public Key fingerprint associated with a given UID.
-
-        ```bash
-        make secrets-gpg-show SECRETS_SOPS_UID=<uid>
-        ```
-
-      - [.sops.yaml](.sops.yaml)
-        > The GPG UID is required for populating in `.sops.yaml`.
-
-        ```yaml
-        creation_rules:
-          - pgp: "<fingerprint>" # <uid>
-        ```
-
-    - SOPS Encrypt/Decrypt
-
-      - Tasks
-        > Encrypt/decrypt one or more files in place using SOPS.
-
-        ```bash
-        make secrets-sops-encrypt <files>
-        ```
-
-        ```bash
-        make secrets-sops-decrypt <files>
-        ```
-
-### 3.6. Container Manager
-
-#### 3.6.1. Docker
-
-[Docker](https://github.com/docker) containerization tool to run applications in isolated container environments and execute container-based tasks.
-
-1. Insights and Details
-
-    - [Dockerfile](Dockerfile)
-      > Dockerfile defining the container image for the project.
-
-2. Usage and Instructions
-
-    - CI/CD
-
-      ```yaml
-      # TODO
-      ```
-
-    - Tasks
-
-      ```bash
-      # TODO
-      ```
-
-### 3.7. Policy Manager
-
-#### 3.7.1. Conftest
-
-[Conftest](https://www.conftest.dev/) is a **Policy as Code (PaC)** tool to streamline policy management for improved development, security and audit capability.
-
-1. Insights and Details
-
-    - [conftest.toml](conftest.toml)
-      > Configuration file for Conftest specifying policy paths and output formats.
-
-    - [tests/policy](tests/policy/)
-      > Directory contains Rego policies for Conftest to enforce best practices and compliance standards.
-
-2. Usage and Instructions
-
-    - CI/CD
-
-      ```yaml
-      uses: sentenz/actions/regal@latest
-      ```
-
-      ```yaml
-      uses: sentenz/actions/conftest@latest
-      ```
-
-    - Tasks
-
-      ```bash
-      make policy-lint-regal <filepath>
-      ```
-
-      ```bash
-      make policy-analysis-conftest <filepath>
-      ```
-
-### 3.8. Supply Chain Manager
-
-#### 3.8.1. Trivy
-
-[Trivy](https://github.com/aquasecurity/trivy) is a comprehensive security scanner for vulnerabilities, misconfigurations, and compliance issues in container images, filesystems, and source code.
-
-1. Insights and Details
-
-    - [trivy.yaml](trivy.yaml)
-      > Configuration file for Trivy specifying scan settings and options.
-
-    - [.trivyignore](.trivyignore)
-      > File specifying vulnerabilities to ignore during Trivy scans.
-
-2. Usage and Instructions
-
-    - CI/CD
-
-      ```yaml
-      uses: sentenz/actions/trivy@latest
-      ```
-
-    - Tasks
-
-      ```bash
-      make sast-trivy-fs <path>
-      ```
-
-      ```bash
-      make sast-trivy-sbom-cyclonedx-fs <path>
-      ```
-
-      ```bash
-      make sast-trivy-sbom-scan <sbom_path>
-      ```
-
-      ```bash
-      make sast-trivy-sbom-license <sbom_path>
-      ```
+- [Supply Chain Manager](CONTRIBUTING.md#11-supply-chain-manager)
+  > Trivy for security scanning of vulnerabilities, misconfigurations, and compliance issues.
 
 ## 4. Troubleshoot
 
