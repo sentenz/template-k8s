@@ -14,11 +14,31 @@ SHELL := bash
 HELM_RELEASE_NAME ?= mychart
 HELM_CHART_DIR ?= charts
 HELM_VALUES_FILE ?= values.yaml
+K8S_ENV ?= local
+K8S_IMAGE ?=
 K8S_IMAGE_TAG ?= latest
 K8S_NAMESPACE ?= default
-K8S_KUSTOMIZE_BIN := kustomize
+K8S_KUSTOMIZE_BIN ?= kustomize
 K8S_KUBECONFIG ?= examples/config/kubeconfig.yaml
-K8S_STACK_DIR ?= manifests/overlays
+K8S_STACK_DIR ?= dependency-track
+K8S_WAIT_TIMEOUT ?= 180s
+K8S_CONFIRM ?= false
+
+KIND_CLUSTER_NAME ?= template-k8s
+KIND_CONFIG ?= examples/kind/cluster.yaml
+KIND_PROVIDER ?= docker
+KIND_REGISTRY_ENABLED ?= true
+KIND_REGISTRY_NAME ?= kind-registry
+KIND_REGISTRY_PORT ?= 5001
+KIND_REGISTRY_IMAGE ?= registry:3
+KIND_DELETE_REGISTRY ?= false
+KIND_LOG_DIR ?= .run/kind
+
+K8S_INGRESS_ENGINE ?= cloud-provider-kind
+K8S_INGRESS_PROVIDER_PID ?= .run/cloud-provider-kind.pid
+K8S_INGRESS_PROVIDER_LOG ?= .run/cloud-provider-kind.log
+
+export KIND_EXPERIMENTAL_PROVIDER := $(KIND_PROVIDER)
 
 # Define Targets
 
@@ -47,24 +67,242 @@ teardown:
 	cd $(@D)/scripts && ./teardown.sh
 .PHONY: teardown
 
-# ── Kubernetes Setup & Teardown ──────────────────────────────────────────────────────────────────
+# ── Local Kubernetes: kind ───────────────────────────────────────────────────────────────────────
 
-## Set up the development environment using Docker Compose
-k8s-setup:
-	docker compose -f $(CURDIR)/examples/docker-compose.yaml up --scale k3s-agent=2 -d
+## Verify required local Kubernetes tooling and runtime readiness
+k8s-doctor:
+	@missing=0
+	@for bin in kind kubectl docker helm $(K8S_KUSTOMIZE_BIN); do \
+		if ! command -v $$bin >/dev/null 2>&1; then \
+			echo "missing required command: $$bin" >&2; \
+			missing=1; \
+		fi; \
+	done
+	@if [[ "$(K8S_INGRESS_ENGINE)" == "cloud-provider-kind" ]] && ! command -v cloud-provider-kind >/dev/null 2>&1; then \
+		echo "missing required command: cloud-provider-kind" >&2; \
+		missing=1; \
+	fi
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "container runtime is not ready: docker info failed" >&2; \
+		missing=1; \
+	fi
+	@if [[ $$missing -ne 0 ]]; then \
+		exit 127; \
+	fi
+	@echo "local Kubernetes dependencies are ready"
+.PHONY: k8s-doctor
+
+## Set up the local Kubernetes development environment with kind
+k8s-setup: k8s-doctor kind-registry-up kind-create kind-registry-configure k8s-ingress-provider-up k8s-wait k8s-monitor-status
 .PHONY: k8s-setup
 
-## Tear down the development environment using Docker Compose
-k8s-teardown:
-	docker compose -f $(CURDIR)/examples/docker-compose.yaml down -v
+## Tear down the local Kubernetes development environment
+k8s-teardown: k8s-ingress-provider-down kind-delete
+	@if [[ "$(KIND_DELETE_REGISTRY)" == "true" ]]; then \
+		$(MAKE) -s kind-registry-down; \
+	else \
+		echo "keeping local registry container '$(KIND_REGISTRY_NAME)' (set KIND_DELETE_REGISTRY=true to remove it)"; \
+	fi
 .PHONY: k8s-teardown
+
+## Recreate the local Kubernetes development environment from scratch
+k8s-reset:
+	@$(MAKE) -s k8s-teardown KIND_DELETE_REGISTRY=$(KIND_DELETE_REGISTRY)
+	@$(MAKE) -s k8s-setup
+.PHONY: k8s-reset
+
+## Create the kind cluster if it does not already exist
+kind-create:
+	@mkdir -p "$(dir $(K8S_KUBECONFIG))" "$(KIND_LOG_DIR)" .run
+	@if kind get clusters | grep -qx "$(KIND_CLUSTER_NAME)"; then \
+		echo "kind cluster '$(KIND_CLUSTER_NAME)' already exists"; \
+	else \
+		echo "creating kind cluster '$(KIND_CLUSTER_NAME)'"; \
+		kind create cluster \
+			--name "$(KIND_CLUSTER_NAME)" \
+			--config "$(KIND_CONFIG)" \
+			--wait "$(K8S_WAIT_TIMEOUT)" \
+			--kubeconfig "$(K8S_KUBECONFIG)"; \
+	fi
+	@kind export kubeconfig --name "$(KIND_CLUSTER_NAME)" --kubeconfig "$(K8S_KUBECONFIG)"
+.PHONY: kind-create
+
+## Delete the kind cluster; safe to run repeatedly
+kind-delete:
+	@kind delete cluster --name "$(KIND_CLUSTER_NAME)"
+.PHONY: kind-delete
+
+## Export kubeconfig for the local kind cluster
+kind-kubeconfig:
+	@mkdir -p "$(dir $(K8S_KUBECONFIG))"
+	@kind export kubeconfig --name "$(KIND_CLUSTER_NAME)" --kubeconfig "$(K8S_KUBECONFIG)"
+	@echo "export KUBECONFIG=$(K8S_KUBECONFIG)"
+.PHONY: kind-kubeconfig
+
+## Start a localhost container registry for kind images
+kind-registry-up:
+	@if [[ "$(KIND_REGISTRY_ENABLED)" != "true" ]]; then \
+		echo "local registry disabled"; \
+		exit 0; \
+	fi
+	@if docker inspect "$(KIND_REGISTRY_NAME)" >/dev/null 2>&1; then \
+		if [[ "$$(docker inspect -f '{{.State.Running}}' "$(KIND_REGISTRY_NAME)")" != "true" ]]; then \
+			echo "starting local registry '$(KIND_REGISTRY_NAME)'"; \
+			docker start "$(KIND_REGISTRY_NAME)" >/dev/null; \
+		else \
+			echo "local registry '$(KIND_REGISTRY_NAME)' already running"; \
+		fi; \
+	else \
+		echo "creating local registry '$(KIND_REGISTRY_NAME)' on localhost:$(KIND_REGISTRY_PORT)"; \
+		docker run -d --restart=always \
+			-p "127.0.0.1:$(KIND_REGISTRY_PORT):5000" \
+			--network bridge \
+			--name "$(KIND_REGISTRY_NAME)" \
+			"$(KIND_REGISTRY_IMAGE)" >/dev/null; \
+	fi
+.PHONY: kind-registry-up
+
+## Configure kind nodes to pull images from the localhost registry
+kind-registry-configure:
+	@if [[ "$(KIND_REGISTRY_ENABLED)" != "true" ]]; then \
+		echo "local registry disabled"; \
+		exit 0; \
+	fi
+	@if docker network inspect kind >/dev/null 2>&1; then \
+		if [[ "$$(docker inspect -f '{{json .NetworkSettings.Networks.kind}}' "$(KIND_REGISTRY_NAME)" 2>/dev/null || echo null)" == "null" ]]; then \
+			docker network connect kind "$(KIND_REGISTRY_NAME)"; \
+		fi; \
+	fi
+	@REGISTRY_DIR="/etc/containerd/certs.d/localhost:$(KIND_REGISTRY_PORT)"; \
+	for node in $$(kind get nodes --name "$(KIND_CLUSTER_NAME)"); do \
+		docker exec "$$node" mkdir -p "$$REGISTRY_DIR"; \
+		printf '[host."http://$(KIND_REGISTRY_NAME):5000"]\n' | docker exec -i "$$node" cp /dev/stdin "$$REGISTRY_DIR/hosts.toml"; \
+	done
+	@printf '%s\n' \
+		'apiVersion: v1' \
+		'kind: ConfigMap' \
+		'metadata:' \
+		'  name: local-registry-hosting' \
+		'  namespace: kube-public' \
+		'data:' \
+		'  localRegistryHosting.v1: |' \
+		'    host: "localhost:$(KIND_REGISTRY_PORT)"' \
+		'    help: "https://kind.sigs.k8s.io/docs/user/local-registry/"' \
+		| kubectl --kubeconfig "$(K8S_KUBECONFIG)" apply -f -
+.PHONY: kind-registry-configure
+
+## Remove the local kind registry container; safe to run repeatedly
+kind-registry-down:
+	@docker rm -f "$(KIND_REGISTRY_NAME)" >/dev/null 2>&1 || true
+	@echo "local registry '$(KIND_REGISTRY_NAME)' removed or already absent"
+.PHONY: kind-registry-down
+
+## Load a locally built image into the kind cluster; usage: make kind-load-image K8S_IMAGE=name:tag
+kind-load-image:
+	@if [[ -z "$(K8S_IMAGE)" ]]; then \
+		echo "usage: make kind-load-image K8S_IMAGE=name:tag" >&2; \
+		exit 2; \
+	fi
+	@kind load docker-image "$(K8S_IMAGE)" --name "$(KIND_CLUSTER_NAME)"
+.PHONY: kind-load-image
+
+## Push an image to the local kind registry; usage: make kind-push-image K8S_IMAGE=name:tag
+kind-push-image:
+	@if [[ -z "$(K8S_IMAGE)" ]]; then \
+		echo "usage: make kind-push-image K8S_IMAGE=name:tag" >&2; \
+		exit 2; \
+	fi
+	@$(MAKE) -s kind-registry-up
+	@image_ref="$(K8S_IMAGE)"; \
+	registry_image="localhost:$(KIND_REGISTRY_PORT)/$${image_ref##*/}"; \
+	docker tag "$$image_ref" "$$registry_image"; \
+	docker push "$$registry_image"; \
+	echo "$$registry_image"
+.PHONY: kind-push-image
+
+## Start the configured ingress provider engine
+k8s-ingress-provider-up:
+	@mkdir -p .run
+	@case "$(K8S_INGRESS_ENGINE)" in \
+		cloud-provider-kind) \
+			if [[ -f "$(K8S_INGRESS_PROVIDER_PID)" ]] && kill -0 "$$(cat "$(K8S_INGRESS_PROVIDER_PID)")" >/dev/null 2>&1; then \
+				echo "cloud-provider-kind already running with PID $$(cat "$(K8S_INGRESS_PROVIDER_PID)")"; \
+			else \
+				rm -f "$(K8S_INGRESS_PROVIDER_PID)"; \
+				echo "starting cloud-provider-kind ingress/load-balancer engine"; \
+				nohup cloud-provider-kind >"$(K8S_INGRESS_PROVIDER_LOG)" 2>&1 & \
+				echo $$! > "$(K8S_INGRESS_PROVIDER_PID)"; \
+				sleep 2; \
+				kill -0 "$$(cat "$(K8S_INGRESS_PROVIDER_PID)")" >/dev/null 2>&1 || { cat "$(K8S_INGRESS_PROVIDER_LOG)" >&2; exit 1; }; \
+			fi \
+			;; \
+		none) \
+			echo "ingress provider engine disabled" \
+			;; \
+		*) \
+			echo "unsupported K8S_INGRESS_ENGINE='$(K8S_INGRESS_ENGINE)'" >&2; \
+			exit 2 \
+			;; \
+	esac
+.PHONY: k8s-ingress-provider-up
+
+## Stop the configured ingress provider engine; safe to run repeatedly
+k8s-ingress-provider-down:
+	@if [[ -f "$(K8S_INGRESS_PROVIDER_PID)" ]]; then \
+		pid="$$(cat "$(K8S_INGRESS_PROVIDER_PID)")"; \
+		if kill -0 "$$pid" >/dev/null 2>&1; then \
+			echo "stopping cloud-provider-kind PID $$pid"; \
+			kill "$$pid"; \
+		fi; \
+		rm -f "$(K8S_INGRESS_PROVIDER_PID)"; \
+	else \
+		echo "ingress provider engine is not managed by this workspace or already stopped"; \
+	fi
+.PHONY: k8s-ingress-provider-down
+
+## Show ingress provider engine status
+k8s-ingress-provider-status:
+	@case "$(K8S_INGRESS_ENGINE)" in \
+		cloud-provider-kind) \
+			if [[ -f "$(K8S_INGRESS_PROVIDER_PID)" ]] && kill -0 "$$(cat "$(K8S_INGRESS_PROVIDER_PID)")" >/dev/null 2>&1; then \
+				echo "cloud-provider-kind running with PID $$(cat "$(K8S_INGRESS_PROVIDER_PID)")"; \
+			else \
+				echo "cloud-provider-kind not running under workspace management"; \
+			fi \
+			;; \
+		none) echo "ingress provider engine disabled" ;; \
+		*) echo "unsupported K8S_INGRESS_ENGINE='$(K8S_INGRESS_ENGINE)'" >&2; exit 2 ;; \
+	esac
+.PHONY: k8s-ingress-provider-status
+
+## Wait until the local kind cluster is ready for workloads
+k8s-wait:
+	@kubectl --kubeconfig "$(K8S_KUBECONFIG)" wait --for=condition=Ready node --all --timeout="$(K8S_WAIT_TIMEOUT)"
+	@kubectl --kubeconfig "$(K8S_KUBECONFIG)" -n kube-system rollout status deployment/coredns --timeout="$(K8S_WAIT_TIMEOUT)"
+	@if kubectl --kubeconfig "$(K8S_KUBECONFIG)" get namespace local-path-storage >/dev/null 2>&1; then \
+		kubectl --kubeconfig "$(K8S_KUBECONFIG)" -n local-path-storage rollout status deployment/local-path-provisioner --timeout="$(K8S_WAIT_TIMEOUT)"; \
+	fi
+.PHONY: k8s-wait
+
+## Assert the local kind cluster exists and is reachable
+k8s-ensure-ready:
+	@if ! kind get clusters | grep -qx "$(KIND_CLUSTER_NAME)"; then \
+		echo "kind cluster '$(KIND_CLUSTER_NAME)' does not exist; run 'make k8s-setup'" >&2; \
+		exit 1; \
+	fi
+	@kubectl --kubeconfig "$(K8S_KUBECONFIG)" cluster-info >/dev/null
+	@$(MAKE) -s k8s-wait
+.PHONY: k8s-ensure-ready
 
 # ── Kubernetes Deploy & Destroy ──────────────────────────────────────────────────────────────────
 
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
+	@if [[ "$(K8S_CONFIRM)" != "true" ]]; then \
+		exit 0; \
+	fi
 	@echo ""
-	@read -r -p "Confirm: Proceed with 'Kubernetes' in '$(K8S_ENV)'$(if $(K8S_STACK_DIR), targeting '$(K8S_STACK_DIR)',)? [yes $(K8S_ENV)/no] " confirm; \
+	@read -r -p "Confirm: Proceed with Kubernetes in '$(K8S_ENV)' targeting '$(K8S_STACK_DIR)'? [yes $(K8S_ENV)/no] " confirm; \
 		if [[ "$$confirm" != "yes $(K8S_ENV)" ]]; then \
 			echo "Aborted."; \
 			exit 1; \
@@ -74,11 +312,12 @@ k8s-confirm:
 # Usage: make k8s-deploy-<env>
 #
 # Template to deploy Kubernetes manifests integrated Helm charts and Kustomize environment-specific overlays
-template-k8s-deploy-%:
-	@$(MAKE) -s k8s-confirm
-	@$(K8S_KUSTOMIZE_BIN) build manifests/overlays/$*/$(K8S_STACK_DIR) \
+template-k8s-deploy-%: k8s-ensure-ready
+	@$(MAKE) -s k8s-confirm K8S_ENV=$* K8S_STACK_DIR=$(K8S_STACK_DIR)
+	@test -d "manifests/overlays/$*/$(K8S_STACK_DIR)" || { echo "missing overlay: manifests/overlays/$*/$(K8S_STACK_DIR)" >&2; exit 1; }
+	@$(K8S_KUSTOMIZE_BIN) build "manifests/overlays/$*/$(K8S_STACK_DIR)" \
 		--enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl apply --kubeconfig $(K8S_KUBECONFIG) -f -
+		| kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f -
 .PHONY: template-k8s-deploy-%
 
 ## Deploy Kubernetes manifests for Dependency-Track
@@ -89,11 +328,12 @@ k8s-deploy-dependency-track:
 # Usage: make k8s-destroy-<env>
 #
 # Template to destroy Kubernetes manifests integrated Helm charts and Kustomize environment-specific overlays
-template-k8s-destroy-%:
-	@$(MAKE) -s k8s-confirm
-	@$(K8S_KUSTOMIZE_BIN) build manifests/overlays/$*/$(K8S_STACK_DIR) \
+template-k8s-destroy-%: k8s-ensure-ready
+	@$(MAKE) -s k8s-confirm K8S_ENV=$* K8S_STACK_DIR=$(K8S_STACK_DIR)
+	@test -d "manifests/overlays/$*/$(K8S_STACK_DIR)" || { echo "missing overlay: manifests/overlays/$*/$(K8S_STACK_DIR)" >&2; exit 1; }
+	@$(K8S_KUSTOMIZE_BIN) build "manifests/overlays/$*/$(K8S_STACK_DIR)" \
 		--enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl delete --kubeconfig $(K8S_KUBECONFIG) -f -
+		| kubectl delete --ignore-not-found=true --kubeconfig "$(K8S_KUBECONFIG)" -f -
 .PHONY: template-k8s-destroy-%
 
 ## Destroy Kubernetes manifests for Dependency-Track
@@ -126,35 +366,61 @@ k8s-render-manifests:
 
 # List all services
 k8s-list-service:
-	kubectl get services --kubeconfig $(K8S_KUBECONFIG)
+	kubectl get services -A --kubeconfig "$(K8S_KUBECONFIG)"
 .PHONY: k8s-list-service
 
 # List all namespaces
 k8s-list-namespace:
-	kubectl get namespaces --kubeconfig $(K8S_KUBECONFIG)
+	kubectl get namespaces --kubeconfig "$(K8S_KUBECONFIG)"
 .PHONY: k8s-list-namespace
 
 # List all pods
 k8s-list-pod:
-	kubectl get pods -A --kubeconfig $(K8S_KUBECONFIG)
+	kubectl get pods -A --kubeconfig "$(K8S_KUBECONFIG)"
 .PHONY: k8s-list-pod
 
 # List all ingress controllers
 k8s-list-controller:
-	kubectl get ingressclass --kubeconfig $(K8S_KUBECONFIG)
+	kubectl get ingressclass --kubeconfig "$(K8S_KUBECONFIG)" || true
 .PHONY: k8s-list-controller
+
+# List all ingress resources
+k8s-list-ingress:
+	kubectl get ingress -A --kubeconfig "$(K8S_KUBECONFIG)" || true
+.PHONY: k8s-list-ingress
+
+# List all storage classes
+k8s-list-storage:
+	kubectl get storageclass --kubeconfig "$(K8S_KUBECONFIG)" || true
+.PHONY: k8s-list-storage
 
 ## Monitor the status of Kubernetes resources
 k8s-monitor-status:
+	@echo "──── K8s Context ─────────────────────────────────────────────────────────────────────────"
+	@kubectl config current-context --kubeconfig "$(K8S_KUBECONFIG)" || true
+	@echo "──── K8s Nodes ───────────────────────────────────────────────────────────────────────────"
+	@kubectl get nodes -o wide --kubeconfig "$(K8S_KUBECONFIG)" || true
 	@echo "──── K8s Services ────────────────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-list-service
 	@echo "──── K8s Namespaces ──────────────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-list-namespace
-	@echo "──── K8s Ingress Controllers ─────────────────────────────────────────────────────────────"
+	@echo "──── K8s Ingress Provider ────────────────────────────────────────────────────────────────"
+	@$(MAKE) -s k8s-ingress-provider-status || true
+	@echo "──── K8s Ingress Classes ────────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-list-controller
+	@echo "──── K8s Ingress Resources ───────────────────────────────────────────────────────────────"
+	@$(MAKE) -s k8s-list-ingress
+	@echo "──── K8s Storage ─────────────────────────────────────────────────────────────────────────"
+	@$(MAKE) -s k8s-list-storage
 	@echo "──── K8s Pods ────────────────────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-list-pod
 .PHONY: k8s-monitor-status
+
+## Export kind logs for diagnostics
+k8s-export-logs:
+	@mkdir -p "$(KIND_LOG_DIR)"
+	@kind export logs --name "$(KIND_CLUSTER_NAME)" "$(KIND_LOG_DIR)"
+.PHONY: k8s-export-logs
 
 # ── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
 
@@ -241,368 +507,19 @@ SECRETS_SOPS_UID ?= sops-k8s
 #
 ## Generate a new GPG key pair for SOPS with the specified UID
 secrets-gpg-generate:
-        @gpg --batch --quiet --passphrase '' --quick-generate-key "$(SECRETS_SOPS_UID)" ed25519 cert,sign 0
-        @NEW_FPR="$$(gpg --list-keys --with-colons "$(SECRETS_SOPS_UID)" | awk -F: '/^fpr:/ {print $$10; exit}')"
-        @gpg --batch --quiet --passphrase '' --quick-add-key "$${NEW_FPR}" cv25519 encrypt 0
+	@gpg --batch --quiet --passphrase '' --quick-generate-key "$(SECRETS_SOPS_UID)" ed25519 cert,sign 0
+	@NEW_FPR="$$(gpg --list-keys --with-colons "$(SECRETS_SOPS_UID)" | awk -F: '/^fpr:/ {print $$10; exit}')"; \
+	gpg --batch --quiet --passphrase '' --quick-add-key "$${NEW_FPR}" cv25519 encrypt 0
 .PHONY: secrets-gpg-generate
 
 # Usage: make secrets-gpg-export SECRETS_SOPS_UID=<uid>
 #
 ## Export the GPG key pair for SOPS with the specified UID to ASCII files
 secrets-gpg-export:
-        @if [ -z "$(SECRETS_SOPS_UID)" ]; then \
-                echo "usage: make secrets-gpg-export SECRETS_SOPS_UID=<uid>" >&2; \
-                exit 1; \
-        fi
-
-        @gpg --armor --export "$(SECRETS_SOPS_UID)" > "$(SECRETS_SOPS_UID)-public.asc"
-        @gpg --armor --export-secret-keys "$(SECRETS_SOPS_UID)" > "$(SECRETS_SOPS_UID)-private.asc"
+	@if [[ -z "$(SECRETS_SOPS_UID)" ]]; then \
+		echo "usage: make secrets-gpg-export SECRETS_SOPS_UID=<uid>" >&2; \
+		exit 1; \
+	fi
+	@gpg --armor --export "$(SECRETS_SOPS_UID)" > "$(SECRETS_SOPS_UID)-public.asc"
+	@gpg --armor --export-secret-keys "$(SECRETS_SOPS_UID)" > "$(SECRETS_SOPS_UID)-private.asc"
 .PHONY: secrets-gpg-export
-
-# Usage: make secrets-gpg-import [SECRETS_SOPS_UID=<uid>] <key-files>
-#
-## Import GPG keys from specified files and if provided set ultimate trust for the SOPS UID
-secrets-gpg-import:
-        @if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-                echo "usage: make secrets-gpg-import <files>" >&2; \
-                exit 1; \
-        fi
-
-        # Import keys from specified files
-        @for file in $(filter-out $@,$(MAKECMDGOALS)); do \
-                if [ -f "$$file" ]; then \
-                        gpg --import "$$file"; \
-                fi; \
-        done
-
-        # Set ultimate trust for the SECRETS_SOPS_UID
-        @if [ "$(origin SECRETS_SOPS_UID)" = "command line" ] && [ -n "$(SECRETS_SOPS_UID)" ]; then \
-                FPR="$$( { gpg --list-keys --with-colons "$(SECRETS_SOPS_UID)" 2>/dev/null || true; } | awk -F: '/^fpr:/ {print $$10; exit}')"; \
-                if [ -n "$${FPR}" ]; then \
-                        echo "$${FPR}:6:" | gpg --import-ownertrust; \
-                fi; \
-        fi
-.PHONY: secrets-gpg-import
-
-# Usage: make secrets-gpg-remove SECRETS_SOPS_UID=<uid>
-#
-## Remove GPG keys for SOPS with the specified UID (interactive)
-secrets-gpg-remove:
-        @if ! gpg --list-keys "$(SECRETS_SOPS_UID)" >/dev/null 2>&1; then
-                echo "warning: no key found for '$(SECRETS_SOPS_UID)'" >&2
-                exit 0
-        fi
-
-        # Delete private key first, then public key
-        @gpg --yes --delete-secret-keys "$(SECRETS_SOPS_UID)"
-        @gpg --yes --delete-keys "$(SECRETS_SOPS_UID)"
-.PHONY: secrets-gpg-remove
-
-# Usage: make secrets-gpg-show [SECRETS_SOPS_UID=<uid>]
-#
-## Show GPG public key information for SOPS UID or list all keys if UID is not set
-secrets-gpg-show:
-        @if [ "$(origin SECRETS_SOPS_UID)" != "command line" ]; then \
-                gpg --list-keys --keyid-format long; \
-                exit 0; \
-        fi
-
-        @FPR="$$( { gpg --list-keys --with-colons "$(SECRETS_SOPS_UID)" 2>/dev/null || true; } | awk -F: '/^fpr:/ {print $$10; exit}')"; \
-        if [ -z "$${FPR}" ]; then \
-                echo "error: no fingerprint found for UID '$(SECRETS_SOPS_UID)'" >&2; \
-                exit 1; \
-        fi; \
-        echo -e "UID: $(SECRETS_SOPS_UID)\nFingerprint: $${FPR}"
-.PHONY: secrets-gpg-show
-
-# Usage: make secrets-sops-encrypt <files>
-#
-## Encrypt specified files using SOPS with GPG keys
-secrets-sops-encrypt:
-        @if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-                echo "usage: make secrets-sops-encrypt <files>" >&2; \
-                exit 1; \
-        fi
-
-        @for file in $(filter-out $@,$(MAKECMDGOALS)); do \
-                if [ -f "$$file" ]; then \
-                        sops --encrypt --in-place "$$file"; \
-                fi; \
-        done
-.PHONY: secrets-sops-encrypt
-
-# Usage: make secrets-sops-decrypt <files>
-#
-## Decrypt specified SOPS-encrypted files using GPG keys
-secrets-sops-decrypt:
-        @if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-                echo "usage: make secrets-sops-decrypt <files>" >&2; \
-                exit 1; \
-        fi
-
-        @for file in $(filter-out $@,$(MAKECMDGOALS)); do \
-                if [ -f "$$file" ]; then \
-                        sops --decrypt --in-place "$$file"; \
-                fi; \
-        done
-.PHONY: secrets-sops-decrypt
-
-# Usage: make secrets-sops-view <file>
-#
-## View decrypted contents of a SOPS-encrypted file using GPG keys
-secrets-sops-view:
-        @if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-                echo "usage: make secrets-sops-view <file>" >&2; \
-                exit 1; \
-        fi
-
-        sops --decrypt "$(filter-out $@,$(MAKECMDGOALS))"
-.PHONY: secrets-sops-view
-
-# ── Policy Manager ───────────────────────────────────────────────────────────────────────────────
-
-POLICY_IMAGE_CONFTEST ?= openpolicyagent/conftest:v0.65.0@sha256:afa510df6d4562ebe24fb3e457da6f6d6924124140a13b51b950cc6cb1d25525
-
-# Usage: make policy-analysis-conftest <filepath>
-#
-## Analyze configuration files using Conftest for policy violations and generate a report
-policy-analysis-conftest:
-	@mkdir -p logs/policy
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make policy-analysis-conftest <filepath>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_IMAGE_CONFTEST)" test "$(filter-out $@,$(MAKECMDGOALS))" > logs/policy/conftest.json 2>&1
-.PHONY: policy-analysis-conftest
-
-POLICY_IMAGE_REGAL ?= ghcr.io/openpolicyagent/regal:0.37.0@sha256:a09884658f3c8c9cc30de136b664b3afdb7927712927184ba891a155a9676050
-
-# Usage: make policy-lint-regal <filepath>
-#
-## Lint Rego policies using Regal and generate a report
-policy-lint-regal:
-	@mkdir -p logs/analysis
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make policy-lint-regal"; \
-		exit 1; \
-	fi
-
-	docker pull "$(POLICY_IMAGE_REGAL)"
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_IMAGE_REGAL)" regal lint "$(filter-out $@,$(MAKECMDGOALS))" --format json > logs/analysis/regal.json 2>&1
-.PHONY: policy-lint-regal
-
-# ── SAST Manager ─────────────────────────────────────────────────────────────────────────────────
-
-SAST_IMAGE_TRIVY ?= aquasec/trivy:0.68.2@sha256:05d0126976bdedcd0782a0336f77832dbea1c81b9cc5e4b3a5ea5d2ec863aca7
-SAST_IMAGE_COSIGN ?= cgr.dev/chainguard/cosign:3.0.0@sha256:b6bc266358e9368be1b3d01fca889b78d5ad5a47832986e14640c34a237ef638
-
-## Scan Infrastructure-as-Code (IaC) files for misconfigurations using Trivy and generate a report
-sast-trivy-misconfig:
-	@mkdir -p logs/sast
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" config --output logs/sast/trivy-misconfig.json /workspace 2>&1
-.PHONY: sast-trivy-misconfig
-
-## Scan local filesystem for vulnerabilities and misconfigurations using Trivy
-sast-trivy-fs:
-	@mkdir -p logs/sast
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" filesystem --output logs/sast/trivy-filesystem.json /workspace 2>&1
-.PHONY: sast-trivy-fs
-
-# Usage: make sast-trivy-image <image_name>
-#
-## Scan a container image for vulnerabilities using Trivy
-sast-trivy-image:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-image <image_name>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" image --output logs/sast/trivy-image.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-image
-
-# Usage: make sast-trivy-image-license <image_name>
-#
-## Scan a container image for license compliance using Trivy
-sast-trivy-image-license:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-image-license <image_name>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" image --scanners license --format table --output logs/sast/trivy-image-license.txt "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-image-license
-
-# Usage: make sast-trivy-repository <repo_url>
-#
-## Scan a remote repository for vulnerabilities using Trivy
-sast-trivy-repository:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-repository <repo_url>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" repository --output logs/sast/trivy-repository.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-repository
-
-# Usage: make sast-trivy-rootfs <path>
-#
-## Scan a rootfs e.g. `/` for vulnerabilities using Trivy
-sast-trivy-rootfs:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-rootfs <path>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" rootfs --output logs/sast/trivy-rootfs.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-rootfs
-
-# Usage: make sast-trivy-sbom-scan <sbom_path>
-#
-## Scan SBOM for vulnerabilities using Trivy
-sast-trivy-sbom-scan:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-sbom-scan <sbom_path>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" sbom --output logs/sast/trivy-sbom.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-sbom-scan
-
-# Usage: make sast-trivy-sbom-cyclonedx-image <image_name>
-#
-## Generate SBOM in CycloneDX format for a container image using Trivy
-sast-trivy-sbom-cyclonedx-image:
-	@mkdir -p logs/sbom
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-sbom-cyclonedx-image <image_name>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" image --format cyclonedx --output logs/sbom/sbom-image.cdx.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-sbom-cyclonedx-image
-
-# Usage: make sast-trivy-sbom-cyclonedx-fs <path>
-#
-## Generate SBOM in CycloneDX format for a file system using Trivy
-sast-trivy-sbom-cyclonedx-fs:
-	@mkdir -p logs/sbom
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-sbom-cyclonedx-fs <path>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" filesystem --format cyclonedx --output logs/sbom/sbom-fs.cdx.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-sbom-cyclonedx-fs
-
-# Usage: make sast-trivy-sbom-license <sbom_path>
-#
-## Scan SBOM for license compliance using Trivy
-sast-trivy-sbom-license:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-sbom-license <sbom_path>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" sbom --scanners license --format table --output logs/sast/trivy-sbom-license.txt "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-sbom-license
-
-# Usage: make sast-trivy-sbom-attestation <intoto_sbom_path>
-#
-## Scan the verified SBOM attestation using Trivy
-sast-trivy-sbom-attestation:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-sbom-attestation <intoto_sbom_path>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" sbom "$(filter-out $@,$(MAKECMDGOALS))"
-.PHONY: sast-trivy-sbom-attestation
-
-# Usage: make sast-trivy-vm <vm_image_path>
-#
-## [EXPERIMENTAL] Scan a virtual machine image using Trivy
-sast-trivy-vm:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-trivy-vm <vm_image_path>"; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" vm --output logs/sast/trivy-vm.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
-.PHONY: sast-trivy-vm
-
-# Usage: make sast-trivy-kubernetes [target]
-#
-## [EXPERIMENTAL] Scan kubernetes cluster using Trivy (default `cluster`)
-sast-trivy-kubernetes:
-	@mkdir -p logs/sast
-
-	@echo "Note: This requires KUBECONFIG to be mounted or available to the container. Assuming ~/.kube/config is mounted to /root/.kube/config"
-
-	docker run --rm -v "${HOME}/.kube/config:/root/.kube/config" -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" kubernetes --output logs/sast/trivy-kubernetes.json $(if $(filter-out $@,$(MAKECMDGOALS)),$(filter-out $@,$(MAKECMDGOALS)),cluster) 2>&1
-.PHONY: sast-trivy-kubernetes
-
-## Generate Cosign key pair
-sast-cosign-generate-key-pair:
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_COSIGN)" generate-key-pair
-.PHONY: sast-cosign-generate-key-pair
-
-# Usage: make sast-cosign-attest <image_name>
-#
-## Attest an image with the generated SBOM using Cosign
-sast-cosign-attest:
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-cosign-attest <image_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f cosign.key ]; then \
-		echo "Error: cosign.key not found. Run 'make sast-cosign-generate-key-pair' first."; \
-		exit 1; \
-	fi
-	@if [ ! -f logs/sbom/sbom.cdx.json ]; then \
-		echo "Error: logs/sbom/sbom.cdx.json not found. Run 'make sast-trivy-sbom-cyclonedx <image_name>' first."; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${HOME}/.docker/config.json:/root/.docker/config.json" -v "${PWD}:/workspace" -w /workspace -e COSIGN_PASSWORD "$(SAST_IMAGE_COSIGN)" attest --key cosign.key --type cyclonedx --predicate logs/sbom/sbom.cdx.json "$(filter-out $@,$(MAKECMDGOALS))"
-.PHONY: sast-cosign-attest
-
-# Usage: make sast-cosign-verify <image_name>
-#
-## Verify SBOM attestation for an image using Cosign
-sast-cosign-verify:
-	@mkdir -p logs/sast
-
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-cosign-verify <image_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f cosign.pub ]; then \
-		echo "Error: cosign.pub not found. Run 'make sast-cosign-generate-key-pair' first."; \
-		exit 1; \
-	fi
-
-	docker run --rm -v "${HOME}/.docker/config.json:/root/.docker/config.json" -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_COSIGN)" verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
-.PHONY: sast-cosign-verify
