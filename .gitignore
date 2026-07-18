@@ -6,3 +6,5 @@
 
 logs/
 render/
+# Generated local Kubernetes credentials
+/config/kubeconfig.yaml

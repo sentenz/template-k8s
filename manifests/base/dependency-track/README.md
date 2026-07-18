@@ -203,9 +203,9 @@ Path-Based DNS Routing ([Ingress Fan-Out](https://kubernetes.io/docs/concepts/se
   > Ensure the resources are created and running correctly.
 
   ```bash
-  kubectl --kubeconfig=examples/config/kubeconfig.yaml -n dependency-track get secret dependency-track-tls
-  kubectl --kubeconfig=examples/config/kubeconfig.yaml -n dependency-track get ingress
-  kubectl --kubeconfig=examples/config/kubeconfig.yaml -n dependency-track get pods
+  kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get secret dependency-track-tls
+  kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get ingress
+  kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get pods
   ```
 
 - Check HTTP
@@ -217,7 +217,7 @@ Path-Based DNS Routing ([Ingress Fan-Out](https://kubernetes.io/docs/concepts/se
   ```
 
 - `hostNetwork`
-  > The `hostNetwork: true` setting is used to allow Traefik to bind to ports 80 and 443 on the host network. This is safe for a local development node (k3s/minikube/kind) that runs on the same machine where the browser services.
+  > The `hostNetwork: true` setting is used to allow Traefik to bind to ports 80 and 443 on the host network. This is safe for the local Kind development cluster that runs on the same machine as the browser client.
 
   > [!IMPORTANT]
   > Do not enable `hostNetwork` for remote clusters, it exposes Traefik on node network interfaces and can conflict with host services or create unwanted exposure.

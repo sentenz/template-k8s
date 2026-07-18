@@ -12,6 +12,7 @@ resources:
 
 patches:
   - path: patch-dependency-track-ingress.yaml
+  - path: patch-traefik-service-nodeport.yaml
 
 secretGenerator:
   - name: dependency-track-tls
