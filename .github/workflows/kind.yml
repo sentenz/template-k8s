@@ -6,20 +6,69 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".github/workflows/kind.yml"
+      - "charts/**"
+      - "config/**"
+      - "manifests/**"
+      - "Makefile"
+      - "scripts/bootstrap.sh"
   pull_request:
     branches:
       - main
+    paths:
+      - ".github/workflows/kind.yml"
+      - "charts/**"
+      - "config/**"
+      - "manifests/**"
+      - "Makefile"
+      - "scripts/bootstrap.sh"
+  workflow_dispatch:
+
+concurrency:
+  group: kind-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  KUBECONFIG: ${{ github.workspace }}/config/kubeconfig.yaml
+  KUSTOMIZE_PATH: manifests/overlays/dev/dependency-track
+
 jobs:
-  kind-cluster:
-    name: Kind Cluster
-    runs-on: ubuntu-latest
+  kind-deployment:
+    name: Kind Deployment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Verify Toolchain
+        run: |
+          set -euo pipefail
+          helm version --short
+          kubectl version --client
+          openssl version
+
+      - name: Generate Ephemeral TLS Certificate
+        run: |
+          set -euo pipefail
+          certificate_directory="${KUSTOMIZE_PATH}"
+
+          openssl req \
+            -x509 \
+            -nodes \
+            -newkey rsa:2048 \
+            -days 1 \
+            -keyout "${certificate_directory}/dependency-track.localhost+1-key.pem" \
+            -out "${certificate_directory}/dependency-track.localhost+1.pem" \
+            -subj "/CN=dependency-track.localhost" \
+            -addext "subjectAltName=DNS:dependency-track.localhost"
 
       - name: Create Kind Cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
@@ -30,5 +79,140 @@ jobs:
           cluster_name: template-k8s
           wait: 5m
 
-      - name: Verify Kind Cluster
-        run: kubectl --kubeconfig config/kubeconfig.yaml get nodes
+      - name: Verify Cluster Prerequisites
+        run: |
+          set -euo pipefail
+          kubectl wait --for=condition=Ready node --all --timeout=5m
+          kubectl get nodes -o wide
+          kubectl get storageclass
+
+      - name: Render and Validate Manifests
+        run: |
+          set -euo pipefail
+          rendered_manifest="${RUNNER_TEMP}/rendered.yaml"
+
+          kubectl kustomize "${KUSTOMIZE_PATH}" \
+            --enable-helm \
+            --load-restrictor=LoadRestrictionsNone \
+            > "${rendered_manifest}"
+
+          test -s "${rendered_manifest}"
+          kubectl apply --dry-run=client -f "${rendered_manifest}"
+
+      - name: Deploy Manifests
+        run: |
+          set -euo pipefail
+          kubectl apply -f "${RUNNER_TEMP}/rendered.yaml"
+
+      - name: Wait for Workloads
+        run: |
+          set -euo pipefail
+
+          kubectl rollout status statefulset --all \
+            --namespace postgresql \
+            --timeout=15m
+
+          kubectl rollout status deployment --all \
+            --namespace traefik \
+            --timeout=10m
+
+          kubectl rollout status deployment --all \
+            --namespace dependency-track \
+            --timeout=20m
+
+          kubectl wait --for=condition=Ready pod --all \
+            --namespace postgresql \
+            --timeout=5m
+
+          kubectl wait --for=condition=Ready pod --all \
+            --namespace traefik \
+            --timeout=5m
+
+          kubectl wait --for=condition=Ready pod --all \
+            --namespace dependency-track \
+            --timeout=5m
+
+          kubectl wait \
+            --for=jsonpath='{.status.phase}'=Bound \
+            persistentvolumeclaim \
+            --all \
+            --namespace postgresql \
+            --timeout=5m
+
+      - name: Test Ingress Endpoints
+        run: |
+          set -euo pipefail
+
+          curl_options=(
+            --fail
+            --insecure
+            --location
+            --noproxy "*"
+            --retry 30
+            --retry-all-errors
+            --retry-delay 10
+            --show-error
+            --silent
+            --resolve dependency-track.localhost:443:127.0.0.1
+          )
+
+          curl "${curl_options[@]}" \
+            https://dependency-track.localhost/health
+
+          curl "${curl_options[@]}" \
+            --output /dev/null \
+            https://dependency-track.localhost/
+
+      - name: Publish Deployment Summary
+        if: success()
+        run: |
+          set -euo pipefail
+          {
+            echo "## Kind deployment test"
+            echo
+            echo '```text'
+            kubectl get deployments,statefulsets,pods,services,ingress \
+              --all-namespaces \
+              -o wide
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Collect Failure Diagnostics
+        if: failure()
+        run: |
+          set +e
+          diagnostics_directory="${RUNNER_TEMP}/kind-diagnostics"
+          mkdir -p "${diagnostics_directory}/logs"
+
+          kubectl get nodes -o wide \
+            > "${diagnostics_directory}/nodes.txt" 2>&1
+          kubectl get all,ingress,persistentvolumeclaim --all-namespaces -o wide \
+            > "${diagnostics_directory}/resources.txt" 2>&1
+          kubectl get persistentvolume,storageclass -o wide \
+            > "${diagnostics_directory}/storage.txt" 2>&1
+          kubectl get events --all-namespaces --sort-by=.metadata.creationTimestamp \
+            > "${diagnostics_directory}/events.txt" 2>&1
+          kubectl describe pods --all-namespaces \
+            > "${diagnostics_directory}/pods.txt" 2>&1
+
+          while read -r namespace pod; do
+            kubectl logs \
+              --namespace "${namespace}" \
+              "${pod}" \
+              --all-containers=true \
+              --prefix=true \
+              --tail=200 \
+              > "${diagnostics_directory}/logs/${namespace}-${pod}.log" 2>&1 || true
+          done < <(
+            kubectl get pods --all-namespaces \
+              -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}'
+          )
+
+      - name: Upload Failure Diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kind-deployment-diagnostics
+          path: ${{ runner.temp }}/kind-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
