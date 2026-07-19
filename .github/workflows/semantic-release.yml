@@ -32,6 +32,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           semantic-version: "latest"
+          extra-plugins: |
+            @semantic-release/changelog@^6
+            @semantic-release/git@^10
+            conventional-changelog-conventionalcommits@9.3.1
 
       - name: Run SBOM Generation (CycloneDX)
         if: steps.release.outputs.new-release-published == 'true'
