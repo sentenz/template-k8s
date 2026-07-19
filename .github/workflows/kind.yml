@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Kind
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  kind-cluster:
+    name: Kind Cluster
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Create Kind Cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
+        with:
+          version: v0.32.0
+          config: config/kind-config.yaml
+          kubeconfig: config/kubeconfig.yaml
+          cluster_name: template-k8s
+          wait: 5m
+
+      - name: Verify Kind Cluster
+        run: kubectl --kubeconfig config/kubeconfig.yaml get nodes
