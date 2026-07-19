@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Release Notes Correction
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/release-notes/2.0.0.md
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-release-notes:
+    name: Update 2.0.0 Release Notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: 2.0.0
+          RELEASE_NOTES_FILE: .github/release-notes/2.0.0.md
+        run: |
+          set -euo pipefail
+
+          gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null
+          gh release edit "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${RELEASE_TAG}" \
+            --notes-file "${RELEASE_NOTES_FILE}"
