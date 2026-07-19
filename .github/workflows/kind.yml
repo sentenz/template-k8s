@@ -116,8 +116,31 @@ jobs:
             exit 1
           fi
 
+          mapfile -t default_storage_classes < <(
+            kubectl get storageclass \
+              -o go-template='{{range .items}}{{if eq (index .metadata.annotations "storageclass.kubernetes.io/is-default-class") "true"}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}'
+          )
+
+          if (( ${#default_storage_classes[@]} != 1 )); then
+            echo "Expected exactly one default StorageClass, found ${#default_storage_classes[@]}" >&2
+            kubectl get storageclass >&2
+            exit 1
+          fi
+
+          default_storage_class="${default_storage_classes[0]}"
+          storage_provisioner="$(
+            kubectl get storageclass "${default_storage_class}" \
+              -o jsonpath='{.provisioner}'
+          )"
+
+          if [[ "${storage_provisioner}" != "rancher.io/local-path" ]]; then
+            echo "Unexpected default StorageClass provisioner: ${storage_provisioner}" >&2
+            kubectl get storageclass >&2
+            exit 1
+          fi
+
           kubectl get nodes -o wide
-          kubectl get storageclass local-path
+          kubectl get storageclass "${default_storage_class}" -o wide
 
       - name: Render and Validate Manifests
         run: |
