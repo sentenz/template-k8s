@@ -31,7 +31,11 @@ jobs:
         uses: sentenz/actions/semantic-release@bceed480720a7bc304e974cd655ebe42ac41d5e2 # 1.1.9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          semantic-version: "latest"
+          semantic-version: "25.0.3"
+          extra-plugins: |
+            @semantic-release/changelog@^6
+            @semantic-release/git@^10
+            conventional-changelog-conventionalcommits@9.3.1
 
       - name: Run SBOM Generation (CycloneDX)
         if: steps.release.outputs.new-release-published == 'true'

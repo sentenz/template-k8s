@@ -2,6 +2,17 @@
 
 ## [2.0.0](https://github.com/sentenz/template-k8s/compare/1.0.0...2.0.0) (2026-07-19)
 
+### ⚠ BREAKING CHANGES
+
+* local Kubernetes development now uses Kind instead of the Docker Compose-based K3s environment
+* the previous K3s Docker Compose definition and the obsolete `examples/config/` paths have been removed
+* local cluster configuration now resides in `config/kind-config.yaml`, and the generated kubeconfig is written to `config/kubeconfig.yaml`
+* use `make k8s-setup` and `make k8s-teardown` for the local cluster lifecycle
+
+### Code Refactoring
+
+* migrate local Kubernetes development from K3s to Kind ([#36](https://github.com/sentenz/template-k8s/issues/36)) ([d88deb7](https://github.com/sentenz/template-k8s/commit/d88deb72dc9b49e4be69466958e11fdbb73e93f4))
+
 # 1.0.0 (2026-01-05)
 
 
