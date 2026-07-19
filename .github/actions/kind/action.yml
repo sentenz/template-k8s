@@ -1,0 +1,480 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Kind Deployment Test
+description: Create a Kind cluster and validate the repository's development Kubernetes deployment.
+
+inputs:
+  cluster-name:
+    description: Name of the Kind cluster.
+    required: false
+    default: template-k8s
+  kind-config:
+    description: Repository-relative path to the Kind cluster configuration.
+    required: false
+    default: config/kind-config.yaml
+  kustomize-path:
+    description: Repository-relative path to the Kustomize overlay to deploy.
+    required: false
+    default: manifests/overlays/dev/dependency-track
+  kind-version:
+    description: Kind CLI version.
+    required: false
+    default: v0.32.0
+  node-image:
+    description: Kind node image pinned by tag and digest.
+    required: false
+    default: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+  kubectl-version:
+    description: kubectl version.
+    required: false
+    default: v1.36.1
+  helm-version:
+    description: Helm version used by the Kustomize Helm inflator.
+    required: false
+    default: v4.2.0
+  cluster-wait:
+    description: Maximum duration for Kind control-plane readiness.
+    required: false
+    default: 5m
+  expected-control-planes:
+    description: Expected number of control-plane nodes.
+    required: false
+    default: "1"
+  expected-workers:
+    description: Expected number of worker nodes.
+    required: false
+    default: "2"
+  storage-provisioner:
+    description: Expected provisioner for the default StorageClass.
+    required: false
+    default: rancher.io/local-path
+  ingress-host:
+    description: HTTPS hostname exposed through the development ingress.
+    required: false
+    default: dependency-track.localhost
+  diagnostics-retention-days:
+    description: Retention period for failure diagnostics.
+    required: false
+    default: "7"
+
+runs:
+  using: composite
+  steps:
+    - name: Validate Inputs
+      shell: bash
+      env:
+        CLUSTER_NAME: ${{ inputs.cluster-name }}
+        KIND_CONFIG: ${{ inputs.kind-config }}
+        KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
+        EXPECTED_CONTROL_PLANES: ${{ inputs.expected-control-planes }}
+        EXPECTED_WORKERS: ${{ inputs.expected-workers }}
+        INGRESS_HOST: ${{ inputs.ingress-host }}
+      run: |
+        set -euo pipefail
+
+        validate_repository_path() {
+          local path="$1"
+          local expected_type="$2"
+          local resolved_path
+
+          if [[ -z "${path}" || "${path}" == /* || "${path}" == *$'\n'* ]]; then
+            echo "Invalid repository-relative path: ${path}" >&2
+            return 1
+          fi
+
+          resolved_path="$(realpath -m -- "${GITHUB_WORKSPACE}/${path}")"
+          case "${resolved_path}" in
+            "${GITHUB_WORKSPACE}"/*) ;;
+            *)
+              echo "Path escapes the repository workspace: ${path}" >&2
+              return 1
+              ;;
+          esac
+
+          if [[ "${expected_type}" == "file" && ! -f "${resolved_path}" ]]; then
+            echo "Required file does not exist: ${path}" >&2
+            return 1
+          fi
+
+          if [[ "${expected_type}" == "directory" && ! -d "${resolved_path}" ]]; then
+            echo "Required directory does not exist: ${path}" >&2
+            return 1
+          fi
+        }
+
+        if ! [[ "${CLUSTER_NAME}" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]]; then
+          echo "Invalid Kind cluster name: ${CLUSTER_NAME}" >&2
+          exit 1
+        fi
+
+        if ! [[ "${EXPECTED_CONTROL_PLANES}" =~ ^[0-9]+$ && "${EXPECTED_WORKERS}" =~ ^[0-9]+$ ]]; then
+          echo "Expected node counts must be non-negative integers" >&2
+          exit 1
+        fi
+
+        if ! [[ "${INGRESS_HOST}" =~ ^[A-Za-z0-9]([-A-Za-z0-9.]*[A-Za-z0-9])?$ ]]; then
+          echo "Invalid ingress host: ${INGRESS_HOST}" >&2
+          exit 1
+        fi
+
+        validate_repository_path "${KIND_CONFIG}" file
+        validate_repository_path "${KUSTOMIZE_PATH}" directory
+
+    - name: Set Up Helm
+      uses: Azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+      with:
+        version: ${{ inputs.helm-version }}
+        token: ""
+
+    - name: Verify Build Toolchain
+      shell: bash
+      run: |
+        set -euo pipefail
+        helm version --short
+        openssl version
+
+    - name: Generate Ephemeral TLS Certificate
+      shell: bash
+      env:
+        KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
+        INGRESS_HOST: ${{ inputs.ingress-host }}
+        CERTIFICATE_BACKUP: ${{ runner.temp }}/kind-certificate-backup
+      run: |
+        set -euo pipefail
+
+        certificate_path="${KUSTOMIZE_PATH}/dependency-track.localhost+1.pem"
+        private_key_path="${KUSTOMIZE_PATH}/dependency-track.localhost+1-key.pem"
+
+        mkdir -p "${CERTIFICATE_BACKUP}"
+        for path in "${certificate_path}" "${private_key_path}"; do
+          name="$(basename "${path}")"
+          if [[ -e "${path}" ]]; then
+            cp -p -- "${path}" "${CERTIFICATE_BACKUP}/${name}"
+            touch "${CERTIFICATE_BACKUP}/${name}.present"
+          fi
+        done
+
+        openssl req \
+          -x509 \
+          -nodes \
+          -newkey rsa:2048 \
+          -days 1 \
+          -keyout "${private_key_path}" \
+          -out "${certificate_path}" \
+          -subj "/CN=${INGRESS_HOST}" \
+          -addext "subjectAltName=DNS:${INGRESS_HOST}"
+
+    - name: Create Kind Cluster
+      uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
+      with:
+        version: ${{ inputs.kind-version }}
+        node_image: ${{ inputs.node-image }}
+        kubectl_version: ${{ inputs.kubectl-version }}
+        config: ${{ inputs.kind-config }}
+        kubeconfig: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+        cluster_name: ${{ inputs.cluster-name }}
+        wait: ${{ inputs.cluster-wait }}
+
+    - name: Verify Cluster Prerequisites
+      shell: bash
+      env:
+        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+        EXPECTED_CONTROL_PLANES: ${{ inputs.expected-control-planes }}
+        EXPECTED_WORKERS: ${{ inputs.expected-workers }}
+        STORAGE_PROVISIONER: ${{ inputs.storage-provisioner }}
+      run: |
+        set -euo pipefail
+
+        kind version
+        kubectl version --output=yaml
+        kubectl wait --for=condition=Ready node --all --timeout=5m
+
+        node_count="$(kubectl get nodes --no-headers | wc -l | tr -d ' ')"
+        control_plane_count="$(
+          kubectl get nodes \
+            --selector='node-role.kubernetes.io/control-plane' \
+            --no-headers | wc -l | tr -d ' '
+        )"
+        worker_count="$(
+          kubectl get nodes \
+            --selector='!node-role.kubernetes.io/control-plane' \
+            --no-headers | wc -l | tr -d ' '
+        )"
+        expected_node_count="$((EXPECTED_CONTROL_PLANES + EXPECTED_WORKERS))"
+
+        if [[ "${node_count}" != "${expected_node_count}" \
+          || "${control_plane_count}" != "${EXPECTED_CONTROL_PLANES}" \
+          || "${worker_count}" != "${EXPECTED_WORKERS}" ]]; then
+          echo "Unexpected Kind topology: nodes=${node_count}, control-planes=${control_plane_count}, workers=${worker_count}" >&2
+          kubectl get nodes --show-labels >&2
+          exit 1
+        fi
+
+        mapfile -t default_storage_classes < <(
+          kubectl get storageclass \
+            -o go-template='{{range .items}}{{if eq (index .metadata.annotations "storageclass.kubernetes.io/is-default-class") "true"}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}'
+        )
+
+        if (( ${#default_storage_classes[@]} != 1 )); then
+          echo "Expected exactly one default StorageClass, found ${#default_storage_classes[@]}" >&2
+          kubectl get storageclass >&2
+          exit 1
+        fi
+
+        default_storage_class="${default_storage_classes[0]}"
+        storage_provisioner="$(
+          kubectl get storageclass "${default_storage_class}" \
+            -o jsonpath='{.provisioner}'
+        )"
+
+        if [[ "${storage_provisioner}" != "${STORAGE_PROVISIONER}" ]]; then
+          echo "Unexpected default StorageClass provisioner: ${storage_provisioner}" >&2
+          kubectl get storageclass >&2
+          exit 1
+        fi
+
+        kubectl get nodes -o wide
+        kubectl get storageclass "${default_storage_class}" -o wide
+
+    - name: Render and Validate Manifests
+      shell: bash
+      env:
+        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+        KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
+        RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
+      run: |
+        set -euo pipefail
+
+        kubectl kustomize "${KUSTOMIZE_PATH}" \
+          --enable-helm \
+          --load-restrictor=LoadRestrictionsNone \
+          > "${RENDERED_MANIFEST}"
+
+        test -s "${RENDERED_MANIFEST}"
+        kubectl apply \
+          --dry-run=client \
+          --validate=strict \
+          -f "${RENDERED_MANIFEST}"
+
+    - name: Deploy Manifests
+      shell: bash
+      env:
+        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+        RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
+      run: |
+        set -euo pipefail
+        kubectl apply -f "${RENDERED_MANIFEST}"
+
+    - name: Wait for Workloads
+      shell: bash
+      env:
+        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+      run: |
+        set -euo pipefail
+
+        wait_for_rollouts() {
+          local namespace="$1"
+          local timeout="$2"
+          local workloads=()
+
+          mapfile -t workloads < <(
+            kubectl get deployment,statefulset,daemonset \
+              --namespace "${namespace}" \
+              --output name
+          )
+
+          if (( ${#workloads[@]} == 0 )); then
+            echo "No rollout-managed workloads found in namespace ${namespace}" >&2
+            return 1
+          fi
+
+          for workload in "${workloads[@]}"; do
+            kubectl rollout status \
+              --namespace "${namespace}" \
+              "${workload}" \
+              --timeout "${timeout}"
+          done
+        }
+
+        wait_for_jobs() {
+          local namespace="$1"
+          local timeout="$2"
+          local jobs=()
+
+          mapfile -t jobs < <(
+            kubectl get jobs \
+              --namespace "${namespace}" \
+              --output name
+          )
+
+          for job in "${jobs[@]}"; do
+            kubectl wait \
+              --namespace "${namespace}" \
+              --for=condition=Complete \
+              "${job}" \
+              --timeout "${timeout}"
+          done
+        }
+
+        wait_for_rollouts postgresql 15m
+        wait_for_rollouts traefik 10m
+        wait_for_rollouts dependency-track 20m
+
+        wait_for_jobs postgresql 10m
+        wait_for_jobs traefik 10m
+        wait_for_jobs dependency-track 10m
+
+        for namespace in postgresql traefik dependency-track; do
+          kubectl wait --for=condition=Ready pod --all \
+            --namespace "${namespace}" \
+            --timeout=5m
+        done
+
+        kubectl wait \
+          --for=jsonpath='{.status.phase}'=Bound \
+          persistentvolumeclaim \
+          --all \
+          --namespace postgresql \
+          --timeout=5m
+
+    - name: Test Ingress Endpoints
+      shell: bash
+      env:
+        KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
+        INGRESS_HOST: ${{ inputs.ingress-host }}
+      run: |
+        set -euo pipefail
+
+        curl_options=(
+          --cacert "${KUSTOMIZE_PATH}/dependency-track.localhost+1.pem"
+          --connect-timeout 5
+          --fail-with-body
+          --location
+          --max-time 30
+          --noproxy "*"
+          --retry 30
+          --retry-all-errors
+          --retry-delay 10
+          --retry-max-time 300
+          --show-error
+          --silent
+          --resolve "${INGRESS_HOST}:443:127.0.0.1"
+        )
+
+        curl "${curl_options[@]}" \
+          "https://${INGRESS_HOST}/health"
+
+        curl "${curl_options[@]}" \
+          --output /dev/null \
+          "https://${INGRESS_HOST}/"
+
+    - name: Publish Deployment Summary
+      if: success()
+      shell: bash
+      env:
+        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+      run: |
+        set -euo pipefail
+        {
+          echo "## Kind deployment test"
+          echo
+          echo "### Toolchain"
+          echo
+          echo '```text'
+          kind version
+          kubectl version
+          helm version --short
+          echo '```'
+          echo
+          echo "### Resources"
+          echo
+          echo '```text'
+          kubectl get deployments,statefulsets,daemonsets,jobs,pods,services,ingress \
+            --all-namespaces \
+            -o wide
+          echo '```'
+        } >> "${GITHUB_STEP_SUMMARY}"
+
+    - name: Collect Failure Diagnostics
+      if: failure()
+      shell: bash
+      env:
+        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+        CLUSTER_NAME: ${{ inputs.cluster-name }}
+        DIAGNOSTICS_DIRECTORY: ${{ runner.temp }}/kind-diagnostics
+      run: |
+        set +e
+        mkdir -p "${DIAGNOSTICS_DIRECTORY}/logs"
+
+        timeout 5m kind export logs \
+          "${DIAGNOSTICS_DIRECTORY}/kind" \
+          --name "${CLUSTER_NAME}" || true
+
+        kubectl get nodes -o wide \
+          > "${DIAGNOSTICS_DIRECTORY}/nodes.txt" 2>&1
+        kubectl get all,ingress,persistentvolumeclaim --all-namespaces -o wide \
+          > "${DIAGNOSTICS_DIRECTORY}/resources.txt" 2>&1
+        kubectl get persistentvolume,storageclass -o wide \
+          > "${DIAGNOSTICS_DIRECTORY}/storage.txt" 2>&1
+        kubectl get events --all-namespaces --sort-by=.metadata.creationTimestamp \
+          > "${DIAGNOSTICS_DIRECTORY}/events.txt" 2>&1
+        kubectl describe pods --all-namespaces \
+          > "${DIAGNOSTICS_DIRECTORY}/pods.txt" 2>&1
+        kubectl describe deployments,statefulsets,daemonsets,jobs,services,ingresses,persistentvolumeclaims \
+          --all-namespaces \
+          > "${DIAGNOSTICS_DIRECTORY}/workloads.txt" 2>&1
+
+        while read -r namespace pod; do
+          kubectl logs \
+            --namespace "${namespace}" \
+            "${pod}" \
+            --all-containers=true \
+            --prefix=true \
+            --tail=200 \
+            > "${DIAGNOSTICS_DIRECTORY}/logs/${namespace}-${pod}.log" 2>&1 || true
+
+          kubectl logs \
+            --namespace "${namespace}" \
+            "${pod}" \
+            --all-containers=true \
+            --prefix=true \
+            --previous \
+            --tail=200 \
+            > "${DIAGNOSTICS_DIRECTORY}/logs/${namespace}-${pod}-previous.log" 2>&1 || true
+        done < <(
+          kubectl get pods --all-namespaces \
+            -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}'
+        )
+
+    - name: Upload Failure Diagnostics
+      if: failure()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: kind-deployment-diagnostics-${{ inputs.cluster-name }}
+        path: ${{ runner.temp }}/kind-diagnostics
+        if-no-files-found: warn
+        retention-days: ${{ inputs.diagnostics-retention-days }}
+
+    - name: Restore Repository and Remove Ephemeral Credentials
+      if: always()
+      shell: bash
+      env:
+        KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
+        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+        RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
+        CERTIFICATE_BACKUP: ${{ runner.temp }}/kind-certificate-backup
+        DIAGNOSTICS_DIRECTORY: ${{ runner.temp }}/kind-diagnostics
+      run: |
+        set +e
+
+        for name in dependency-track.localhost+1.pem dependency-track.localhost+1-key.pem; do
+          path="${KUSTOMIZE_PATH}/${name}"
+          if [[ -f "${CERTIFICATE_BACKUP}/${name}.present" ]]; then
+            mv -f -- "${CERTIFICATE_BACKUP}/${name}" "${path}"
+          else
+            rm -f -- "${path}"
+          fi
+        done
+
+        rm -f -- "${KUBECONFIG}" "${RENDERED_MANIFEST}"
+        rm -rf -- "${CERTIFICATE_BACKUP}" "${DIAGNOSTICS_DIRECTORY}"
