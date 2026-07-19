@@ -12,4 +12,6 @@ BREAKING CHANGE: Local development now uses Kind instead of K3s. Remove the exis
 
 When squash-merging a pull request, verify that the squash commit body preserves the footer. A header-only `!` can indicate a major release without retaining enough information for actionable release notes in every parser and preset combination.
 
+The Semantic-Release workflow pins `conventional-changelog-conventionalcommits@9.3.1`. Keep this preset aligned with the version supported by `@semantic-release/release-notes-generator`; do not adopt a new preset major implicitly through a floating range because its parser or writer contract may change independently.
+
 Version-specific correction sources in this directory are synchronized to their existing GitHub releases by the corresponding workflow under `.github/workflows/`.
