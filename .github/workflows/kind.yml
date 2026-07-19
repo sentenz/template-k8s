@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Kind
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/actions/kind/**"
+      - ".github/workflows/kind.yml"
+      - "charts/**"
+      - "config/**"
+      - "manifests/**"
+      - "Makefile"
+      - "scripts/bootstrap.sh"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/actions/kind/**"
+      - ".github/workflows/kind.yml"
+      - "charts/**"
+      - "config/**"
+      - "manifests/**"
+      - "Makefile"
+      - "scripts/bootstrap.sh"
+  workflow_dispatch:
+
+concurrency:
+  group: kind-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  kind-deployment:
+    name: Kind Deployment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Test Kind Deployment
+        uses: ./.github/actions/kind
+        with:
+          cluster-name: template-k8s
+          kind-config: config/kind-config.yaml
+          kustomize-path: manifests/overlays/dev/dependency-track

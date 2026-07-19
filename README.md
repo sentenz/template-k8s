@@ -116,7 +116,9 @@ Kustomize assembles and applies configuration in a defined hierarchy to ensure p
 
 ### 1.4. Prerequisites
 
-TODO
+- A Docker-compatible container runtime. Docker Engine and Docker Desktop are supported by Kind.
+- Kind, kubectl, Kustomize, and Helm. On supported Linux hosts, `make bootstrap` installs the required command-line tools.
+- Host ports `80` and `443` available for the local Traefik ingress endpoint.
 
 ## 2. Usage
 
@@ -124,7 +126,15 @@ TODO
 
 #### 2.1.1. Kube Config
 
-TODO
+The local development environment uses a three-node Kind cluster: one control-plane node and two worker nodes. The generated kubeconfig is written to `config/kubeconfig.yaml` and is intentionally excluded from version control because it contains client credentials.
+
+```bash
+make k8s-setup
+make k8s-monitor-status
+make k8s-teardown
+```
+
+The Kind configuration maps host ports `80` and `443` to fixed NodePorts used by the Traefik service in the development overlay.
 
 ### 2.2. Cryptographic
 
