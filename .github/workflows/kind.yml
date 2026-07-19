@@ -108,29 +108,39 @@ jobs:
         run: |
           set -euo pipefail
 
-          kubectl rollout status statefulset --all \
-            --namespace postgresql \
-            --timeout=15m
+          wait_for_rollouts() {
+            local namespace="$1"
+            local timeout="$2"
+            local workloads=()
 
-          kubectl rollout status deployment --all \
-            --namespace traefik \
-            --timeout=10m
+            mapfile -t workloads < <(
+              kubectl get deployment,statefulset,daemonset \
+                --namespace "${namespace}" \
+                --output name
+            )
 
-          kubectl rollout status deployment --all \
-            --namespace dependency-track \
-            --timeout=20m
+            if (( ${#workloads[@]} == 0 )); then
+              echo "No rollout-managed workloads found in namespace ${namespace}" >&2
+              return 1
+            fi
 
-          kubectl wait --for=condition=Ready pod --all \
-            --namespace postgresql \
-            --timeout=5m
+            for workload in "${workloads[@]}"; do
+              kubectl rollout status \
+                --namespace "${namespace}" \
+                "${workload}" \
+                --timeout "${timeout}"
+            done
+          }
 
-          kubectl wait --for=condition=Ready pod --all \
-            --namespace traefik \
-            --timeout=5m
+          wait_for_rollouts postgresql 15m
+          wait_for_rollouts traefik 10m
+          wait_for_rollouts dependency-track 20m
 
-          kubectl wait --for=condition=Ready pod --all \
-            --namespace dependency-track \
-            --timeout=5m
+          for namespace in postgresql traefik dependency-track; do
+            kubectl wait --for=condition=Ready pod --all \
+              --namespace "${namespace}" \
+              --timeout=5m
+          done
 
           kubectl wait \
             --for=jsonpath='{.status.phase}'=Bound \
