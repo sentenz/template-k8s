@@ -1,5 +1,7 @@
 # Changelog
 
+## [2.0.0](https://github.com/sentenz/template-k8s/compare/1.0.0...2.0.0) (2026-07-19)
+
 # 1.0.0 (2026-01-05)
 
 
