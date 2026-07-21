@@ -707,3 +707,15 @@ sast-cosign-verify:
 
 	docker run --rm -v "${HOME}/.docker/config.json:/root/.docker/config.json" -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_COSIGN)" verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
 .PHONY: sast-cosign-verify
+
+# ── Container Manager ────────────────────────────────────────────────────────────────────────────
+
+## Teardown Docker containers and remove all unused images, containers, volumes, and networks
+container-docker-teardown:
+	# Display Docker disk usage statistics (images, containers, networks, volumes with links and sizes)
+	@docker system df -v
+	# Remove all unused Docker objects (images, containers, networks)
+	@docker system prune -f -a --filter "until=24h"
+	# Remove all Docker volumes (unused named `LINKS = 0`, anonymous)
+	@docker volume prune -f -a --filter "label!=keep=true"
+.PHONY: container-docker-teardown
