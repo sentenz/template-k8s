@@ -1,0 +1,313 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Kind CLI Container
+
+on:
+  pull_request:
+    paths:
+      - container/kind/**
+      - .github/workflows/kind-container.yml
+  push:
+    branches:
+      - main
+    tags:
+      - kind-v*
+    paths:
+      - container/kind/**
+      - .github/workflows/kind-container.yml
+  workflow_dispatch:
+    inputs:
+      kind_version:
+        description: kind release version to build
+        required: true
+        default: v0.32.0
+        type: string
+      publish:
+        description: Publish the immutable version tag to GHCR
+        required: true
+        default: false
+        type: boolean
+      update_latest:
+        description: Also update the moving latest tag
+        required: true
+        default: false
+        type: boolean
+      run_cluster_test:
+        description: Create and delete a cluster using the host Docker socket
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: kind-container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DEFAULT_KIND_VERSION: v0.32.0
+  IMAGE_NAME: ghcr.io/sentenz/kind
+
+jobs:
+  validate:
+    name: Build, smoke test, and scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve kind version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_KIND_VERSION: ${{ inputs.kind_version }}
+        run: |
+          set -euo pipefail
+
+          kind_version="${DEFAULT_KIND_VERSION}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == kind-v* ]]; then
+            kind_version="${GITHUB_REF_NAME#kind-}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            kind_version="${DISPATCH_KIND_VERSION}"
+          fi
+
+          if ! [[ "${kind_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid kind version: ${kind_version}" >&2
+            exit 1
+          fi
+
+          echo "kind_version=${kind_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Validate multi-platform build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/kind/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          outputs: type=cacheonly
+          build-args: |
+            KIND_VERSION=${{ steps.version.outputs.kind_version }}
+
+      - name: Build local smoke-test image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/kind/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: local/kind:${{ github.sha }}
+          provenance: false
+          sbom: false
+          build-args: |
+            KIND_VERSION=${{ steps.version.outputs.kind_version }}
+
+      - name: Smoke test kind version
+        shell: bash
+        env:
+          EXPECTED_KIND_VERSION: ${{ steps.version.outputs.kind_version }}
+          TEST_IMAGE: local/kind:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          version_output="$(docker run --rm "${TEST_IMAGE}" version)"
+          printf '%s\n' "${version_output}"
+          grep -F -- "${EXPECTED_KIND_VERSION}" <<< "${version_output}"
+
+      - name: Scan local image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: local/kind:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os
+          severity: CRITICAL
+
+  publish:
+    name: Publish multi-platform image
+    if: >-
+      startsWith(github.ref, 'refs/tags/kind-v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish)
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve kind version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_KIND_VERSION: ${{ inputs.kind_version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == kind-v* ]]; then
+            kind_version="${GITHUB_REF_NAME#kind-}"
+          else
+            kind_version="${DISPATCH_KIND_VERSION}"
+          fi
+
+          if ! [[ "${kind_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid kind version: ${kind_version}" >&2
+            exit 1
+          fi
+
+          echo "kind_version=${kind_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Protect immutable version tag
+        shell: bash
+        env:
+          KIND_VERSION: ${{ steps.version.outputs.kind_version }}
+        run: |
+          set -euo pipefail
+          version_image="${IMAGE_NAME}:${KIND_VERSION}"
+          if docker buildx imagetools inspect "${version_image}" >/dev/null 2>&1; then
+            echo "Refusing to overwrite existing image tag: ${version_image}" >&2
+            exit 1
+          fi
+
+      - name: Generate OCI metadata
+        id: metadata
+        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # v5.9.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.kind_version }}
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' && inputs.update_latest }}
+          labels: |
+            org.opencontainers.image.title=kind CLI
+            org.opencontainers.image.description=Containerized client environment for the Kubernetes kind CLI
+            org.opencontainers.image.url=https://github.com/sentenz/template-k8s
+            org.opencontainers.image.source=https://github.com/sentenz/template-k8s
+            org.opencontainers.image.version=${{ steps.version.outputs.kind_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build and publish image
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/kind/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            KIND_VERSION=${{ steps.version.outputs.kind_version }}
+
+      - name: Inspect published manifest
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "${IMAGE_NAME}@${IMAGE_DIGEST}"
+
+      - name: Scan published image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os
+          severity: CRITICAL
+
+  cluster-test:
+    name: Create cluster through CLI container
+    if: github.event_name == 'workflow_dispatch' && inputs.run_cluster_test
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Build local cluster-test image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/kind/Dockerfile
+          load: true
+          tags: local/kind:cluster-test
+          provenance: false
+          sbom: false
+          build-args: |
+            KIND_VERSION=${{ inputs.kind_version }}
+
+      - name: Create cluster
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume "${GITHUB_WORKSPACE}:/workspace" \
+            --workdir /workspace \
+            local/kind:cluster-test \
+            create cluster \
+            --name template-k8s-container-test \
+            --config config/kind-cluster.yaml \
+            --wait 5m
+
+      - name: Verify cluster nodes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_count="$({ docker ps --filter label=io.x-k8s.kind.cluster=template-k8s-container-test --format '{{.ID}}'; } | wc -l | tr -d ' ')"
+          if [[ "${node_count}" != "3" ]]; then
+            echo "Expected three kind nodes, found ${node_count}" >&2
+            docker ps --filter label=io.x-k8s.kind.cluster=template-k8s-container-test >&2
+            exit 1
+          fi
+
+      - name: Delete cluster
+        if: always()
+        shell: bash
+        run: |
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            local/kind:cluster-test \
+            delete cluster \
+            --name template-k8s-container-test
