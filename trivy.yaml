@@ -1,7 +1,7 @@
 cacert: ""
 cache:
   backend: fs
-  dir: /root/.cache/trivy
+  dir: .cache/trivy
   redis:
     ca: ""
     cert: ""
@@ -221,7 +221,7 @@ misconfiguration:
     exclude-downloaded-modules: false
     vars: []
 module:
-  dir: /root/.trivy/modules
+  dir: .cache/trivy/modules
   enable-modules: []
 output: ""
 output-plugin-arg: ""
