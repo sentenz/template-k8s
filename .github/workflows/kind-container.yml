@@ -48,6 +48,7 @@ permissions:
 env:
   DEFAULT_KIND_VERSION: v0.32.0
   IMAGE_NAME: ghcr.io/sentenz/kind
+  TRIVY_VERSION: v0.70.0
 
 jobs:
   prepare:
@@ -139,38 +140,56 @@ jobs:
           printf '%s\n' "${version_output}"
           grep -F -- "${EXPECTED_KIND_VERSION}" <<< "${version_output}"
 
-      - name: Set up Trivy
-        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514
-
-      - name: Scan amd64 image
+      - name: Export amd64 image archive
         shell: bash
         env:
           TEST_IMAGE: local/kind:${{ github.sha }}-amd64
         run: |
           set -euo pipefail
-          trivy image \
-            --format json \
-            --output trivy-amd64.json \
-            --exit-code 0 \
-            --ignore-unfixed \
-            --scanners vuln \
-            --pkg-types os,library \
-            --severity CRITICAL \
+          docker save \
+            --output "${RUNNER_TEMP}/kind-amd64.tar" \
             "${TEST_IMAGE}"
 
-      - name: Scan arm64 image
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Scan architecture archives
+        id: scan
         shell: bash
         run: |
           set -euo pipefail
-          trivy image \
-            --input "${RUNNER_TEMP}/kind-arm64.tar" \
-            --format json \
-            --output trivy-arm64.json \
-            --exit-code 0 \
-            --ignore-unfixed \
-            --scanners vuln \
-            --pkg-types os,library \
-            --severity CRITICAL
+
+          trivy --version
+          scanner_failed=0
+          for arch in amd64 arm64; do
+            archive="${RUNNER_TEMP}/kind-${arch}.tar"
+            report="trivy-${arch}.json"
+            log="trivy-${arch}.log"
+
+            set +e
+            trivy image \
+              --input "${archive}" \
+              --format json \
+              --output "${report}" \
+              --exit-code 0 \
+              --ignore-unfixed \
+              --scanners vuln \
+              --pkg-types os,library \
+              --severity CRITICAL \
+              2>&1 | tee "${log}"
+            status="${PIPESTATUS[0]}"
+            set -e
+
+            if (( status != 0 )); then
+              echo "::error title=Trivy ${arch} scan failed::Trivy exited with status ${status}"
+              scanner_failed=1
+            fi
+          done
+
+          echo "scanner_failed=${scanner_failed}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload vulnerability reports
         if: always()
@@ -179,16 +198,30 @@ jobs:
           name: kind-vulnerability-reports-${{ github.sha }}
           path: |
             trivy-amd64.json
+            trivy-amd64.log
             trivy-arm64.json
-          if-no-files-found: error
+            trivy-arm64.log
+          if-no-files-found: warn
 
       - name: Enforce vulnerability policy
         shell: bash
+        env:
+          SCANNER_FAILED: ${{ steps.scan.outputs.scanner_failed }}
         run: |
           set -euo pipefail
 
+          if [[ "${SCANNER_FAILED}" != "0" ]]; then
+            echo "One or more Trivy scans failed before producing a valid report." >&2
+            exit 1
+          fi
+
           findings=0
           for report in trivy-amd64.json trivy-arm64.json; do
+            if [[ ! -s "${report}" ]]; then
+              echo "Missing vulnerability report: ${report}" >&2
+              exit 1
+            fi
+
             count="$(jq '[.Results[]?.Vulnerabilities[]?] | length' "${report}")"
             printf '%s: %s critical finding(s)\n' "${report}" "${count}"
             if (( count > 0 )); then
@@ -319,20 +352,6 @@ jobs:
           build-args: |
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
 
-      - name: Scan amd64 release candidate
-        if: env.PUBLISH_VERSION == 'true'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        env:
-          TRIVY_PLATFORM: linux/amd64
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build_amd64.outputs.digest }}
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          scanners: vuln
-          vuln-type: os,library
-          severity: CRITICAL
-
       - name: Build and push arm64 release candidate
         if: env.PUBLISH_VERSION == 'true'
         id: build_arm64
@@ -348,19 +367,111 @@ jobs:
           build-args: |
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
 
-      - name: Scan arm64 release candidate
+      - name: Set up Trivy
         if: env.PUBLISH_VERSION == 'true'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        env:
-          TRIVY_PLATFORM: linux/arm64
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
-          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build_arm64.outputs.digest }}
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          scanners: vuln
-          vuln-type: os,library
-          severity: CRITICAL
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Scan release candidates
+        if: env.PUBLISH_VERSION == 'true'
+        id: release_scan
+        shell: bash
+        env:
+          AMD64_DIGEST: ${{ steps.build_amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ steps.build_arm64.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          trivy --version
+          scanner_failed=0
+          for arch in amd64 arm64; do
+            if [[ "${arch}" == "amd64" ]]; then
+              digest="${AMD64_DIGEST}"
+            else
+              digest="${ARM64_DIGEST}"
+            fi
+
+            report="trivy-release-${arch}.json"
+            log="trivy-release-${arch}.log"
+
+            set +e
+            trivy image \
+              --platform "linux/${arch}" \
+              --format json \
+              --output "${report}" \
+              --exit-code 0 \
+              --ignore-unfixed \
+              --scanners vuln \
+              --pkg-types os,library \
+              --severity CRITICAL \
+              "${IMAGE_NAME}@${digest}" \
+              2>&1 | tee "${log}"
+            status="${PIPESTATUS[0]}"
+            set -e
+
+            if (( status != 0 )); then
+              echo "::error title=Trivy ${arch} release scan failed::Trivy exited with status ${status}"
+              scanner_failed=1
+            fi
+          done
+
+          echo "scanner_failed=${scanner_failed}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload release vulnerability reports
+        if: env.PUBLISH_VERSION == 'true' && always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kind-release-vulnerability-reports-${{ needs.prepare.outputs.kind_version }}
+          path: |
+            trivy-release-amd64.json
+            trivy-release-amd64.log
+            trivy-release-arm64.json
+            trivy-release-arm64.log
+          if-no-files-found: warn
+
+      - name: Enforce release vulnerability policy
+        if: env.PUBLISH_VERSION == 'true'
+        shell: bash
+        env:
+          SCANNER_FAILED: ${{ steps.release_scan.outputs.scanner_failed }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${SCANNER_FAILED}" != "0" ]]; then
+            echo "One or more release-candidate scans failed before producing a valid report." >&2
+            exit 1
+          fi
+
+          findings=0
+          for report in trivy-release-amd64.json trivy-release-arm64.json; do
+            if [[ ! -s "${report}" ]]; then
+              echo "Missing vulnerability report: ${report}" >&2
+              exit 1
+            fi
+
+            count="$(jq '[.Results[]?.Vulnerabilities[]?] | length' "${report}")"
+            printf '%s: %s critical finding(s)\n' "${report}" "${count}"
+            if (( count > 0 )); then
+              jq -r '
+                .Results[]? as $result
+                | $result.Vulnerabilities[]?
+                | [
+                    $result.Target,
+                    .PkgName,
+                    .InstalledVersion,
+                    (.FixedVersion // "unfixed"),
+                    .VulnerabilityID,
+                    .Title
+                  ]
+                | @tsv
+              ' "${report}"
+              findings=1
+            fi
+          done
+
+          exit "${findings}"
 
       - name: Publish immutable version tag
         if: env.PUBLISH_VERSION == 'true'
