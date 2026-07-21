@@ -5,6 +5,9 @@
     - [1.1.1. Host-Based](#111-host-based)
     - [1.1.2. Path-Based](#112-path-based)
   - [1.2. Troubleshoot](#12-troubleshoot)
+    - [1.2.1. Kubernetes Resources](#121-kubernetes-resources)
+    - [1.2.2. Host Services](#122-host-services)
+    - [1.2.3. Host Network](#123-host-network)
 
 ## 1. Usage
 
@@ -199,28 +202,41 @@ Path-Based DNS Routing ([Ingress Fan-Out](https://kubernetes.io/docs/concepts/se
 
 ### 1.2. Troubleshoot
 
-- Check Resources
-  > Ensure the resources are created and running correctly.
+#### 1.2.1. Kubernetes Resources
+
+Ensure the resources are created and running correctly.
+
+```bash
+kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get secret dependency-track-tls
+kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get ingress
+kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get pods
+```
+
+#### 1.2.2. Host Services
+
+Verify the services are accessible via HTTP. The `-k` flag skips TLS verification for self-signed certificates.
+
+- Path-Based
 
   ```bash
-  kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get secret dependency-track-tls
-  kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get ingress
-  kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get pods
+  curl -I -k -v --max-time 15 https://dependency-track.localhost/
+  curl -I -k -v --max-time 15 https://dependency-track.localhost/api
+  curl -I -k -v --max-time 15 https://dependency-track.localhost/health
   ```
 
-- Check HTTP
-  > Verify the services are accessible via HTTP. The `-k` flag skips TLS verification for self-signed certificates.
+- Host-Based
 
   ```bash
-  curl -I -k -v https://dependency-track.localhost/ --max-time 15
-  curl -I -k -v https://api.dependency-track.localhost/ --max-time 15
+  curl -I -k -v --max-time 15 https://dependency-track.localhost/
+  curl -I -k -v --max-time 15 https://api.dependency-track.localhost/
   ```
 
-- `hostNetwork`
-  > The `hostNetwork: true` setting is used to allow Traefik to bind to ports 80 and 443 on the host network. This is safe for the local Kind development cluster that runs on the same machine as the browser client.
+#### 1.2.3. Host Network
 
-  > [!IMPORTANT]
-  > Do not enable `hostNetwork` for remote clusters, it exposes Traefik on node network interfaces and can conflict with host services or create unwanted exposure.
+The `hostNetwork: true` setting is used to allow Traefik to bind to ports 80 and 443 on the host network. This is safe for the local Kind development cluster that runs on the same machine as the browser client.
+
+> [!IMPORTANT]
+> Do not enable `hostNetwork` for remote clusters, it exposes Traefik on node network interfaces and can conflict with host services or create unwanted exposure.
 
 - `/etc/hosts`
   > Modify for local name resolution, testing services, or overriding DNS entries.
