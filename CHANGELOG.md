@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.3](https://github.com/sentenz/template-k8s/compare/2.0.2...2.0.3) (2026-07-21)
+
+### Bug Fixes
+
+* update dependency-track chart version to 2.0.0-rc.3 in kustomization.yaml ([bcc7919](https://github.com/sentenz/template-k8s/commit/bcc79197948fa2a57516d973fa619c97807c4c90))
+
 ## [2.0.2](https://github.com/sentenz/template-k8s/compare/2.0.1...2.0.2) (2026-07-21)
 
 ### Bug Fixes
