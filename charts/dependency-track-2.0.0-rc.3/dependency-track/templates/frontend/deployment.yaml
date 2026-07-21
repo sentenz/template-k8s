@@ -1,0 +1,110 @@
+{{- if .Values.frontend.enabled }}
+{{- $extraEnv := prepend .Values.frontend.extraEnv (dict "name" "API_BASE_URL" "value" .Values.frontend.apiBaseUrl) -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dependencytrack.frontend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "dependencytrack.componentLabels" (dict "ctx" . "component" "frontend" "role" "") | nindent 4 }}
+  {{- with .Values.frontend.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.frontend.autoscaling.enabled }}
+  replicas: {{ .Values.frontend.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.frontend.revisionHistoryLimit }}
+  strategy: {{- toYaml .Values.frontend.deployment.strategy | nindent 4 }}
+  selector:
+    matchLabels: {{- include "dependencytrack.selectorLabels" (dict "ctx" . "component" "frontend" "role" "") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dependencytrack.selectorLabels" (dict "ctx" . "component" "frontend" "role" "") | nindent 8 }}
+        {{- with .Values.frontend.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.frontend.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "dependencytrack.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: {{ .Values.enableServiceLinks }}
+      {{- with .Values.frontend.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.frontend.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.initContainers }}
+      initContainers:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: frontend
+          image: {{ include "dependencytrack.frontend.image" . }}
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          {{- with .Values.frontend.securityContext }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.frontend.command }}
+          command: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.frontend.args }}
+          args: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources: {{- toYaml .Values.frontend.resources | nindent 12 }}
+          env:
+            {{- toYaml $extraEnv | nindent 12 }}
+          {{- with .Values.frontend.extraEnvFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: web
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              scheme: HTTP
+              port: web
+              path: /static/config.json
+            {{- toYaml .Values.frontend.probes.liveness | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              scheme: HTTP
+              port: web
+              path: /static/config.json
+            {{- toYaml .Values.frontend.probes.readiness | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.frontend.additionalVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.frontend.extraContainers }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.frontend.additionalVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.frontend.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

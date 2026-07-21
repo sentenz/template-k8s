@@ -1,0 +1,27 @@
+{{- if .Values.apiServer.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "dependencytrack.apiServer.metricsFullname" . }}
+  namespace: {{ .Values.apiServer.serviceMonitor.namespace }}
+  labels:
+    {{- include "dependencytrack.componentLabels" (dict "ctx" . "component" "api-server" "role" "") | nindent 4 }}
+    {{- with .Values.apiServer.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels: {{- include "dependencytrack.selectorLabels" (dict "ctx" . "component" "api-server" "role" "") | nindent 6 }}
+  # `dependencytrack_io_role` distinguishes web/worker in PromQL.
+  podTargetLabels:
+    - dependencytrack.io/role
+  endpoints:
+    - port: management
+      path: /metrics
+      interval: {{ .Values.apiServer.serviceMonitor.scrapeInterval }}
+      scrapeTimeout: {{ .Values.apiServer.serviceMonitor.scrapeTimeout }}
+{{- end }}
