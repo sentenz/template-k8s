@@ -139,29 +139,38 @@ jobs:
           printf '%s\n' "${version_output}"
           grep -F -- "${EXPECTED_KIND_VERSION}" <<< "${version_output}"
 
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514
+
       - name: Scan amd64 image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: local/kind:${{ github.sha }}-amd64
-          format: json
-          output: trivy-amd64.json
-          exit-code: "0"
-          ignore-unfixed: true
-          scanners: vuln
-          vuln-type: os,library
-          severity: CRITICAL
+        shell: bash
+        env:
+          TEST_IMAGE: local/kind:${{ github.sha }}-amd64
+        run: |
+          set -euo pipefail
+          trivy image \
+            --format json \
+            --output trivy-amd64.json \
+            --exit-code 0 \
+            --ignore-unfixed \
+            --scanners vuln \
+            --pkg-types os,library \
+            --severity CRITICAL \
+            "${TEST_IMAGE}"
 
       - name: Scan arm64 image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          input: ${{ runner.temp }}/kind-arm64.tar
-          format: json
-          output: trivy-arm64.json
-          exit-code: "0"
-          ignore-unfixed: true
-          scanners: vuln
-          vuln-type: os,library
-          severity: CRITICAL
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy image \
+            --input "${RUNNER_TEMP}/kind-arm64.tar" \
+            --format json \
+            --output trivy-arm64.json \
+            --exit-code 0 \
+            --ignore-unfixed \
+            --scanners vuln \
+            --pkg-types os,library \
+            --severity CRITICAL
 
       - name: Upload vulnerability reports
         if: always()
