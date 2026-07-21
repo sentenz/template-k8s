@@ -1,14 +1,20 @@
 ---
-common:
+database:
+  jdbcUrl: "jdbc:postgresql://postgresql.postgresql.svc.cluster.local:5432/dtrack"
+  username: "dtrack"
+  password: "dtrack"
+
+# Development-only fixture KEK. Replace with an externally managed Secret for
+# any persistent or non-local environment.
+secretManagement:
   database:
-    jdbcUrl: "jdbc:postgresql://postgresql.postgresql.svc.cluster.local:5432/dtrack"
-    username: "dtrack"
-    password: "dtrack"
+    kek:
+      value: "h1lrkPlxxIe9K92pUQkV4O+gn4NMP1E9pN4p94zC5IE="
 
 apiServer:
   service:
     type: ClusterIP
-  metrics:
+  serviceMonitor:
     enabled: false
   extraEnv: []
 
