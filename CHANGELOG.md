@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.1](https://github.com/sentenz/template-k8s/compare/2.0.0...2.0.1) (2026-07-21)
+
+### Bug Fixes
+
+* modidy kustomize patch target for dependency-track frontend ([e4982f8](https://github.com/sentenz/template-k8s/commit/e4982f8c2bf6f68de353c04206fee18b7b9a4362))
+
 ## [2.0.0](https://github.com/sentenz/template-k8s/compare/1.0.0...2.0.0) (2026-07-19)
 
 ### ⚠ BREAKING CHANGES
