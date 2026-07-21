@@ -7,7 +7,6 @@ creation_rules:
       - pgp:
           - "F174FF15961E09604A3CBD78F650082B88276934" # sops
           - "EB46708C781B80024FC2A17F270E6358E03EC01E" # sops-k8s
-          - "4A88DC2628DC86414D12825A4BCB923204FF3992" # sops-sentenz
 
   # 2. Certificates and Private Keys
   - path_regex: '.*\.(pem|key|crt|cer|p12|der)$'
@@ -16,7 +15,6 @@ creation_rules:
       - pgp:
           - "F174FF15961E09604A3CBD78F650082B88276934" # sops
           - "EB46708C781B80024FC2A17F270E6358E03EC01E" # sops-k8s
-          - "4A88DC2628DC86414D12825A4BCB923204FF3992" # sops-sentenz
 
   # 3. Kubernetes YAML: encrypt only secret payloads
   - path_regex: .*.yaml
@@ -25,14 +23,12 @@ creation_rules:
       - pgp:
           - "0F0FA4800EFAD0BE36B109AE7F34A16A052377E8" # sops
           - "EB46708C781B80024FC2A17F270E6358E03EC01E" # sops-k8s
-          - "4A88DC2628DC86414D12825A4BCB923204FF3992" # sops-sentenz
 
   # 4.1. Generic group rule
   - key_groups:
       - pgp:
           - "F174FF15961E09604A3CBD78F650082B88276934" # sops
           - "EB46708C781B80024FC2A17F270E6358E03EC01E" # sops-k8s
-          - "4A88DC2628DC86414D12825A4BCB923204FF3992" # sops-sentenz
 
   # 4.2. Generic single rule
   - pgp: "F174FF15961E09604A3CBD78F650082B88276934" # sops
