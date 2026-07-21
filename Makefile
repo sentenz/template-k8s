@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
-ifneq (,$(wildcard .env))
-	include .env
+# Load Dotenv Files
+
+DOTENV_FILES := $(filter-out %.enc,$(wildcard .env .env.*))
+ifneq ($(strip $(DOTENV_FILES)),)
+	include $(DOTENV_FILES)
 	export
 endif
 
@@ -20,12 +23,13 @@ K8S_KUSTOMIZE_BIN := kustomize
 K8S_KUBECONFIG ?= config/kubeconfig.yaml
 K8S_STACK_DIR ?= manifests/overlays
 KIND_CLUSTER_NAME ?= template-k8s
-KIND_CONFIG ?= config/kind-config.yaml
+KIND_CONFIG ?= config/kind-cluster.yaml
 
 # Define Targets
 
 default: help
 
+# NOTE Targets MUST have a leading comment line starting with `##` to be included in the list. See the targets below for examples.
 help:
 	@awk 'BEGIN {printf "Tasks\n\tA collection of tasks used in the current project.\n\n"}'
 	@awk 'BEGIN {printf "Usage\n\tmake $(shell tput -Txterm setaf 6)<task>$(shell tput -Txterm sgr0)\n\n"}' $(MAKEFILE_LIST)
@@ -152,8 +156,8 @@ k8s-list-controller:
 	kubectl get ingressclass --kubeconfig $(K8S_KUBECONFIG)
 .PHONY: k8s-list-controller
 
-## Monitor the status of Kubernetes resources
-k8s-monitor-status:
+## Display Kubernetes observability information including services, namespaces, ingress controllers, and pods
+k8s-obserability:
 	@echo "──── K8s Services ────────────────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-list-service
 	@echo "──── K8s Namespaces ──────────────────────────────────────────────────────────────────────"
@@ -162,7 +166,7 @@ k8s-monitor-status:
 	@$(MAKE) -s k8s-list-controller
 	@echo "──── K8s Pods ────────────────────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-list-pod
-.PHONY: k8s-monitor-status
+.PHONY: k8s-obserability
 
 # ── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
 
@@ -243,6 +247,7 @@ helm-render-charts:
 
 # ── Secrets Manager ──────────────────────────────────────────────────────────────────────────────
 
+SECRETS_IMAGE_SOPS ?= ghcr.io/getsops/sops:v3.13.2@sha256:0bc8915bce25ea3bf0f3e27a74cb5ad092488e6e5245af384816d628ed7fd426
 SECRETS_SOPS_UID ?= sops-k8s
 
 # Usage: make secrets-gpg-generate SECRETS_SOPS_UID=<uid>
@@ -259,8 +264,8 @@ secrets-gpg-generate:
 ## Export the GPG key pair for SOPS with the specified UID to ASCII files
 secrets-gpg-export:
 	@if [ -z "$(SECRETS_SOPS_UID)" ]; then \
-	        echo "usage: make secrets-gpg-export SECRETS_SOPS_UID=<uid>" >&2; \
-	        exit 1; \
+		echo "usage: make secrets-gpg-export SECRETS_SOPS_UID=<uid>" >&2; \
+		exit 1; \
 	fi
 
 	@gpg --armor --export "$(SECRETS_SOPS_UID)" > "$(SECRETS_SOPS_UID)-public.asc"
@@ -272,23 +277,23 @@ secrets-gpg-export:
 ## Import GPG keys from specified files and if provided set ultimate trust for the SOPS UID
 secrets-gpg-import:
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-	        echo "usage: make secrets-gpg-import <files>" >&2; \
-	        exit 1; \
+		echo "usage: make secrets-gpg-import <files>" >&2; \
+		exit 1; \
 	fi
 
 	# Import keys from specified files
 	@for file in $(filter-out $@,$(MAKECMDGOALS)); do \
-	        if [ -f "$$file" ]; then \
-	                gpg --import "$$file"; \
-	        fi; \
+		if [ -f "$$file" ]; then \
+			gpg --import "$$file"; \
+		fi; \
 	done
 
 	# Set ultimate trust for the SECRETS_SOPS_UID
 	@if [ "$(origin SECRETS_SOPS_UID)" = "command line" ] && [ -n "$(SECRETS_SOPS_UID)" ]; then \
-	        FPR="$$( { gpg --list-keys --with-colons "$(SECRETS_SOPS_UID)" 2>/dev/null || true; } | awk -F: '/^fpr:/ {print $$10; exit}')"; \
-	        if [ -n "$${FPR}" ]; then \
-	                echo "$${FPR}:6:" | gpg --import-ownertrust; \
-	        fi; \
+		FPR="$$( { gpg --list-keys --with-colons "$(SECRETS_SOPS_UID)" 2>/dev/null || true; } | awk -F: '/^fpr:/ {print $$10; exit}')"; \
+		if [ -n "$${FPR}" ]; then \
+			echo "$${FPR}:6:" | gpg --import-ownertrust; \
+		fi; \
 	fi
 .PHONY: secrets-gpg-import
 
@@ -297,8 +302,8 @@ secrets-gpg-import:
 ## Remove GPG keys for SOPS with the specified UID (interactive)
 secrets-gpg-remove:
 	@if ! gpg --list-keys "$(SECRETS_SOPS_UID)" >/dev/null 2>&1; then
-	        echo "warning: no key found for '$(SECRETS_SOPS_UID)'" >&2
-	        exit 0
+		echo "warning: no key found for '$(SECRETS_SOPS_UID)'" >&2
+		exit 0
 	fi
 
 	# Delete private key first, then public key
@@ -311,47 +316,54 @@ secrets-gpg-remove:
 ## Show GPG public key information for SOPS UID or list all keys if UID is not set
 secrets-gpg-show:
 	@if [ "$(origin SECRETS_SOPS_UID)" != "command line" ]; then \
-	        gpg --list-keys --keyid-format long; \
-	        exit 0; \
+		gpg --list-keys --keyid-format long; \
+		exit 0; \
 	fi
 
 	@FPR="$$( { gpg --list-keys --with-colons "$(SECRETS_SOPS_UID)" 2>/dev/null || true; } | awk -F: '/^fpr:/ {print $$10; exit}')"; \
 	if [ -z "$${FPR}" ]; then \
-	        echo "error: no fingerprint found for UID '$(SECRETS_SOPS_UID)'" >&2; \
-	        exit 1; \
+		echo "error: no fingerprint found for UID '$(SECRETS_SOPS_UID)'" >&2; \
+		exit 1; \
 	fi; \
 	echo -e "UID: $(SECRETS_SOPS_UID)\nFingerprint: $${FPR}"
 .PHONY: secrets-gpg-show
 
 # Usage: make secrets-sops-encrypt <files>
 #
-## Encrypt specified files using SOPS with GPG keys
+## Encrypt specified files using SOPS with GPG keys, writing output to <file>.enc
 secrets-sops-encrypt:
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-	        echo "usage: make secrets-sops-encrypt <files>" >&2; \
-	        exit 1; \
+		echo "usage: make secrets-sops-encrypt <files>" >&2; \
+		exit 1; \
 	fi
 
 	@for file in $(filter-out $@,$(MAKECMDGOALS)); do \
-	        if [ -f "$$file" ]; then \
-	                sops --encrypt --in-place "$$file"; \
-	        fi; \
+		if [ -f "$$file" ]; then \
+			docker run --rm -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/root/.gnupg" -w /workspace $(SECRETS_IMAGE_SOPS) encrypt --output "$$file.enc" "$$file"; \
+		else \
+			echo "file not found: $$file" >&2; \
+		fi; \
 	done
 .PHONY: secrets-sops-encrypt
 
 # Usage: make secrets-sops-decrypt <files>
 #
-## Decrypt specified SOPS-encrypted files using GPG keys
+## Decrypt specified SOPS-encrypted files (expects <file>.enc), writing output to <file>
 secrets-sops-decrypt:
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-	        echo "usage: make secrets-sops-decrypt <files>" >&2; \
-	        exit 1; \
+		echo "usage: make secrets-sops-decrypt <files>" >&2; \
+		exit 1; \
 	fi
 
 	@for file in $(filter-out $@,$(MAKECMDGOALS)); do \
-	        if [ -f "$$file" ]; then \
-	                sops --decrypt --in-place "$$file"; \
-	        fi; \
+		case "$$file" in \
+			*.enc) \
+				docker run --rm -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/root/.gnupg" -w /workspace $(SECRETS_IMAGE_SOPS) decrypt --filename-override "$${file%.enc}" --output "$${file%.enc}" "$$file"; \
+				;; \
+			*) \
+				docker run --rm -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/root/.gnupg" -w /workspace $(SECRETS_IMAGE_SOPS) decrypt --in-place "$$file"; \
+				;; \
+		esac; \
 	done
 .PHONY: secrets-sops-decrypt
 
@@ -360,47 +372,46 @@ secrets-sops-decrypt:
 ## View decrypted contents of a SOPS-encrypted file using GPG keys
 secrets-sops-view:
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-	        echo "usage: make secrets-sops-view <file>" >&2; \
-	        exit 1; \
+		echo "usage: make secrets-sops-view <file>" >&2; \
+		exit 1; \
 	fi
 
-	sops --decrypt "$(filter-out $@,$(MAKECMDGOALS))"
+	docker run --rm -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/root/.gnupg" -w /workspace $(SECRETS_IMAGE_SOPS) decrypt "$(filter-out $@,$(MAKECMDGOALS))"
 .PHONY: secrets-sops-view
 
 # ── Policy Manager ───────────────────────────────────────────────────────────────────────────────
 
-POLICY_IMAGE_CONFTEST ?= openpolicyagent/conftest:v0.65.0@sha256:afa510df6d4562ebe24fb3e457da6f6d6924124140a13b51b950cc6cb1d25525
+POLICY_IMAGE_CONFTEST ?= docker.io/openpolicyagent/conftest:v0.68.2@sha256:5fd81e332d7e4bc01daf3ef35371800a9a9720a30c0c37a78de0c5fbe4b6d622
 
-# Usage: make policy-analysis-conftest <filepath>
+# Usage: make policy-conftest-test <filepath>
 #
-## Analyze configuration files using Conftest for policy violations and generate a report
-policy-analysis-conftest:
+## Run Conftest container in REPL (Read-Eval-Print-Loop) to evaluate policies against input data and generate a report
+policy-conftest-test:
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "usage: make policy-conftest-test <filepath>"; \
+		exit 1; \
+	fi
+
 	@mkdir -p logs/policy
 
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make policy-analysis-conftest <filepath>"; \
-		exit 1; \
-	fi
+	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_IMAGE_CONFTEST)" test "$(filter-out $@,$(MAKECMDGOALS))" > logs/policy/conftest-report.json 2>&1
+.PHONY: policy-conftest-test
 
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_IMAGE_CONFTEST)" test "$(filter-out $@,$(MAKECMDGOALS))" > logs/policy/conftest.json 2>&1
-.PHONY: policy-analysis-conftest
+POLICY_IMAGE_REGAL ?= ghcr.io/open-policy-agent/regal:0.42.0@sha256:07984036043f772a1f921bd0ad9045b8bd9dc58460a1d76f476c458dc8a98b16
 
-POLICY_IMAGE_REGAL ?= ghcr.io/openpolicyagent/regal:0.37.0@sha256:a09884658f3c8c9cc30de136b664b3afdb7927712927184ba891a155a9676050
-
-# Usage: make policy-lint-regal <filepath>
+# Usage: make policy-regal-lint <filepath>
 #
 ## Lint Rego policies using Regal and generate a report
-policy-lint-regal:
-	@mkdir -p logs/analysis
-
+policy-regal-lint:
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make policy-lint-regal"; \
+		echo "usage: make policy-regal-lint <filepath>"; \
 		exit 1; \
 	fi
 
-	docker pull "$(POLICY_IMAGE_REGAL)"
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_IMAGE_REGAL)" regal lint "$(filter-out $@,$(MAKECMDGOALS))" --format json > logs/analysis/regal.json 2>&1
-.PHONY: policy-lint-regal
+	@mkdir -p logs/policy
+
+	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_IMAGE_REGAL)" lint "$(filter-out $@,$(MAKECMDGOALS))" --format json > logs/policy/regal.json 2>&1
+.PHONY: policy-regal-lint
 
 # ── SAST Manager ─────────────────────────────────────────────────────────────────────────────────
 

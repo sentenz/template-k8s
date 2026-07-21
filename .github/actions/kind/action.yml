@@ -11,7 +11,7 @@ inputs:
   kind-config:
     description: Repository-relative path to the Kind cluster configuration.
     required: false
-    default: config/kind-config.yaml
+    default: config/kind-cluster.yaml
   kustomize-path:
     description: Repository-relative path to the Kustomize overlay to deploy.
     required: false

@@ -49,5 +49,5 @@ jobs:
         uses: ./.github/actions/kind
         with:
           cluster-name: template-k8s
-          kind-config: config/kind-config.yaml
+          kind-config: config/kind-cluster.yaml
           kustomize-path: manifests/overlays/dev/dependency-track
