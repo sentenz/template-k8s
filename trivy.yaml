@@ -1,7 +1,7 @@
 cacert: ""
 cache:
   backend: fs
-  dir: /root/.cache/trivy
+  dir: .cache/trivy
   redis:
     ca: ""
     cert: ""
@@ -26,7 +26,7 @@ dependency-tree: false
 exit-code: 0
 exit-on-eol: 0
 ignore-policy: ""
-ignorefile: .trivyignore
+ignorefile: .trivyignore.yaml
 image:
   docker:
     host: ""
@@ -221,7 +221,7 @@ misconfiguration:
     exclude-downloaded-modules: false
     vars: []
 module:
-  dir: /root/.trivy/modules
+  dir: .cache/trivy/modules
   enable-modules: []
 output: ""
 output-plugin-arg: ""
