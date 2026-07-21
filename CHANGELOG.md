@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.2](https://github.com/sentenz/template-k8s/compare/2.0.1...2.0.2) (2026-07-21)
+
+### Bug Fixes
+
+* update ingress resource names to match service names in patch-dependency-track-ingress.yaml ([390b5ab](https://github.com/sentenz/template-k8s/commit/390b5ab33fd8eab1695d662323da262725c541a0))
+
 ## [2.0.1](https://github.com/sentenz/template-k8s/compare/2.0.0...2.0.1) (2026-07-21)
 
 ### Bug Fixes
