@@ -3,12 +3,6 @@
 name: Registry Digest Lookup
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/registry-digest-lookup.md
-      - .github/workflows/registry-digest-lookup.yml
   push:
     branches:
       - agent/containerize-kind-make-targets
@@ -17,7 +11,7 @@ on:
       - .github/workflows/registry-digest-lookup.yml
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
 jobs:
@@ -28,6 +22,9 @@ jobs:
     env:
       IMAGE: ghcr.io/sentenz/kind:v0.32.0
     steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
       - name: Log in to GHCR
         shell: bash
         env:
@@ -47,4 +44,14 @@ jobs:
             echo "Unable to resolve immutable manifest digest for ${IMAGE}" >&2
             exit 1
           fi
-          echo "KIND_IMAGE_DIGEST=${digest}"
+          printf '%s\n' "${digest}" > .github/registry-digest-result.txt
+
+      - name: Publish lookup result to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/registry-digest-result.txt
+          git commit -m "chore: record temporary kind image digest"
+          git push
