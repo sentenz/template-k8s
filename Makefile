@@ -170,30 +170,30 @@ k8s-obserability:
 
 # ── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
 
-# Vendor Helm chart for Dependency-Track
-helm-vendor-dependency-track:
-	helm repo add dependency-track https://dependencytrack.github.io/helm-charts
-	helm pull dependency-track/dependency-track --version 0.36.0 --untar --untardir charts/
-.PHONY: helm-vendor-dependency-track
+# # Vendor Helm chart for Dependency-Track
+# helm-vendor-dependency-track:
+# 	helm repo add dependency-track https://dependencytrack.github.io/helm-charts
+# 	helm pull dependency-track/dependency-track --version 0.36.0 --untar --untardir charts/
+# .PHONY: helm-vendor-dependency-track
 
-# Vendor Helm chart for PostgreSQL
-helm-vendor-postgresql:
-	helm repo add bitnami https://charts.bitnami.com/bitnami
-	helm pull bitnami/postgresql --version 16.7.27 --untar --untardir charts/
-.PHONY: helm-vendor-postgresql
+# # Vendor Helm chart for PostgreSQL
+# helm-vendor-postgresql:
+# 	helm repo add bitnami https://charts.bitnami.com/bitnami
+# 	helm pull bitnami/postgresql --version 16.7.27 --untar --untardir charts/
+# .PHONY: helm-vendor-postgresql
 
-# Vendor Helm chart for Traefik
-helm-vendor-traefik:
-	helm repo add traefik https://traefik.github.io/charts
-	helm pull traefik/traefik --version 37.0.0 --untar --untardir charts/
-.PHONY: helm-vendor-traefik
+# # Vendor Helm chart for Traefik
+# helm-vendor-traefik:
+# 	helm repo add traefik https://traefik.github.io/charts
+# 	helm pull traefik/traefik --version 37.0.0 --untar --untardir charts/
+# .PHONY: helm-vendor-traefik
 
-## Vendor all Helm charts
-helm-vendor-charts:
-	@$(MAKE) helm-vendor-dependency-track
-	@$(MAKE) helm-vendor-postgresql
-	@$(MAKE) helm-vendor-traefik
-.PHONY: helm-vendor-charts
+# ## Vendor all Helm charts
+# helm-vendor-charts:
+# 	@$(MAKE) helm-vendor-dependency-track
+# 	@$(MAKE) helm-vendor-postgresql
+# 	@$(MAKE) helm-vendor-traefik
+# .PHONY: helm-vendor-charts
 
 # ── Helm Charts Rendering ────────────────────────────────────────────────────────────────────────
 
