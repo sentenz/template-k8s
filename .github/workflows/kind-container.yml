@@ -12,20 +12,23 @@ on:
       - main
     tags:
       - kind-v*
+    paths:
+      - container/kind/**
+      - .github/workflows/kind-container.yml
   workflow_dispatch:
     inputs:
       kind_version:
-        description: kind release version to build
+        description: kind release version to build or promote
         required: true
         default: v0.32.0
         type: string
       publish:
-        description: Publish the immutable version tag to GHCR
+        description: Publish a new immutable version tag to GHCR
         required: true
         default: false
         type: boolean
       update_latest:
-        description: Also update the moving latest tag
+        description: Promote the selected immutable version to latest
         required: true
         default: false
         type: boolean
@@ -36,8 +39,8 @@ on:
         type: boolean
 
 concurrency:
-  group: kind-container-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: kind-container-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ inputs.kind_version || 'default' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -47,18 +50,13 @@ env:
   IMAGE_NAME: ghcr.io/sentenz/kind
 
 jobs:
-  validate:
-    name: Build, smoke test, and scan
+  prepare:
+    name: Resolve kind version
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 5
     outputs:
       kind_version: ${{ steps.version.outputs.kind_version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          persist-credentials: false
-
       - name: Resolve kind version
         id: version
         shell: bash
@@ -81,73 +79,16 @@ jobs:
 
           echo "kind_version=${kind_version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
-        with:
-          platforms: amd64,arm64
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
-
-      - name: Validate multi-platform build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: .
-          file: container/kind/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: false
-          outputs: type=cacheonly
-          build-args: |
-            KIND_VERSION=${{ steps.version.outputs.kind_version }}
-
-      - name: Build local smoke-test image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: .
-          file: container/kind/Dockerfile
-          platforms: linux/amd64
-          load: true
-          tags: local/kind:${{ github.sha }}
-          provenance: false
-          sbom: false
-          build-args: |
-            KIND_VERSION=${{ steps.version.outputs.kind_version }}
-
-      - name: Smoke test kind version
-        shell: bash
-        env:
-          EXPECTED_KIND_VERSION: ${{ steps.version.outputs.kind_version }}
-          TEST_IMAGE: local/kind:${{ github.sha }}
-        run: |
-          set -euo pipefail
-          version_output="$(docker run --rm "${TEST_IMAGE}" version)"
-          printf '%s\n' "${version_output}"
-          grep -F -- "${EXPECTED_KIND_VERSION}" <<< "${version_output}"
-
-      - name: Scan local image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: local/kind:${{ github.sha }}
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: os
-          severity: CRITICAL
-
-  publish:
-    name: Publish multi-platform image
+  validate:
+    name: Build, smoke test, and scan
+    needs: prepare
     if: >-
-      startsWith(github.ref, 'refs/tags/kind-v') ||
-      (github.event_name == 'workflow_dispatch' && inputs.publish)
-    needs: validate
-    concurrency:
-      group: kind-container-publish-${{ needs.validate.outputs.kind_version }}
-      cancel-in-progress: false
+      github.event_name != 'workflow_dispatch' ||
+      inputs.publish ||
+      inputs.update_latest != true ||
+      inputs.run_cluster_test
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: write
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -162,6 +103,117 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
+      - name: Build local amd64 image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/kind/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: local/kind:${{ github.sha }}-amd64
+          provenance: false
+          sbom: false
+          build-args: |
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+
+      - name: Build arm64 image archive
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/kind/Dockerfile
+          platforms: linux/arm64
+          outputs: type=docker,dest=${{ runner.temp }}/kind-arm64.tar
+          provenance: false
+          sbom: false
+          build-args: |
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+
+      - name: Smoke test kind version
+        shell: bash
+        env:
+          EXPECTED_KIND_VERSION: ${{ needs.prepare.outputs.kind_version }}
+          TEST_IMAGE: local/kind:${{ github.sha }}-amd64
+        run: |
+          set -euo pipefail
+          version_output="$(docker run --rm "${TEST_IMAGE}" version)"
+          printf '%s\n' "${version_output}"
+          grep -F -- "${EXPECTED_KIND_VERSION}" <<< "${version_output}"
+
+      - name: Scan amd64 image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: local/kind:${{ github.sha }}-amd64
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+
+      - name: Scan arm64 image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          input: ${{ runner.temp }}/kind-arm64.tar
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+
+  release:
+    name: Publish or promote image
+    needs:
+      - prepare
+      - validate
+    if: >-
+      always() &&
+      needs.prepare.result == 'success' &&
+      (
+        (
+          startsWith(github.ref, 'refs/tags/kind-v') ||
+          (github.event_name == 'workflow_dispatch' && inputs.publish)
+        ) &&
+        needs.validate.result == 'success'
+        ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.update_latest &&
+          inputs.publish != true &&
+          (
+            needs.validate.result == 'success' ||
+            needs.validate.result == 'skipped'
+          )
+        )
+      )
+    concurrency:
+      group: kind-container-release-${{ needs.prepare.outputs.kind_version }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      KIND_VERSION: ${{ needs.prepare.outputs.kind_version }}
+      PUBLISH_VERSION: ${{ startsWith(github.ref, 'refs/tags/kind-v') || inputs.publish }}
+      UPDATE_LATEST: ${{ github.event_name == 'workflow_dispatch' && inputs.update_latest }}
+    steps:
+      - name: Checkout
+        if: env.PUBLISH_VERSION == 'true'
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        if: env.PUBLISH_VERSION == 'true'
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
       - name: Log in to GHCR
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
@@ -169,72 +221,136 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Protect immutable version tag
+      - name: Validate requested release operation
         shell: bash
-        env:
-          KIND_VERSION: ${{ needs.validate.outputs.kind_version }}
         run: |
           set -euo pipefail
+
           version_image="${IMAGE_NAME}:${KIND_VERSION}"
-          if docker buildx imagetools inspect "${version_image}" >/dev/null 2>&1; then
-            echo "Refusing to overwrite existing image tag: ${version_image}" >&2
-            exit 1
+          if [[ "${PUBLISH_VERSION}" == "true" ]]; then
+            if docker buildx imagetools inspect "${version_image}" >/dev/null 2>&1; then
+              echo "Refusing to overwrite existing image tag: ${version_image}" >&2
+              exit 1
+            fi
+          elif [[ "${UPDATE_LATEST}" == "true" ]]; then
+            if ! docker buildx imagetools inspect "${version_image}" >/dev/null 2>&1; then
+              echo "Cannot promote missing image tag: ${version_image}" >&2
+              exit 1
+            fi
           fi
 
       - name: Generate OCI metadata
+        if: env.PUBLISH_VERSION == 'true'
         id: metadata
         uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # v5.9.0
         with:
           images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ needs.validate.outputs.kind_version }}
-            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' && inputs.update_latest }}
           labels: |
             org.opencontainers.image.title=kind CLI
             org.opencontainers.image.description=Containerized client environment for the Kubernetes kind CLI
             org.opencontainers.image.url=https://github.com/sentenz/template-k8s
             org.opencontainers.image.source=https://github.com/sentenz/template-k8s
-            org.opencontainers.image.version=${{ needs.validate.outputs.kind_version }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.kind_version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=Apache-2.0
 
-      - name: Build and publish image
-        id: build
+      - name: Build and push amd64 release candidate
+        if: env.PUBLISH_VERSION == 'true'
+        id: build_amd64
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
           file: container/kind/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.metadata.outputs.tags }}
+          platforms: linux/amd64
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.metadata.outputs.labels }}
           provenance: mode=max
           sbom: true
           build-args: |
-            KIND_VERSION=${{ needs.validate.outputs.kind_version }}
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
 
-      - name: Inspect published manifest
-        shell: bash
-        env:
-          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          set -euo pipefail
-          docker buildx imagetools inspect "${IMAGE_NAME}@${IMAGE_DIGEST}"
-
-      - name: Scan published image
+      - name: Scan amd64 release candidate
+        if: env.PUBLISH_VERSION == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
         with:
-          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build_amd64.outputs.digest }}
           format: table
           exit-code: "1"
           ignore-unfixed: true
-          vuln-type: os
+          scanners: vuln
+          vuln-type: os,library
           severity: CRITICAL
+
+      - name: Build and push arm64 release candidate
+        if: env.PUBLISH_VERSION == 'true'
+        id: build_arm64
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/kind/Dockerfile
+          platforms: linux/arm64
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.metadata.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+
+      - name: Scan arm64 release candidate
+        if: env.PUBLISH_VERSION == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build_arm64.outputs.digest }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+
+      - name: Publish immutable version tag
+        if: env.PUBLISH_VERSION == 'true'
+        shell: bash
+        env:
+          AMD64_DIGEST: ${{ steps.build_amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ steps.build_arm64.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          version_image="${IMAGE_NAME}:${KIND_VERSION}"
+          docker buildx imagetools create \
+            --tag "${version_image}" \
+            "${IMAGE_NAME}@${AMD64_DIGEST}" \
+            "${IMAGE_NAME}@${ARM64_DIGEST}"
+          docker buildx imagetools inspect "${version_image}"
+
+      - name: Promote immutable version to latest
+        if: env.UPDATE_LATEST == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version_image="${IMAGE_NAME}:${KIND_VERSION}"
+          latest_image="${IMAGE_NAME}:latest"
+          docker buildx imagetools inspect "${version_image}"
+          docker buildx imagetools create \
+            --tag "${latest_image}" \
+            "${version_image}"
+          docker buildx imagetools inspect "${latest_image}"
 
   cluster-test:
     name: Create cluster through CLI container
-    if: github.event_name == 'workflow_dispatch' && inputs.run_cluster_test
-    needs: validate
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.run_cluster_test &&
+      needs.validate.result == 'success'
+    needs:
+      - prepare
+      - validate
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -256,7 +372,7 @@ jobs:
           provenance: false
           sbom: false
           build-args: |
-            KIND_VERSION=${{ needs.validate.outputs.kind_version }}
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
 
       - name: Create cluster
         shell: bash
