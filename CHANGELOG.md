@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.4](https://github.com/sentenz/template-k8s/compare/2.0.3...2.0.4) (2026-07-21)
+
+### Bug Fixes
+
+* resolve Dependency-Track chart v2 deployment values ([#43](https://github.com/sentenz/template-k8s/issues/43)) ([ea1fe33](https://github.com/sentenz/template-k8s/commit/ea1fe33950e6b6edf5104c30791e75d9fa5b0f0d))
+
 ## [2.0.3](https://github.com/sentenz/template-k8s/compare/2.0.2...2.0.3) (2026-07-21)
 
 ### Bug Fixes
