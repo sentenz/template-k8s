@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Registry Digest Lookup
+
+on:
+  pull_request:
+    paths:
+      - .github/registry-digest-lookup.md
+      - .github/workflows/registry-digest-lookup.yml
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  lookup:
+    name: Resolve immutable image digest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      IMAGE: ghcr.io/sentenz/kind:v0.32.0
+    steps:
+      - name: Log in to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Resolve manifest digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          inspection="$(docker buildx imagetools inspect "${IMAGE}")"
+          printf '%s\n' "${inspection}"
+          digest="$(awk '$1 == "Digest:" { print $2; exit }' <<< "${inspection}")"
+          if ! [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unable to resolve immutable manifest digest for ${IMAGE}" >&2
+            exit 1
+          fi
+          echo "KIND_IMAGE_DIGEST=${digest}"
