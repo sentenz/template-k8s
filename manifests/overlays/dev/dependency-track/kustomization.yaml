@@ -2,9 +2,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# namePrefix: dev-
-# namespace: k8s-dependency-track
-
 resources:
   - ../../../base/dependency-track
   - ../../../base/postgresql
@@ -12,7 +9,6 @@ resources:
 
 patches:
   - path: patch-dependency-track-ingress.yaml
-  # - path: patch-dependency-track-frontend.yaml
   - path: patch-traefik-service-nodeport.yaml
 
 secretGenerator:
