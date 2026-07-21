@@ -55,7 +55,7 @@ teardown:
 
 # ── Kubernetes Setup & Teardown ──────────────────────────────────────────────────────────────────
 
-## Set up the local Kubernetes development cluster using Kind
+## Setup the local Kubernetes development cluster using Kind
 k8s-setup:
 	@mkdir -p "$(dir $(K8S_KUBECONFIG))"
 	@kind create cluster \
