@@ -1,20 +1,16 @@
 ---
+common:
+  database:
+    jdbcUrl: "jdbc:postgresql://postgresql.postgresql.svc.cluster.local:5432/dtrack"
+    username: "dtrack"
+    password: "dtrack"
+
 apiServer:
   service:
     type: ClusterIP
   metrics:
     enabled: false
-  extraEnv:
-    - name: ALPINE_DATABASE_MODE
-      value: external
-    - name: ALPINE_DATABASE_URL
-      value: jdbc:postgresql://postgresql.postgresql.svc.cluster.local:5432/dtrack
-    - name: ALPINE_DATABASE_DRIVER
-      value: org.postgresql.Driver
-    - name: ALPINE_DATABASE_USERNAME
-      value: dtrack
-    - name: ALPINE_DATABASE_PASSWORD
-      value: dtrack
+  extraEnv: []
 
 frontend:
   service:

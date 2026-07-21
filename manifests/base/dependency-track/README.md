@@ -212,8 +212,8 @@ Path-Based DNS Routing ([Ingress Fan-Out](https://kubernetes.io/docs/concepts/se
   > Verify the services are accessible via HTTP. The `-k` flag skips TLS verification for self-signed certificates.
 
   ```bash
-  curl -I -k https://dependency-track.localhost/
-  curl -I -k https://api.dependency-track.localhost/
+  curl -I -k -v https://dependency-track.localhost/ --max-time 15
+  curl -I -k -v https://api.dependency-track.localhost/ --max-time 15
   ```
 
 - `hostNetwork`

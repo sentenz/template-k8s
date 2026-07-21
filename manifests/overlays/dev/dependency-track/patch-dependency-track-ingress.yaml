@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: dependency-track
+  name: dependency-track-hyades
   namespace: dependency-track
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
@@ -19,20 +19,20 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: dependency-track-api-server
+                name: dependency-track-hyades-api-server
                 port:
                   name: web
           - path: /health
             pathType: Prefix
             backend:
               service:
-                name: dependency-track-api-server
+                name: dependency-track-hyades-api-server
                 port:
                   name: web
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: dependency-track-frontend
+                name: dependency-track-hyades-frontend
                 port:
                   name: web

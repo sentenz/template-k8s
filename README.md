@@ -130,7 +130,7 @@ The local development environment uses a three-node Kind cluster: one control-pl
 
 ```bash
 make k8s-setup
-make k8s-monitor-status
+make k8s-obserability
 make k8s-teardown
 ```
 
