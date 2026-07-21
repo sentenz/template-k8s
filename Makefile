@@ -245,6 +245,41 @@ helm-render-charts:
 	@$(MAKE) -s helm-render-postgresql
 .PHONY: helm-render-charts
 
+# ── Git Hooks Manager ────────────────────────────────────────────────────────────────────────────
+
+## Initialize Lefthook Git hooks in the local repository
+githooks-lefthook-initialize:
+	lefthook install --force
+.PHONY: githooks-lefthook-initialize
+
+## Deinitialize Lefthook Git hooks from the local repository
+githooks-lefthook-deinitialize:
+	lefthook uninstall
+.PHONY: githooks-lefthook-deinitialize
+
+# ── Skills Manager ───────────────────────────────────────────────────────────────────────────────
+
+## Provision new Agent Skills into the project environment
+skills-agent-add:
+	skills add sentenz/skills
+.PHONY: skills-agent-add
+
+## Synchronize and update existing Agent Skills in the project environment
+skills-agent-update:
+	skills update sentenz/skills
+.PHONY: skills-agent-update
+
+# ── Dependency Manager ───────────────────────────────────────────────────────────────────────────
+
+DEPENDENCY_IMAGE_RENOVATE ?= docker.io/renovate/renovate:43.268.4@sha256:ef296dce4dfb2a8b1d0179c4fbfb34eef8b5f1530c4b7bbbd101269aeaaad526
+
+## Update project dependencies locally using Renovate and generate a report
+dependency-renovate-update:
+	@mkdir -p logs/dependency
+
+	docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_IMAGE_RENOVATE)" renovate --platform=local --repository-cache=reset > logs/dependency/renovate.log 2>&1
+.PHONY: dependency-renovate-update
+
 # ── Secrets Manager ──────────────────────────────────────────────────────────────────────────────
 
 SECRETS_IMAGE_SOPS ?= ghcr.io/getsops/sops:v3.13.2@sha256:0bc8915bce25ea3bf0f3e27a74cb5ad092488e6e5245af384816d628ed7fd426
@@ -415,14 +450,25 @@ policy-regal-lint:
 
 # ── SAST Manager ─────────────────────────────────────────────────────────────────────────────────
 
-SAST_IMAGE_TRIVY ?= aquasec/trivy:0.68.2@sha256:05d0126976bdedcd0782a0336f77832dbea1c81b9cc5e4b3a5ea5d2ec863aca7
-SAST_IMAGE_COSIGN ?= cgr.dev/chainguard/cosign:3.0.0@sha256:b6bc266358e9368be1b3d01fca889b78d5ad5a47832986e14640c34a237ef638
+SAST_IMAGE_SEMGREP ?= semgrep/semgrep:1.170.0@sha256:c98f8829eea377274ee4b10656458b078b88232469b2ff913f091c2317347c9d
+SAST_FILES_SEMGREP ?= .
+SAST_REGEX_SEMGREP = $(if $(strip $(SAST_FILES_SEMGREP)),$(SAST_FILES_SEMGREP),.)
+
+## Scan source code for security issues using Semgrep and generate a report
+sast-semgrep-scan:
+	@mkdir -p logs/sast
+
+	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_SEMGREP)" semgrep scan --config auto --error --json --output logs/sast/semgrep.json $(SAST_REGEX_SEMGREP) 2> logs/sast/semgrep.log
+.PHONY: sast-semgrep-scan
+
+SAST_IMAGE_TRIVY ?= aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+SAST_FILES_TRIVY ?= .
 
 ## Scan Infrastructure-as-Code (IaC) files for misconfigurations using Trivy and generate a report
 sast-trivy-misconfig:
 	@mkdir -p logs/sast
 
-	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" config --output logs/sast/trivy-misconfig.json /workspace 2>&1
+	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" config --output logs/sast/trivy-misconfig.json $(SAST_FILES_TRIVY) 2>&1
 .PHONY: sast-trivy-misconfig
 
 ## Scan local filesystem for vulnerabilities and misconfigurations using Trivy
@@ -436,12 +482,12 @@ sast-trivy-fs:
 #
 ## Scan a container image for vulnerabilities using Trivy
 sast-trivy-image:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-image <image_name>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" image --output logs/sast/trivy-image.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-image
@@ -450,12 +496,12 @@ sast-trivy-image:
 #
 ## Scan a container image for license compliance using Trivy
 sast-trivy-image-license:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-image-license <image_name>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" image --scanners license --format table --output logs/sast/trivy-image-license.txt "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-image-license
@@ -464,12 +510,12 @@ sast-trivy-image-license:
 #
 ## Scan a remote repository for vulnerabilities using Trivy
 sast-trivy-repository:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-repository <repo_url>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" repository --output logs/sast/trivy-repository.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-repository
@@ -478,12 +524,12 @@ sast-trivy-repository:
 #
 ## Scan a rootfs e.g. `/` for vulnerabilities using Trivy
 sast-trivy-rootfs:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-rootfs <path>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" rootfs --output logs/sast/trivy-rootfs.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-rootfs
@@ -492,12 +538,12 @@ sast-trivy-rootfs:
 #
 ## Scan SBOM for vulnerabilities using Trivy
 sast-trivy-sbom-scan:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-sbom-scan <sbom_path>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" sbom --output logs/sast/trivy-sbom.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-sbom-scan
@@ -506,12 +552,12 @@ sast-trivy-sbom-scan:
 #
 ## Generate SBOM in CycloneDX format for a container image using Trivy
 sast-trivy-sbom-cyclonedx-image:
-	@mkdir -p logs/sbom
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-sbom-cyclonedx-image <image_name>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sbom
 
 	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" image --format cyclonedx --output logs/sbom/sbom-image.cdx.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-sbom-cyclonedx-image
@@ -520,12 +566,12 @@ sast-trivy-sbom-cyclonedx-image:
 #
 ## Generate SBOM in CycloneDX format for a file system using Trivy
 sast-trivy-sbom-cyclonedx-fs:
-	@mkdir -p logs/sbom
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-sbom-cyclonedx-fs <path>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sbom
 
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" filesystem --format cyclonedx --output logs/sbom/sbom-fs.cdx.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-sbom-cyclonedx-fs
@@ -534,12 +580,12 @@ sast-trivy-sbom-cyclonedx-fs:
 #
 ## Scan SBOM for license compliance using Trivy
 sast-trivy-sbom-license:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-sbom-license <sbom_path>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" sbom --scanners license --format table --output logs/sast/trivy-sbom-license.txt "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-sbom-license
@@ -548,12 +594,12 @@ sast-trivy-sbom-license:
 #
 ## Scan the verified SBOM attestation using Trivy
 sast-trivy-sbom-attestation:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-sbom-attestation <intoto_sbom_path>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" sbom "$(filter-out $@,$(MAKECMDGOALS))"
 .PHONY: sast-trivy-sbom-attestation
@@ -562,12 +608,12 @@ sast-trivy-sbom-attestation:
 #
 ## [EXPERIMENTAL] Scan a virtual machine image using Trivy
 sast-trivy-vm:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-trivy-vm <vm_image_path>"; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" vm --output logs/sast/trivy-vm.json "$(filter-out $@,$(MAKECMDGOALS))" 2>&1
 .PHONY: sast-trivy-vm
@@ -576,12 +622,48 @@ sast-trivy-vm:
 #
 ## [EXPERIMENTAL] Scan kubernetes cluster using Trivy (default `cluster`)
 sast-trivy-kubernetes:
-	@mkdir -p logs/sast
-
 	@echo "Note: This requires KUBECONFIG to be mounted or available to the container. Assuming ~/.kube/config is mounted to /root/.kube/config"
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${HOME}/.kube/config:/root/.kube/config" -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRIVY)" kubernetes --output logs/sast/trivy-kubernetes.json $(if $(filter-out $@,$(MAKECMDGOALS)),$(filter-out $@,$(MAKECMDGOALS)),cluster) 2>&1
 .PHONY: sast-trivy-kubernetes
+
+SAST_IMAGE_GITLEAKS ?= ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+
+## Scan git repository history for leaked secrets using Gitleaks and generate a report
+sast-gitleaks-detect:
+	@mkdir -p logs/sast
+
+	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_GITLEAKS)" detect --redact --source /workspace --report-format json --report-path logs/sast/gitleaks-detect.json 2>&1
+.PHONY: sast-gitleaks-detect
+
+## Scan staged git changes for leaked secrets using Gitleaks and generate a report
+sast-gitleaks-staged:
+	@mkdir -p logs/sast
+
+	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_GITLEAKS)" protect --redact --staged --source /workspace --report-format json --report-path logs/sast/gitleaks-protect.json 2>&1
+.PHONY: sast-gitleaks-staged
+
+SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.95.9@sha256:59b244249d1a1aef4baa24fe73d3c931616264482580d806d77f6c74d26b3e42
+
+## Scan local filesystem for leaked secrets using TruffleHog and generate a report
+sast-trufflehog-fs:
+	@mkdir -p logs/sast
+
+	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRUFFLEHOG)" filesystem . --no-update --json > logs/sast/trufflehog-filesystem.json 2> logs/sast/trufflehog-filesystem.log
+.PHONY: sast-trufflehog-fs
+
+## Scan git repository history for leaked secrets using TruffleHog and generate a report
+sast-trufflehog-git:
+	@mkdir -p logs/sast
+
+	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRUFFLEHOG)" git file:///workspace --no-update --json > logs/sast/trufflehog-git.json 2> logs/sast/trufflehog-git.log
+.PHONY: sast-trufflehog-git
+
+# ── Supply Chain Security ────────────────────────────────────────────────────────────────────────
+
+SAST_IMAGE_COSIGN ?= cgr.dev/chainguard/cosign:3.0.0@sha256:b6bc266358e9368be1b3d01fca889b78d5ad5a47832986e14640c34a237ef638
 
 ## Generate Cosign key pair
 sast-cosign-generate-key-pair:
@@ -612,8 +694,6 @@ sast-cosign-attest:
 #
 ## Verify SBOM attestation for an image using Cosign
 sast-cosign-verify:
-	@mkdir -p logs/sast
-
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		echo "usage: make sast-cosign-verify <image_name>"; \
 		exit 1; \
@@ -622,6 +702,8 @@ sast-cosign-verify:
 		echo "Error: cosign.pub not found. Run 'make sast-cosign-generate-key-pair' first."; \
 		exit 1; \
 	fi
+
+	@mkdir -p logs/sast
 
 	docker run --rm -v "${HOME}/.docker/config.json:/root/.docker/config.json" -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_COSIGN)" verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
 .PHONY: sast-cosign-verify

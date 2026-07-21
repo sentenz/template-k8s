@@ -9,23 +9,29 @@ Contribution guidelines and project management tools.
   - [3.1. Make](#31-make)
 - [4. Bootstrap](#4-bootstrap)
   - [4.1. Scripts](#41-scripts)
-- [5. Dev Containers](#5-dev-containers)
-- [6. Release Manager](#6-release-manager)
-  - [6.1. Semantic-Release](#61-semantic-release)
-- [7. Update Manager](#7-update-manager)
-  - [7.1. Renovate](#71-renovate)
-  - [7.2. Dependabot](#72-dependabot)
-- [8. Secrets Manager](#8-secrets-manager)
-  - [8.1. SOPS](#81-sops)
-- [9. Container Manager](#9-container-manager)
-  - [9.1. Docker](#91-docker)
-- [10. Policy Manager](#10-policy-manager)
-  - [10.1. Conftest](#101-conftest)
-- [11. Supply Chain Manager](#11-supply-chain-manager)
-  - [11.1. Trivy](#111-trivy)
-- [12. Documentation Generators](#12-documentation-generators)
-  - [12.1. Doxygen](#121-doxygen)
-  - [12.2. MkDocs](#122-mkdocs)
+- [5. Git Hooks Manager](#5-git-hooks-manager)
+  - [5.1. Lefthook](#51-lefthook)
+- [6. Dev Containers](#6-dev-containers)
+- [7. Release Manager](#7-release-manager)
+  - [7.1. Semantic-Release](#71-semantic-release)
+- [8. Update Manager](#8-update-manager)
+  - [8.1. Renovate](#81-renovate)
+  - [8.2. Dependabot](#82-dependabot)
+- [9. Secrets Manager](#9-secrets-manager)
+  - [9.1. SOPS](#91-sops)
+- [10. Container Manager](#10-container-manager)
+  - [10.1. Docker](#101-docker)
+- [11. Policy Manager](#11-policy-manager)
+  - [11.1. Conftest](#111-conftest)
+- [12. SAST Manager](#12-sast-manager)
+  - [12.1. Gitleaks](#121-gitleaks)
+  - [12.2. TruffleHog](#122-trufflehog)
+  - [12.3. Semgrep](#123-semgrep)
+- [13. Supply Chain Manager](#13-supply-chain-manager)
+  - [13.1. Trivy](#131-trivy)
+- [14. Documentation Generators](#14-documentation-generators)
+  - [14.1. Doxygen](#141-doxygen)
+  - [14.2. MkDocs](#142-mkdocs)
 
 ## 1. AI Agents
 
@@ -65,6 +71,9 @@ AI Agents are automated tools that assist in various development tasks such as c
 
     - [Sentenz Skills](https://github.com/sentenz/skills)
       > Reusable AI agent skills for various development tasks.
+
+    - [skills-lock.json](skills-lock.json)
+      > Lock file for managing skill dependencies and versions.
 
 2. Usage and Instructions
 
@@ -139,7 +148,30 @@ AI Agents are automated tools that assist in various development tasks such as c
       make teardown
       ```
 
-## 5. Dev Containers
+## 5. Git Hooks Manager
+
+### 5.1. Lefthook
+
+[Lefthook](https://lefthook.dev/) is a fast, language-agnostic Git hooks manager that uses a single `lefthook.yml` configuration file to define hooks for automating tasks during the Git workflow.
+
+1. Insights and Details
+
+    - [lefthook.yml](lefthook.yml)
+      > Configuration file for Lefthook specifying Git hooks and associated commands.
+
+2. Usage and Instructions
+
+    - Tasks
+
+      ```bash
+      make githooks-lefthook-initialize
+      ```
+
+      ```bash
+      make githooks-lefthook-deinitialize
+      ```
+
+## 6. Dev Containers
 
 1. Insights and Details
 
@@ -156,9 +188,9 @@ AI Agents are automated tools that assist in various development tasks such as c
       make devcontainer-python
       ```
 
-## 6. Release Manager
+## 7. Release Manager
 
-### 6.1. Semantic-Release
+### 7.1. Semantic-Release
 
 [Semantic-Release](https://github.com/semantic-release/semantic-release) automates the release process by analyzing commit messages to determine the next version number, generating changelog and release notes, and publishing the release.
 
@@ -175,9 +207,9 @@ AI Agents are automated tools that assist in various development tasks such as c
       uses: sentenz/actions/semantic-release@latest
       ```
 
-## 7. Update Manager
+## 8. Update Manager
 
-### 7.1. Renovate
+### 8.1. Renovate
 
 [Renovate](https://github.com/renovatebot/renovate) automates dependency updates by creating merge requests for outdated dependencies, libraries and packages.
 
@@ -194,7 +226,7 @@ AI Agents are automated tools that assist in various development tasks such as c
       uses: sentenz/actions/renovate@latest
       ```
 
-### 7.2. Dependabot
+### 8.2. Dependabot
 
 [Dependabot](https://github.com/dependabot/dependabot-core) automates dependency updates by creating pull requests for outdated dependencies, libraries and packages.
 
@@ -203,9 +235,9 @@ AI Agents are automated tools that assist in various development tasks such as c
     - [.github/dependabot.yml](.github/dependabot.yml)
       > Configuration file for Dependabot specifying update rules and schedules.
 
-## 8. Secrets Manager
+## 9. Secrets Manager
 
-### 8.1. SOPS
+### 9.1. SOPS
 
 [SOPS (Secrets OPerationS)](https://github.com/getsops/sops) is a tool for managing and encrypting sensitive data such as passwords, API keys, and other secrets.
 
@@ -222,7 +254,7 @@ AI Agents are automated tools that assist in various development tasks such as c
         > Generate a new key pair to be used with SOPS.
 
         > [!NOTE]
-        > The UID can be customized via the `SECRETS_SOPS_UID` variable.
+        > Customize the UID by providing the `SECRETS_SOPS_UID` variable. Default UID is `sops-<repo>`.
 
         ```bash
         make secrets-gpg-generate SECRETS_SOPS_UID=<uid>
@@ -258,9 +290,9 @@ AI Agents are automated tools that assist in various development tasks such as c
         make secrets-sops-decrypt <files>
         ```
 
-## 9. Container Manager
+## 10. Container Manager
 
-### 9.1. Docker
+### 10.1. Docker
 
 [Docker](https://github.com/docker) containerization tool to run applications in isolated container environments and execute container-based tasks.
 
@@ -287,9 +319,9 @@ AI Agents are automated tools that assist in various development tasks such as c
       make container-docker-run
       ```
 
-## 10. Policy Manager
+## 11. Policy Manager
 
-### 10.1. Conftest
+### 11.1. Conftest
 
 [Conftest](https://www.conftest.dev/) is a **Policy as Code (PaC)** tool to streamline policy management for improved development, security and audit capability.
 
@@ -323,9 +355,95 @@ AI Agents are automated tools that assist in various development tasks such as c
       make policy-conftest-test <filepath>
       ```
 
-## 11. Supply Chain Manager
+## 12. SAST Manager
 
-### 11.1. Trivy
+SAST (Static Application Security Testing) tools for identifying security vulnerabilities and issues in source code, container images, and artifacts.
+
+### 12.1. Gitleaks
+
+[Gitleaks](https://github.com/gitleaks/gitleaks) is a SAST tool for detecting hardcoded secrets such as passwords, API keys, and tokens in git repositories and staged changes.
+
+1. Insights and Details
+
+    - [lefthook.yml](lefthook.yml)
+      > Pre-commit hook runs `sast-gitleaks-protect` to scan staged changes before every commit.
+
+2. Usage and Instructions
+
+    - CI/CD
+
+      ```yaml
+      - component: sentenz/actions/gitleaks@latest
+      ```
+
+    - Tasks
+
+      ```bash
+      make sast-gitleaks-detect
+      ```
+
+      ```bash
+      make sast-gitleaks-protect
+      ```
+
+### 12.2. TruffleHog
+
+[TruffleHog](https://github.com/trufflesecurity/trufflehog) is a secret-scanning tool for detecting verified, unverified, and unknown credentials in filesystems and git repositories.
+
+1. Insights and Details
+
+    - [.github/workflows/trufflehog.yml](.github/workflows/trufflehog.yml)
+      > Workflow definition for TruffleHog-based secret scanning in CI.
+
+2. Usage and Instructions
+
+    - CI/CD
+
+      ```yaml
+      uses: trufflesecurity/trufflehog@latest
+      ```
+
+    - Tasks
+
+      ```bash
+      make sast-trufflehog-fs
+      ```
+
+      ```bash
+      make sast-trufflehog-git
+      ```
+
+### 12.3. Semgrep
+
+[Semgrep](https://github.com/semgrep/semgrep) is a static analysis tool for detecting code security issues and enforcing secure coding patterns across source files.
+
+1. Insights and Details
+
+    - [.github/workflows/semgrep.yml](.github/workflows/semgrep.yml)
+      > Workflow definition for Semgrep-based static analysis in CI.
+
+    - [lefthook.yml](lefthook.yml)
+      > Pre-commit hook runs `sast-semgrep-scan` against staged files before every commit when Docker is available.
+
+2. Usage and Instructions
+
+    - CI/CD
+
+      ```yaml
+      uses: sentenz/actions/semgrep@latest
+      ```
+
+    - Tasks
+
+      ```bash
+      make sast-semgrep-scan
+      ```
+
+## 13. Supply Chain Manager
+
+Software Supply Chain Security for identifying vulnerabilities in dependencies by scanning SBOMs, container images, and filesystems.
+
+### 13.1. Trivy
 
 [Trivy](https://github.com/aquasecurity/trivy) is a comprehensive security scanner for vulnerabilities, misconfigurations, and compliance issues in container images, filesystems, and source code.
 
@@ -363,9 +481,9 @@ AI Agents are automated tools that assist in various development tasks such as c
       make sast-trivy-sbom-license <sbom_path>
       ```
 
-## 12. Documentation Generators
+## 14. Documentation Generators
 
-### 12.1. Doxygen
+### 14.1. Doxygen
 
 [Doxygen](https://www.doxygen.nl/) is an **API Documentation Generator** for C++, C programming languages, used to create software reference documentation from annotated source code.
 
@@ -392,7 +510,7 @@ AI Agents are automated tools that assist in various development tasks such as c
       make pages-doxygen-serve
       ```
 
-### 12.2. MkDocs
+### 14.2. MkDocs
 
 [MkDocs](https://www.mkdocs.org/) is a Static Site Generator (SSG) designed for building project documentation using Markdown files.
 
