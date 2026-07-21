@@ -26,4 +26,10 @@ logs/
 !.vscode/launch.json
 !.vscode/extensions.json
 
-/manifests/overlays/dev/dependency-track/*.pem
+### Certificates ###
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.priv
