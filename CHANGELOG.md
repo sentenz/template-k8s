@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.1](https://github.com/sentenz/template-k8s/compare/2.1.0...2.1.1) (2026-07-21)
+
+### Bug Fixes
+
+* **kind:** publish image on semantic version tags ([d6ff073](https://github.com/sentenz/template-k8s/commit/d6ff073e52b6bbab1425ad77db6ad774c35822a5))
+
 ## [2.1.0](https://github.com/sentenz/template-k8s/compare/2.0.4...2.1.0) (2026-07-21)
 
 ### Features
