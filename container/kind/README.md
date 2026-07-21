@@ -41,20 +41,23 @@ Create the repository development cluster with the host Docker daemon:
 
 ```bash
 docker run --rm \
+  --network host \
   --volume /var/run/docker.sock:/var/run/docker.sock \
   --volume "$PWD:/workspace" \
   --workdir /workspace \
   ghcr.io/sentenz/kind:v0.32.0 \
   create cluster \
+  --name template-k8s \
   --config config/kind-cluster.yaml
 ```
 
-The repository mount exposes the Kind configuration to the CLI container. The Docker socket allows kind to create and manage node containers on the host daemon.
+The repository mount exposes the Kind configuration to the CLI container. The Docker socket allows kind to create and manage node containers on the host daemon. Host networking keeps the CLI container in the same loopback namespace as the Docker host so it can reach the Kubernetes API endpoint created by kind. On Docker Desktop, host networking must be supported and enabled; otherwise use a runtime-specific API address that is reachable from the CLI container.
 
 Delete the cluster with the same execution model:
 
 ```bash
 docker run --rm \
+  --network host \
   --volume /var/run/docker.sock:/var/run/docker.sock \
   ghcr.io/sentenz/kind:v0.32.0 \
   delete cluster \
@@ -77,14 +80,14 @@ The repository's existing `helm/kind-action` integration remains the default Git
 
 ## Publication
 
-The `.github/workflows/kind-container.yml` workflow validates the image on pull requests and pushes that modify the container implementation.
+The `.github/workflows/kind-container.yml` workflow validates image changes on pull requests and runs on pushes to `main` so tag-triggered publication remains reliable.
 
 Immutable version publication uses either:
 
 - a trusted tag named `kind-v<version>`, for example `kind-v0.32.0`; or
 - a manually dispatched workflow with `publish` enabled and an explicit `kind-version` value.
 
-The workflow refuses to overwrite an existing version tag in `ghcr.io/sentenz/kind`. The optional `latest` tag is updated only when `update-latest` is explicitly enabled during a manual publication.
+Publication jobs are serialized by the resolved kind version, and the workflow refuses to overwrite an existing version tag in `ghcr.io/sentenz/kind`. The optional `latest` tag is updated only when `update-latest` is explicitly enabled during a manual publication.
 
 Published images target `linux/amd64` and `linux/arm64`, include OCI metadata, BuildKit provenance, and an SBOM, and are scanned for critical vulnerabilities.
 
