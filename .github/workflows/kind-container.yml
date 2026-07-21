@@ -12,9 +12,6 @@ on:
       - main
     tags:
       - kind-v*
-    paths:
-      - container/kind/**
-      - .github/workflows/kind-container.yml
   workflow_dispatch:
     inputs:
       kind_version:
@@ -54,6 +51,8 @@ jobs:
     name: Build, smoke test, and scan
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    outputs:
+      kind_version: ${{ steps.version.outputs.kind_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -141,6 +140,9 @@ jobs:
       startsWith(github.ref, 'refs/tags/kind-v') ||
       (github.event_name == 'workflow_dispatch' && inputs.publish)
     needs: validate
+    concurrency:
+      group: kind-container-publish-${{ needs.validate.outputs.kind_version }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -151,27 +153,6 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
-
-      - name: Resolve kind version
-        id: version
-        shell: bash
-        env:
-          DISPATCH_KIND_VERSION: ${{ inputs.kind_version }}
-        run: |
-          set -euo pipefail
-
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == kind-v* ]]; then
-            kind_version="${GITHUB_REF_NAME#kind-}"
-          else
-            kind_version="${DISPATCH_KIND_VERSION}"
-          fi
-
-          if ! [[ "${kind_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid kind version: ${kind_version}" >&2
-            exit 1
-          fi
-
-          echo "kind_version=${kind_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
@@ -191,7 +172,7 @@ jobs:
       - name: Protect immutable version tag
         shell: bash
         env:
-          KIND_VERSION: ${{ steps.version.outputs.kind_version }}
+          KIND_VERSION: ${{ needs.validate.outputs.kind_version }}
         run: |
           set -euo pipefail
           version_image="${IMAGE_NAME}:${KIND_VERSION}"
@@ -206,14 +187,14 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ steps.version.outputs.kind_version }}
+            type=raw,value=${{ needs.validate.outputs.kind_version }}
             type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' && inputs.update_latest }}
           labels: |
             org.opencontainers.image.title=kind CLI
             org.opencontainers.image.description=Containerized client environment for the Kubernetes kind CLI
             org.opencontainers.image.url=https://github.com/sentenz/template-k8s
             org.opencontainers.image.source=https://github.com/sentenz/template-k8s
-            org.opencontainers.image.version=${{ steps.version.outputs.kind_version }}
+            org.opencontainers.image.version=${{ needs.validate.outputs.kind_version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=Apache-2.0
 
@@ -230,7 +211,7 @@ jobs:
           provenance: mode=max
           sbom: true
           build-args: |
-            KIND_VERSION=${{ steps.version.outputs.kind_version }}
+            KIND_VERSION=${{ needs.validate.outputs.kind_version }}
 
       - name: Inspect published manifest
         shell: bash
@@ -275,13 +256,14 @@ jobs:
           provenance: false
           sbom: false
           build-args: |
-            KIND_VERSION=${{ inputs.kind_version }}
+            KIND_VERSION=${{ needs.validate.outputs.kind_version }}
 
       - name: Create cluster
         shell: bash
         run: |
           set -euo pipefail
           docker run --rm \
+            --network host \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             --volume "${GITHUB_WORKSPACE}:/workspace" \
             --workdir /workspace \
@@ -307,6 +289,7 @@ jobs:
         shell: bash
         run: |
           docker run --rm \
+            --network host \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             local/kind:cluster-test \
             delete cluster \
