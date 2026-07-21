@@ -55,10 +55,18 @@ teardown:
 
 # ── Kubernetes Setup & Teardown ──────────────────────────────────────────────────────────────────
 
+K8S_KIND_IMAGE ?= ghcr.io/sentenz/kind:v0.32.0@sha256:fe11a5f85fed99bd46b0dcb6c1acf86ebee86e2409c6f88a6680e1ee0e74b80c
+
 ## Setup the local Kubernetes development cluster using Kind
 k8s-setup:
 	@mkdir -p "$(dir $(K8S_KUBECONFIG))"
-	@kind create cluster \
+	@docker run --rm \
+		--network host \
+		--volume /var/run/docker.sock:/var/run/docker.sock \
+		--volume "$(CURDIR):/workspace" \
+		--workdir /workspace \
+		"$(K8S_KIND_IMAGE)" \
+		create cluster \
 		--name "$(KIND_CLUSTER_NAME)" \
 		--config "$(KIND_CONFIG)" \
 		--kubeconfig "$(K8S_KUBECONFIG)" \
@@ -67,7 +75,12 @@ k8s-setup:
 
 ## Tear down the local Kubernetes development cluster
 k8s-teardown:
-	@kind delete cluster --name "$(KIND_CLUSTER_NAME)"
+	@docker run --rm \
+		--network host \
+		--volume /var/run/docker.sock:/var/run/docker.sock \
+		"$(K8S_KIND_IMAGE)" \
+		delete cluster \
+		--name "$(KIND_CLUSTER_NAME)"
 	@rm -f "$(K8S_KUBECONFIG)"
 .PHONY: k8s-teardown
 
