@@ -120,7 +120,7 @@ runs:
         validate_repository_path "${KIND_CONFIG}" file
         validate_repository_path "${KUSTOMIZE_PATH}" directory
 
-    - name: Set Up Helm
+    - name: Setup Helm
       uses: Azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
       with:
         version: ${{ inputs.helm-version }}
@@ -141,8 +141,8 @@ runs:
       run: |
         set -euo pipefail
 
-        certificate_path="${KUSTOMIZE_PATH}/dependency-track.localhost+1.pem"
-        private_key_path="${KUSTOMIZE_PATH}/dependency-track.localhost+1-key.pem"
+        certificate_path="${KUSTOMIZE_PATH}/${INGRESS_HOST}+1.pem"
+        private_key_path="${KUSTOMIZE_PATH}/${INGRESS_HOST}+1-key.pem"
 
         mkdir -p "${CERTIFICATE_BACKUP}"
         for path in "${certificate_path}" "${private_key_path}"; do
@@ -164,7 +164,7 @@ runs:
           -addext "subjectAltName=DNS:${INGRESS_HOST}"
 
     - name: Create Kind Cluster
-      uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
+      uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
       with:
         version: ${{ inputs.kind-version }}
         node_image: ${{ inputs.node-image }}
@@ -345,7 +345,7 @@ runs:
         set -euo pipefail
 
         curl_options=(
-          --cacert "${KUSTOMIZE_PATH}/dependency-track.localhost+1.pem"
+          --cacert "${KUSTOMIZE_PATH}/${INGRESS_HOST}+1.pem"
           --connect-timeout 5
           --fail-with-body
           --location
@@ -360,12 +360,9 @@ runs:
           --resolve "${INGRESS_HOST}:443:127.0.0.1"
         )
 
-        curl "${curl_options[@]}" \
-          "https://${INGRESS_HOST}/health"
+        curl "${curl_options[@]}" "https://${INGRESS_HOST}/health"
 
-        curl "${curl_options[@]}" \
-          --output /dev/null \
-          "https://${INGRESS_HOST}/"
+        curl "${curl_options[@]}" --output /dev/null "https://${INGRESS_HOST}/"
 
     - name: Publish Deployment Summary
       if: success()
@@ -466,7 +463,7 @@ runs:
       run: |
         set +e
 
-        for name in dependency-track.localhost+1.pem dependency-track.localhost+1-key.pem; do
+        for name in "${INGRESS_HOST}+1.pem" "${INGRESS_HOST}+1-key.pem"; do
           path="${KUSTOMIZE_PATH}/${name}"
           if [[ -f "${CERTIFICATE_BACKUP}/${name}.present" ]]; then
             mv -f -- "${CERTIFICATE_BACKUP}/${name}" "${path}"
