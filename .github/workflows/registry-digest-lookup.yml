@@ -3,6 +3,12 @@
 name: Registry Digest Lookup
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/registry-digest-lookup.md
+      - .github/workflows/registry-digest-lookup.yml
   push:
     branches:
       - agent/containerize-kind-make-targets
