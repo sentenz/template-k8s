@@ -143,8 +143,9 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: local/kind:${{ github.sha }}-amd64
-          format: table
-          exit-code: "1"
+          format: json
+          output: trivy-amd64.json
+          exit-code: "0"
           ignore-unfixed: true
           scanners: vuln
           vuln-type: os,library
@@ -154,12 +155,52 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           input: ${{ runner.temp }}/kind-arm64.tar
-          format: table
-          exit-code: "1"
+          format: json
+          output: trivy-arm64.json
+          exit-code: "0"
           ignore-unfixed: true
           scanners: vuln
           vuln-type: os,library
           severity: CRITICAL
+
+      - name: Upload vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kind-vulnerability-reports-${{ github.sha }}
+          path: |
+            trivy-amd64.json
+            trivy-arm64.json
+          if-no-files-found: error
+
+      - name: Enforce vulnerability policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          findings=0
+          for report in trivy-amd64.json trivy-arm64.json; do
+            count="$(jq '[.Results[]?.Vulnerabilities[]?] | length' "${report}")"
+            printf '%s: %s critical finding(s)\n' "${report}" "${count}"
+            if (( count > 0 )); then
+              jq -r '
+                .Results[]? as $result
+                | $result.Vulnerabilities[]?
+                | [
+                    $result.Target,
+                    .PkgName,
+                    .InstalledVersion,
+                    (.FixedVersion // "unfixed"),
+                    .VulnerabilityID,
+                    .Title
+                  ]
+                | @tsv
+              ' "${report}"
+              findings=1
+            fi
+          done
+
+          exit "${findings}"
 
   release:
     name: Publish or promote image
