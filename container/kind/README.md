@@ -18,7 +18,7 @@ docker build \
 
 The Dockerfile downloads the selected kind release binary and verifies it using the checksum published with that release. The default Alpine base image is pinned by digest.
 
-Build both supported platforms with Buildx:
+Build and publish both supported platforms with Buildx:
 
 ```bash
 docker buildx build \
@@ -26,6 +26,7 @@ docker buildx build \
   --build-arg KIND_VERSION=v0.32.0 \
   --tag ghcr.io/sentenz/kind:v0.32.0 \
   --file container/kind/Dockerfile \
+  --push \
   .
 ```
 
@@ -80,15 +81,20 @@ The repository's existing `helm/kind-action` integration remains the default Git
 
 ## Publication
 
-The `.github/workflows/kind-container.yml` workflow validates image changes on pull requests and runs on pushes to `main` so tag-triggered publication remains reliable.
+The `.github/workflows/kind-container.yml` workflow validates image changes on pull requests and relevant pushes to `main`. Trusted `kind-v*` tag pushes remain publication triggers.
 
 Immutable version publication uses either:
 
 - a trusted tag named `kind-v<version>`, for example `kind-v0.32.0`; or
-- a manually dispatched workflow with `publish` enabled and an explicit `kind-version` value.
+- a manually dispatched workflow with `publish` enabled and an explicit `kind_version` value.
 
-Publication jobs are serialized by the resolved kind version, and the workflow refuses to overwrite an existing version tag in `ghcr.io/sentenz/kind`. The optional `latest` tag is updated only when `update-latest` is explicitly enabled during a manual publication.
+For a new release, the workflow builds separate `linux/amd64` and `linux/arm64` candidates, publishes them by digest without a version tag, and scans each candidate for critical operating-system and library vulnerabilities. The immutable version manifest is created only after both scans pass. Published platform images include OCI metadata, BuildKit provenance, and an SBOM.
 
-Published images target `linux/amd64` and `linux/arm64`, include OCI metadata, BuildKit provenance, and an SBOM, and are scanned for critical vulnerabilities.
+Publication operations are serialized by the resolved kind version, and the workflow refuses to overwrite an existing version tag in `ghcr.io/sentenz/kind`.
+
+The moving `latest` tag is managed as a separate promotion operation:
+
+- publish a new version and promote it in one dispatch by enabling both `publish` and `update_latest`; or
+- promote an existing immutable version by setting `publish` to false, enabling `update_latest`, and selecting its `kind_version`.
 
 A full cluster-creation test is available only through explicit manual dispatch. It mounts the Docker socket on a trusted ephemeral GitHub-hosted runner and is intentionally excluded from pull-request execution.
