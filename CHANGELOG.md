@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.2](https://github.com/sentenz/template-k8s/compare/2.1.1...2.1.2) (2026-07-21)
+
+### Bug Fixes
+
+* **kind:** publish on unprefixed semantic release tags ([dc82cb4](https://github.com/sentenz/template-k8s/commit/dc82cb4f119a7c2071f37dc1f51187cb8fe1add3))
+
 ## [2.1.1](https://github.com/sentenz/template-k8s/compare/2.1.0...2.1.1) (2026-07-21)
 
 ### Bug Fixes
