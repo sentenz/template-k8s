@@ -9,7 +9,7 @@ database:
 secretManagement:
   database:
     kek:
-      value: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      value: "h1lrkPlxxIe9K92pUQkV4O+gn4NMP1E9pN4p94zC5IE="
 
 apiServer:
   service:
