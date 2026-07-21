@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.0](https://github.com/sentenz/template-k8s/compare/2.0.4...2.1.0) (2026-07-21)
+
+### Features
+
+* **kind:** add containerized kind CLI ([b97c22a](https://github.com/sentenz/template-k8s/commit/b97c22a2fd0326ccfab3ffbf16595e8948ae4d3d))
+
+### Bug Fixes
+
+* **kind:** address container workflow review feedback ([d8c405d](https://github.com/sentenz/template-k8s/commit/d8c405da2a6d001375b3d81dbaa838b64b5a64e3))
+* **kind:** gate publication on platform scans ([bbde907](https://github.com/sentenz/template-k8s/commit/bbde907dde2c787c2525a4b9cc845c9a76069fb9))
+* **kind:** refresh Alpine runtime dependencies ([9bcaf1b](https://github.com/sentenz/template-k8s/commit/9bcaf1b1057ff69696e80e74b8d0943be1c7a1e9))
+* **trivy:** use repository-local cache paths ([05e4e77](https://github.com/sentenz/template-k8s/commit/05e4e77abfd804a2a6fcb68bb4272ffb1686aae4))
+
 ## [2.0.4](https://github.com/sentenz/template-k8s/compare/2.0.3...2.0.4) (2026-07-21)
 
 ### Bug Fixes
