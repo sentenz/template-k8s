@@ -8,11 +8,15 @@ readonly DEFAULT_KUBECTL_VERSION="v1.36.1"
 readonly DEFAULT_KUSTOMIZE_VERSION="v5.8.1"
 readonly DEFAULT_KIND_VERSION="v0.32.0"
 readonly DEFAULT_HELM_VERSION="v4.2.0"
+readonly DEFAULT_GO_VERSION="1.25.11"
+readonly DEFAULT_GO_AMD64_SHA256="34f14304e856893f4ba30c2cacfe93906e9de7915c5f6aaaf3a81cdccd7ba30b"
+readonly DEFAULT_GO_ARM64_SHA256="c30bf9e156a54ea4e31fbbbf31a712b32734b58cc9a22426fa5ee632d0885124"
 
 readonly KUBECTL_VERSION="${KUBECTL_VERSION:-${DEFAULT_KUBECTL_VERSION}}"
 readonly KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION:-${DEFAULT_KUSTOMIZE_VERSION}}"
 readonly KIND_VERSION="${KIND_VERSION:-${DEFAULT_KIND_VERSION}}"
 readonly HELM_VERSION="${HELM_VERSION:-${DEFAULT_HELM_VERSION}}"
+readonly GO_VERSION="${GO_VERSION:-${DEFAULT_GO_VERSION}}"
 readonly TARGETOS="${TARGETOS:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
 readonly TARGETARCH="${TARGETARCH:-$(uname -m)}"
 readonly INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
@@ -62,6 +66,11 @@ validate_version() {
 
   [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] \
     || fail "invalid ${tool} version: ${version}"
+}
+
+validate_go_version() {
+  [[ "${GO_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || fail "invalid Go version: ${GO_VERSION}"
 }
 
 normalize_platform() {
@@ -130,6 +139,24 @@ install_binary() {
   log "installed ${name} to ${INSTALL_DIR}/${name}"
 }
 
+resolve_go_sha256() {
+  local expected="${GO_SHA256:-}"
+
+  if [[ -z "${expected}" ]]; then
+    [[ "${GO_VERSION}" == "${DEFAULT_GO_VERSION}" ]] \
+      || fail "GO_SHA256 is required when overriding GO_VERSION"
+    case "${ARCH}" in
+      amd64) expected="${DEFAULT_GO_AMD64_SHA256}" ;;
+      arm64) expected="${DEFAULT_GO_ARM64_SHA256}" ;;
+      *) fail "no Go checksum configured for architecture: ${ARCH}" ;;
+    esac
+  fi
+
+  expected="${expected,,}"
+  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid GO_SHA256"
+  printf '%s\n' "${expected}"
+}
+
 install_kubectl() {
   local base_url asset checksum_file expected
 
@@ -169,28 +196,46 @@ install_kind() {
 }
 
 install_kustomize() {
-  local version_without_v base_url asset archive checksum_file expected extract_dir
+  local go_archive go_asset go_expected go_root go_bin gobin version_output
 
-  version_without_v="${KUSTOMIZE_VERSION#v}"
-  asset="kustomize_v${version_without_v}_${OS}_${ARCH}.tar.gz"
-  base_url="https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${KUSTOMIZE_VERSION}"
-  archive="${TMP_DIR}/${asset}"
-  checksum_file="${TMP_DIR}/kustomize-checksums.txt"
-  extract_dir="${TMP_DIR}/kustomize"
+  go_asset="go${GO_VERSION}.${OS}-${ARCH}.tar.gz"
+  go_archive="${TMP_DIR}/${go_asset}"
+  go_root="${TMP_DIR}/go-toolchain"
+  gobin="${TMP_DIR}/kustomize-bin"
 
-  download "${base_url}/${asset}" "${archive}"
-  if [[ -n "${KUSTOMIZE_SHA256:-}" ]]; then
-    expected="${KUSTOMIZE_SHA256,,}"
-  else
-    download "${base_url}/checksums.txt" "${checksum_file}"
-    expected="$(read_sha256 "${checksum_file}" "${asset}")"
-  fi
-  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid KUSTOMIZE_SHA256"
-  verify_sha256 "${archive}" "${expected}"
+  download "https://go.dev/dl/${go_asset}" "${go_archive}"
+  go_expected="$(resolve_go_sha256)"
+  verify_sha256 "${go_archive}" "${go_expected}"
 
-  mkdir -p -- "${extract_dir}"
-  tar --extract --gzip --file "${archive}" --directory "${extract_dir}" --no-same-owner
-  install_binary "${extract_dir}/kustomize" kustomize
+  mkdir -p -- "${go_root}" "${gobin}" "${TMP_DIR}/go-cache" "${TMP_DIR}/go-mod-cache" "${TMP_DIR}/go-path"
+  tar --extract --gzip --file "${go_archive}" --directory "${go_root}" --no-same-owner
+  go_bin="${go_root}/go/bin/go"
+  [[ -x "${go_bin}" ]] || fail "Go toolchain binary not found after extraction"
+
+  log "building kustomize ${KUSTOMIZE_VERSION} with Go ${GO_VERSION}"
+  CGO_ENABLED=0 \
+  GOBIN="${gobin}" \
+  GOCACHE="${TMP_DIR}/go-cache" \
+  GOENV=off \
+  GOFLAGS='-buildvcs=false' \
+  GOMODCACHE="${TMP_DIR}/go-mod-cache" \
+  GONOSUMDB='' \
+  GOPATH="${TMP_DIR}/go-path" \
+  GOPRIVATE='' \
+  GOPROXY='https://proxy.golang.org' \
+  GOSUMDB='sum.golang.org' \
+  GOTOOLCHAIN=local \
+  GOOS="${OS}" \
+  GOARCH="${ARCH}" \
+    "${go_bin}" install \
+      -trimpath \
+      -ldflags="-s -w -X sigs.k8s.io/kustomize/api/provenance.version=${KUSTOMIZE_VERSION}" \
+      "sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VERSION}"
+
+  version_output="$("${gobin}/kustomize" version)"
+  grep -F -- "${KUSTOMIZE_VERSION#v}" <<< "${version_output}" >/dev/null \
+    || fail "built kustomize version does not match ${KUSTOMIZE_VERSION}: ${version_output}"
+  install_binary "${gobin}/kustomize" kustomize
 }
 
 install_helm() {
@@ -253,6 +298,7 @@ main() {
   validate_version kustomize "${KUSTOMIZE_VERSION}"
   validate_version kind "${KIND_VERSION}"
   validate_version helm "${HELM_VERSION}"
+  validate_go_version
   normalize_platform
   validate_install_dir
 
