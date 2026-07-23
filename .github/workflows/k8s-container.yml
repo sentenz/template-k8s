@@ -1,0 +1,490 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Kubernetes Toolchain Container
+
+on:
+  pull_request:
+    paths:
+      - container/k8s/**
+      - scripts/install-tools.sh
+      - .trivyignore.yaml
+      - .github/workflows/k8s-container.yml
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+    paths:
+      - container/k8s/**
+      - scripts/install-tools.sh
+      - .trivyignore.yaml
+      - .github/workflows/k8s-container.yml
+  workflow_dispatch:
+    inputs:
+      image_version:
+        description: Immutable image version to publish or promote
+        required: true
+        default: v1.0.0
+        type: string
+      kubectl_version:
+        description: kubectl release version
+        required: true
+        default: v1.36.1
+        type: string
+      kustomize_version:
+        description: Kustomize release version
+        required: true
+        default: v5.8.1
+        type: string
+      kind_version:
+        description: kind release version
+        required: true
+        default: v0.32.0
+        type: string
+      helm_version:
+        description: Helm release version
+        required: true
+        default: v4.2.0
+        type: string
+      publish:
+        description: Publish a new immutable version to GHCR
+        required: true
+        default: false
+        type: boolean
+      update_latest:
+        description: Promote the selected immutable version to latest
+        required: true
+        default: false
+        type: boolean
+      run_cluster_test:
+        description: Create and delete a cluster using the host Docker socket
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: k8s-container-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ inputs.image_version || 'default' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DEFAULT_KUBECTL_VERSION: v1.36.1
+  DEFAULT_KUSTOMIZE_VERSION: v5.8.1
+  DEFAULT_KIND_VERSION: v0.32.0
+  DEFAULT_HELM_VERSION: v4.2.0
+  IMAGE_NAME: ghcr.io/sentenz/k8s
+  TRIVY_VERSION: v0.70.0
+
+jobs:
+  prepare:
+    name: Resolve release configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      image_version: ${{ steps.resolve.outputs.image_version }}
+      kubectl_version: ${{ steps.resolve.outputs.kubectl_version }}
+      kustomize_version: ${{ steps.resolve.outputs.kustomize_version }}
+      kind_version: ${{ steps.resolve.outputs.kind_version }}
+      helm_version: ${{ steps.resolve.outputs.helm_version }}
+      publish: ${{ steps.resolve.outputs.publish }}
+      update_latest: ${{ steps.resolve.outputs.update_latest }}
+    steps:
+      - name: Resolve and validate inputs
+        id: resolve
+        shell: bash
+        env:
+          DISPATCH_IMAGE_VERSION: ${{ inputs.image_version }}
+          DISPATCH_KUBECTL_VERSION: ${{ inputs.kubectl_version }}
+          DISPATCH_KUSTOMIZE_VERSION: ${{ inputs.kustomize_version }}
+          DISPATCH_KIND_VERSION: ${{ inputs.kind_version }}
+          DISPATCH_HELM_VERSION: ${{ inputs.helm_version }}
+          DISPATCH_PUBLISH: ${{ inputs.publish }}
+          DISPATCH_UPDATE_LATEST: ${{ inputs.update_latest }}
+        run: |
+          set -euo pipefail
+
+          image_version=dev
+          kubectl_version="${DEFAULT_KUBECTL_VERSION}"
+          kustomize_version="${DEFAULT_KUSTOMIZE_VERSION}"
+          kind_version="${DEFAULT_KIND_VERSION}"
+          helm_version="${DEFAULT_HELM_VERSION}"
+          publish=false
+          update_latest=false
+
+          if [[ "${GITHUB_REF_TYPE}" == tag ]]; then
+            image_version="${GITHUB_REF_NAME}"
+            publish=true
+            if [[ "${image_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              update_latest=true
+            fi
+          elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
+            image_version="${DISPATCH_IMAGE_VERSION}"
+            kubectl_version="${DISPATCH_KUBECTL_VERSION}"
+            kustomize_version="${DISPATCH_KUSTOMIZE_VERSION}"
+            kind_version="${DISPATCH_KIND_VERSION}"
+            helm_version="${DISPATCH_HELM_VERSION}"
+            publish="${DISPATCH_PUBLISH}"
+            update_latest="${DISPATCH_UPDATE_LATEST}"
+          fi
+
+          version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$'
+          for value in \
+            "${kubectl_version}" \
+            "${kustomize_version}" \
+            "${kind_version}" \
+            "${helm_version}"; do
+            if ! [[ "${value}" =~ ${version_pattern} ]]; then
+              echo "Invalid tool version: ${value}" >&2
+              exit 1
+            fi
+          done
+
+          if [[ "${publish}" == true || "${update_latest}" == true ]]; then
+            if ! [[ "${image_version}" =~ ${version_pattern} ]]; then
+              echo "Invalid image version: ${image_version}" >&2
+              exit 1
+            fi
+          fi
+
+          {
+            echo "image_version=${image_version}"
+            echo "kubectl_version=${kubectl_version}"
+            echo "kustomize_version=${kustomize_version}"
+            echo "kind_version=${kind_version}"
+            echo "helm_version=${helm_version}"
+            echo "publish=${publish}"
+            echo "update_latest=${update_latest}"
+          } >> "${GITHUB_OUTPUT}"
+
+  validate:
+    name: Build, smoke test, and scan
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate installer syntax
+        shell: bash
+        run: bash -n scripts/install-tools.sh container/k8s/entrypoint.sh
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Build local amd64 image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/k8s/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: local/k8s:${{ github.sha }}-amd64
+          provenance: false
+          sbom: false
+          build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+
+      - name: Build arm64 image archive
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/k8s/Dockerfile
+          platforms: linux/arm64
+          outputs: type=docker,dest=${{ runner.temp }}/k8s-arm64.tar
+          provenance: false
+          sbom: false
+          build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+
+      - name: Smoke test toolchain
+        shell: bash
+        env:
+          TEST_IMAGE: local/k8s:${{ github.sha }}-amd64
+          EXPECTED_KUBECTL_VERSION: ${{ needs.prepare.outputs.kubectl_version }}
+          EXPECTED_KUSTOMIZE_VERSION: ${{ needs.prepare.outputs.kustomize_version }}
+          EXPECTED_KIND_VERSION: ${{ needs.prepare.outputs.kind_version }}
+          EXPECTED_HELM_VERSION: ${{ needs.prepare.outputs.helm_version }}
+        run: |
+          set -euo pipefail
+
+          kubectl_output="$(docker run --rm "${TEST_IMAGE}" kubectl version --client=true --output=yaml)"
+          kustomize_output="$(docker run --rm "${TEST_IMAGE}" kustomize version)"
+          kind_output="$(docker run --rm "${TEST_IMAGE}" kind version)"
+          helm_output="$(docker run --rm "${TEST_IMAGE}" helm version --short)"
+          compatibility_output="$(docker run --rm "${TEST_IMAGE}" version)"
+
+          printf '%s\n' "${kubectl_output}" "${kustomize_output}" "${kind_output}" "${helm_output}"
+          grep -F -- "${EXPECTED_KUBECTL_VERSION}" <<< "${kubectl_output}"
+          grep -F -- "${EXPECTED_KUSTOMIZE_VERSION#v}" <<< "${kustomize_output}"
+          grep -F -- "${EXPECTED_KIND_VERSION#v}" <<< "${kind_output}"
+          grep -F -- "${EXPECTED_HELM_VERSION}" <<< "${helm_output}"
+          grep -F -- "${EXPECTED_KIND_VERSION#v}" <<< "${compatibility_output}"
+
+      - name: Export amd64 image archive
+        shell: bash
+        env:
+          TEST_IMAGE: local/k8s:${{ github.sha }}-amd64
+        run: docker save --output "${RUNNER_TEMP}/k8s-amd64.tar" "${TEST_IMAGE}"
+
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Scan architecture archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            trivy image \
+              --input "${RUNNER_TEMP}/k8s-${arch}.tar" \
+              --exit-code 1 \
+              --ignore-unfixed \
+              --scanners vuln \
+              --pkg-types os,library \
+              --severity CRITICAL
+          done
+
+  release:
+    name: Publish or promote image
+    needs:
+      - prepare
+      - validate
+    if: >-
+      needs.validate.result == 'success' &&
+      (needs.prepare.outputs.publish == 'true' || needs.prepare.outputs.update_latest == 'true')
+    concurrency:
+      group: k8s-container-release-${{ needs.prepare.outputs.image_version }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_VERSION: ${{ needs.prepare.outputs.image_version }}
+      PUBLISH_VERSION: ${{ needs.prepare.outputs.publish }}
+      UPDATE_LATEST: ${{ needs.prepare.outputs.update_latest }}
+    steps:
+      - name: Checkout
+        if: env.PUBLISH_VERSION == 'true'
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        if: env.PUBLISH_VERSION == 'true'
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate release operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_image="${IMAGE_NAME}:${IMAGE_VERSION}"
+
+          if [[ "${PUBLISH_VERSION}" == true ]]; then
+            if docker buildx imagetools inspect "${version_image}" >/dev/null 2>&1; then
+              echo "Refusing to overwrite existing immutable tag: ${version_image}" >&2
+              exit 1
+            fi
+          elif ! docker buildx imagetools inspect "${version_image}" >/dev/null 2>&1; then
+            echo "Cannot promote missing immutable tag: ${version_image}" >&2
+            exit 1
+          fi
+
+      - name: Generate OCI metadata
+        if: env.PUBLISH_VERSION == 'true'
+        id: metadata
+        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # v5.9.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.title=Kubernetes toolchain
+            org.opencontainers.image.description=Verified kubectl, Kustomize, kind, and Helm toolchain
+            org.opencontainers.image.url=https://github.com/sentenz/template-k8s
+            org.opencontainers.image.source=https://github.com/sentenz/template-k8s
+            org.opencontainers.image.version=${{ needs.prepare.outputs.image_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build and push amd64 release candidate
+        if: env.PUBLISH_VERSION == 'true'
+        id: build_amd64
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/k8s/Dockerfile
+          platforms: linux/amd64
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.metadata.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+
+      - name: Build and push arm64 release candidate
+        if: env.PUBLISH_VERSION == 'true'
+        id: build_arm64
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/k8s/Dockerfile
+          platforms: linux/arm64
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.metadata.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+
+      - name: Set up Trivy
+        if: env.PUBLISH_VERSION == 'true'
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Scan release candidates
+        if: env.PUBLISH_VERSION == 'true'
+        shell: bash
+        env:
+          AMD64_DIGEST: ${{ steps.build_amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ steps.build_arm64.outputs.digest }}
+        run: |
+          set -euo pipefail
+          trivy image --platform linux/amd64 --exit-code 1 --ignore-unfixed \
+            --scanners vuln --pkg-types os,library --severity CRITICAL \
+            "${IMAGE_NAME}@${AMD64_DIGEST}"
+          trivy image --platform linux/arm64 --exit-code 1 --ignore-unfixed \
+            --scanners vuln --pkg-types os,library --severity CRITICAL \
+            "${IMAGE_NAME}@${ARM64_DIGEST}"
+
+      - name: Publish immutable version tag
+        if: env.PUBLISH_VERSION == 'true'
+        shell: bash
+        env:
+          AMD64_DIGEST: ${{ steps.build_amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ steps.build_arm64.outputs.digest }}
+        run: |
+          set -euo pipefail
+          version_image="${IMAGE_NAME}:${IMAGE_VERSION}"
+          docker buildx imagetools create \
+            --tag "${version_image}" \
+            "${IMAGE_NAME}@${AMD64_DIGEST}" \
+            "${IMAGE_NAME}@${ARM64_DIGEST}"
+          docker buildx imagetools inspect "${version_image}"
+
+      - name: Promote immutable version to latest
+        if: env.UPDATE_LATEST == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_image="${IMAGE_NAME}:${IMAGE_VERSION}"
+          latest_image="${IMAGE_NAME}:latest"
+          docker buildx imagetools inspect "${version_image}"
+          docker buildx imagetools create --tag "${latest_image}" "${version_image}"
+          docker buildx imagetools inspect "${latest_image}"
+
+  cluster-test:
+    name: Create cluster through toolchain container
+    if: github.event_name == 'workflow_dispatch' && inputs.run_cluster_test
+    needs:
+      - prepare
+      - validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Build local cluster-test image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: container/k8s/Dockerfile
+          load: true
+          tags: local/k8s:cluster-test
+          provenance: false
+          sbom: false
+          build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
+            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+
+      - name: Create cluster
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --network host \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume "${GITHUB_WORKSPACE}:/workspace" \
+            --workdir /workspace \
+            local/k8s:cluster-test \
+            kind create cluster \
+            --name template-k8s-container-test \
+            --config config/kind-cluster.yaml \
+            --wait 5m
+
+      - name: Verify cluster nodes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_count="$({ docker ps --filter label=io.x-k8s.kind.cluster=template-k8s-container-test --format '{{.ID}}'; } | wc -l | tr -d ' ')"
+          if [[ "${node_count}" != 3 ]]; then
+            echo "Expected three kind nodes, found ${node_count}" >&2
+            docker ps --filter label=io.x-k8s.kind.cluster=template-k8s-container-test >&2
+            exit 1
+          fi
+
+      - name: Delete cluster
+        if: always()
+        shell: bash
+        run: |
+          docker run --rm \
+            --network host \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            local/k8s:cluster-test \
+            kind delete cluster \
+            --name template-k8s-container-test
