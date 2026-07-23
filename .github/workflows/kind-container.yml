@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
-name: Kind CLI Container
+name: Kubernetes CLI Container
 
 on:
   pull_request:
     paths:
       - container/kind/**
+      - scripts/install-k8s-tools.sh
+      - scripts/bootstrap.sh
       - .github/workflows/kind-container.yml
   push:
     branches:
@@ -14,13 +16,35 @@ on:
       - "*.*.*"
     paths:
       - container/kind/**
+      - scripts/install-k8s-tools.sh
+      - scripts/bootstrap.sh
       - .github/workflows/kind-container.yml
   workflow_dispatch:
     inputs:
-      kind_version:
-        description: kind release version to build or promote
+      image_version:
+        description: Immutable image version to build or promote
         required: true
         default: v0.32.0
+        type: string
+      kubectl_version:
+        description: kubectl release version
+        required: true
+        default: v1.36.1
+        type: string
+      kustomize_version:
+        description: Kustomize release version
+        required: true
+        default: v5.8.1
+        type: string
+      kind_version:
+        description: kind release version
+        required: true
+        default: v0.32.0
+        type: string
+      helm_version:
+        description: Helm release version
+        required: true
+        default: v4.1.4
         type: string
       publish:
         description: Publish a new immutable version tag to GHCR
@@ -39,55 +63,87 @@ on:
         type: boolean
 
 concurrency:
-  group: kind-container-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ inputs.kind_version || 'default' }}
+  group: k8s-container-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ inputs.image_version || 'default' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 env:
+  DEFAULT_IMAGE_VERSION: v0.32.0
+  DEFAULT_KUBECTL_VERSION: v1.36.1
+  DEFAULT_KUSTOMIZE_VERSION: v5.8.1
   DEFAULT_KIND_VERSION: v0.32.0
-  IMAGE_NAME: ghcr.io/sentenz/kind
+  DEFAULT_HELM_VERSION: v4.1.4
+  IMAGE_NAME: ghcr.io/sentenz/k8s
   TRIVY_VERSION: v0.70.0
 
 jobs:
   prepare:
-    name: Resolve image and kind versions
+    name: Resolve image and tool versions
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       image_version: ${{ steps.version.outputs.image_version }}
+      kubectl_version: ${{ steps.version.outputs.kubectl_version }}
+      kustomize_version: ${{ steps.version.outputs.kustomize_version }}
       kind_version: ${{ steps.version.outputs.kind_version }}
+      helm_version: ${{ steps.version.outputs.helm_version }}
     steps:
-      - name: Resolve image and kind versions
+      - name: Resolve and validate versions
         id: version
         shell: bash
         env:
+          DISPATCH_IMAGE_VERSION: ${{ inputs.image_version }}
+          DISPATCH_KUBECTL_VERSION: ${{ inputs.kubectl_version }}
+          DISPATCH_KUSTOMIZE_VERSION: ${{ inputs.kustomize_version }}
           DISPATCH_KIND_VERSION: ${{ inputs.kind_version }}
+          DISPATCH_HELM_VERSION: ${{ inputs.helm_version }}
         run: |
           set -euo pipefail
 
+          image_version="${DEFAULT_IMAGE_VERSION}"
+          kubectl_version="${DEFAULT_KUBECTL_VERSION}"
+          kustomize_version="${DEFAULT_KUSTOMIZE_VERSION}"
           kind_version="${DEFAULT_KIND_VERSION}"
-          image_version="${DEFAULT_KIND_VERSION}"
+          helm_version="${DEFAULT_HELM_VERSION}"
+
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             image_version="${GITHUB_REF_NAME}"
           elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            image_version="${DISPATCH_IMAGE_VERSION}"
+            kubectl_version="${DISPATCH_KUBECTL_VERSION}"
+            kustomize_version="${DISPATCH_KUSTOMIZE_VERSION}"
             kind_version="${DISPATCH_KIND_VERSION}"
-            image_version="${DISPATCH_KIND_VERSION}"
+            helm_version="${DISPATCH_HELM_VERSION}"
           fi
 
-          if ! [[ "${kind_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid kind version: ${kind_version}" >&2
+          version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$'
+          for pair in \
+            "kubectl:${kubectl_version}" \
+            "kustomize:${kustomize_version}" \
+            "kind:${kind_version}" \
+            "helm:${helm_version}"; do
+            name="${pair%%:*}"
+            value="${pair#*:}"
+            if ! [[ "${value}" =~ ${version_pattern} ]]; then
+              echo "Invalid ${name} version: ${value}" >&2
+              exit 1
+            fi
+          done
+
+          if ! [[ "${image_version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid image version: ${image_version}" >&2
             exit 1
           fi
 
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]] && ! [[ "${image_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid semantic release tag: ${image_version}" >&2
-            exit 1
-          fi
-
-          echo "image_version=${image_version}" >> "${GITHUB_OUTPUT}"
-          echo "kind_version=${kind_version}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "image_version=${image_version}"
+            echo "kubectl_version=${kubectl_version}"
+            echo "kustomize_version=${kustomize_version}"
+            echo "kind_version=${kind_version}"
+            echo "helm_version=${helm_version}"
+          } >> "${GITHUB_OUTPUT}"
 
   validate:
     name: Build, smoke test, and scan
@@ -98,7 +154,7 @@ jobs:
       inputs.update_latest != true ||
       inputs.run_cluster_test
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -120,11 +176,14 @@ jobs:
           file: container/kind/Dockerfile
           platforms: linux/amd64
           load: true
-          tags: local/kind:${{ github.sha }}-amd64
+          tags: local/k8s:${{ github.sha }}-amd64
           provenance: false
           sbom: false
           build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
 
       - name: Build arm64 image archive
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
@@ -132,31 +191,49 @@ jobs:
           context: .
           file: container/kind/Dockerfile
           platforms: linux/arm64
-          outputs: type=docker,dest=${{ runner.temp }}/kind-arm64.tar
+          outputs: type=docker,dest=${{ runner.temp }}/k8s-arm64.tar
           provenance: false
           sbom: false
           build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
 
-      - name: Smoke test kind version
+      - name: Smoke test embedded tools
         shell: bash
         env:
+          TEST_IMAGE: local/k8s:${{ github.sha }}-amd64
+          EXPECTED_KUBECTL_VERSION: ${{ needs.prepare.outputs.kubectl_version }}
+          EXPECTED_KUSTOMIZE_VERSION: ${{ needs.prepare.outputs.kustomize_version }}
           EXPECTED_KIND_VERSION: ${{ needs.prepare.outputs.kind_version }}
-          TEST_IMAGE: local/kind:${{ github.sha }}-amd64
+          EXPECTED_HELM_VERSION: ${{ needs.prepare.outputs.helm_version }}
         run: |
           set -euo pipefail
-          version_output="$(docker run --rm "${TEST_IMAGE}" version)"
-          printf '%s\n' "${version_output}"
-          grep -F -- "${EXPECTED_KIND_VERSION}" <<< "${version_output}"
+
+          check_version() {
+            local expected="$1"
+            shift
+            local output
+            output="$(docker run --rm "${TEST_IMAGE}" "$@" 2>&1)"
+            printf '%s\n' "${output}"
+            grep -F -- "${expected}" <<< "${output}"
+          }
+
+          check_version "${EXPECTED_KUBECTL_VERSION}" kubectl version --client=true
+          check_version "${EXPECTED_KUSTOMIZE_VERSION}" kustomize version
+          check_version "${EXPECTED_KIND_VERSION}" kind version
+          check_version "${EXPECTED_HELM_VERSION}" helm version --short
+          check_version "${EXPECTED_KIND_VERSION}" version
 
       - name: Export amd64 image archive
         shell: bash
         env:
-          TEST_IMAGE: local/kind:${{ github.sha }}-amd64
+          TEST_IMAGE: local/k8s:${{ github.sha }}-amd64
         run: |
           set -euo pipefail
           docker save \
-            --output "${RUNNER_TEMP}/kind-amd64.tar" \
+            --output "${RUNNER_TEMP}/k8s-amd64.tar" \
             "${TEST_IMAGE}"
 
       - name: Set up Trivy
@@ -174,7 +251,7 @@ jobs:
           trivy --version
           scanner_failed=0
           for arch in amd64 arm64; do
-            archive="${RUNNER_TEMP}/kind-${arch}.tar"
+            archive="${RUNNER_TEMP}/k8s-${arch}.tar"
             report="trivy-${arch}.json"
             log="trivy-${arch}.log"
 
@@ -204,7 +281,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: kind-vulnerability-reports-${{ github.sha }}
+          name: k8s-vulnerability-reports-${{ github.sha }}
           path: |
             trivy-amd64.json
             trivy-amd64.log
@@ -263,23 +340,18 @@ jobs:
       needs.prepare.result == 'success' &&
       (
         (
-          github.ref_type == 'tag' ||
-          (github.event_name == 'workflow_dispatch' && inputs.publish)
-        ) &&
-        needs.validate.result == 'success'
-        ||
+          (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish)) &&
+          needs.validate.result == 'success'
+        ) ||
         (
           github.event_name == 'workflow_dispatch' &&
           inputs.update_latest &&
           inputs.publish != true &&
-          (
-            needs.validate.result == 'success' ||
-            needs.validate.result == 'skipped'
-          )
+          (needs.validate.result == 'success' || needs.validate.result == 'skipped')
         )
       )
     concurrency:
-      group: kind-container-release-${{ needs.prepare.outputs.image_version }}
+      group: k8s-container-release-${{ needs.prepare.outputs.image_version }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -288,7 +360,6 @@ jobs:
       packages: write
     env:
       IMAGE_VERSION: ${{ needs.prepare.outputs.image_version }}
-      KIND_VERSION: ${{ needs.prepare.outputs.kind_version }}
       PUBLISH_VERSION: ${{ github.ref_type == 'tag' || inputs.publish }}
       UPDATE_LATEST: ${{ github.event_name == 'workflow_dispatch' && inputs.update_latest }}
     steps:
@@ -339,8 +410,8 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           labels: |
-            org.opencontainers.image.title=kind CLI
-            org.opencontainers.image.description=Containerized client environment for the Kubernetes kind CLI
+            org.opencontainers.image.title=Kubernetes CLI toolchain
+            org.opencontainers.image.description=Checksum-verified kubectl, Kustomize, kind, and Helm client environment
             org.opencontainers.image.url=https://github.com/sentenz/template-k8s
             org.opencontainers.image.source=https://github.com/sentenz/template-k8s
             org.opencontainers.image.version=${{ needs.prepare.outputs.image_version }}
@@ -360,7 +431,10 @@ jobs:
           provenance: mode=max
           sbom: true
           build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
 
       - name: Build and push arm64 release candidate
         if: env.PUBLISH_VERSION == 'true'
@@ -375,7 +449,10 @@ jobs:
           provenance: mode=max
           sbom: true
           build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
 
       - name: Set up Trivy
         if: env.PUBLISH_VERSION == 'true'
@@ -394,7 +471,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          trivy --version
           scanner_failed=0
           for arch in amd64 arm64; do
             if [[ "${arch}" == "amd64" ]]; then
@@ -433,7 +509,7 @@ jobs:
         if: env.PUBLISH_VERSION == 'true' && always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: kind-release-vulnerability-reports-${{ needs.prepare.outputs.image_version }}
+          name: k8s-release-vulnerability-reports-${{ needs.prepare.outputs.image_version }}
           path: |
             trivy-release-amd64.json
             trivy-release-amd64.log
@@ -514,7 +590,7 @@ jobs:
           docker buildx imagetools inspect "${latest_image}"
 
   cluster-test:
-    name: Create cluster through CLI container
+    name: Create cluster through toolchain container
     if: >-
       github.event_name == 'workflow_dispatch' &&
       inputs.run_cluster_test &&
@@ -539,11 +615,14 @@ jobs:
           context: .
           file: container/kind/Dockerfile
           load: true
-          tags: local/kind:cluster-test
+          tags: local/k8s:cluster-test
           provenance: false
           sbom: false
           build-args: |
+            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
+            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
+            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
 
       - name: Create cluster
         shell: bash
@@ -554,13 +633,26 @@ jobs:
             --volume /var/run/docker.sock:/var/run/docker.sock \
             --volume "${GITHUB_WORKSPACE}:/workspace" \
             --workdir /workspace \
-            local/kind:cluster-test \
+            local/k8s:cluster-test \
             create cluster \
             --name template-k8s-container-test \
             --config config/kind-cluster.yaml \
+            --kubeconfig config/kubeconfig-container-test.yaml \
             --wait 5m
 
-      - name: Verify cluster nodes
+      - name: Verify cluster through kubectl
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --network host \
+            --volume "${GITHUB_WORKSPACE}:/workspace" \
+            --workdir /workspace \
+            local/k8s:cluster-test \
+            kubectl get nodes \
+            --kubeconfig config/kubeconfig-container-test.yaml
+
+      - name: Verify cluster node containers
         shell: bash
         run: |
           set -euo pipefail
@@ -578,6 +670,7 @@ jobs:
           docker run --rm \
             --network host \
             --volume /var/run/docker.sock:/var/run/docker.sock \
-            local/kind:cluster-test \
+            local/k8s:cluster-test \
             delete cluster \
             --name template-k8s-container-test
+          rm -f "${GITHUB_WORKSPACE}/config/kubeconfig-container-test.yaml"
