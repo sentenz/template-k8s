@@ -1,7 +1,7 @@
 misconfigurations:
   - id: AVD-DS-0002
     paths:
-      - container/kind/Dockerfile
+      - container/k8s/Dockerfile
     expired_at: 2027-07-21
     statement: >-
       This image is a client for the host container runtime. Mounting the Docker
