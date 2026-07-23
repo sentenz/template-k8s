@@ -1,8 +1,13 @@
-# kind CLI Container
+# Kubernetes CLI Toolchain Container
 
-The `ghcr.io/sentenz/kind` image provides a small, versioned execution environment for the [`kind`](https://kind.sigs.k8s.io/) CLI.
+The `ghcr.io/sentenz/k8s` image provides a versioned client environment containing:
 
-This image is a client-side tool container. It does not replace `kindest/node`, which remains the Kubernetes node image used by clusters created with kind.
+- [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)
+- [Kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/)
+- [`kind`](https://kind.sigs.k8s.io/)
+- [Helm](https://helm.sh/)
+
+The image is a client-side toolchain. It does not replace `kindest/node`, which remains the Kubernetes node image used by clusters created with kind.
 
 ## Build
 
@@ -10,33 +15,69 @@ Build the image for the host architecture:
 
 ```bash
 docker build \
-  --build-arg KIND_VERSION=v0.32.0 \
-  --tag ghcr.io/sentenz/kind:v0.32.0 \
+  --tag ghcr.io/sentenz/k8s:v0.32.0 \
   --file container/kind/Dockerfile \
   .
 ```
 
-The Dockerfile downloads the selected kind release binary and verifies it using the checksum published with that release. The default Alpine base image is pinned by digest.
+Override individual tool versions with build arguments:
+
+```bash
+docker build \
+  --build-arg KUBECTL_VERSION=v1.36.1 \
+  --build-arg KUSTOMIZE_VERSION=v5.8.1 \
+  --build-arg KIND_VERSION=v0.32.0 \
+  --build-arg HELM_VERSION=v4.1.4 \
+  --tag ghcr.io/sentenz/k8s:v0.32.0 \
+  --file container/kind/Dockerfile \
+  .
+```
 
 Build and publish both supported platforms with Buildx:
 
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  --build-arg KIND_VERSION=v0.32.0 \
-  --tag ghcr.io/sentenz/kind:v0.32.0 \
+  --tag ghcr.io/sentenz/k8s:v0.32.0 \
   --file container/kind/Dockerfile \
   --push \
   .
 ```
 
-## Run
+The Dockerfile uses `scripts/install-k8s-tools.sh` for all tool downloads. Every artifact is downloaded over HTTPS and verified against either an upstream checksum sidecar or an explicitly supplied SHA-256 pin.
 
-Display the embedded kind version:
+For a fail-closed, repository-pinned build, set `CHECKSUM_POLICY=pinned` and provide architecture-specific digest arguments:
 
 ```bash
-docker run --rm ghcr.io/sentenz/kind:v0.32.0 version
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --build-arg CHECKSUM_POLICY=pinned \
+  --build-arg KUBECTL_SHA256_AMD64='<sha256>' \
+  --build-arg KUBECTL_SHA256_ARM64='<sha256>' \
+  --build-arg KUSTOMIZE_SHA256_AMD64='<sha256>' \
+  --build-arg KUSTOMIZE_SHA256_ARM64='<sha256>' \
+  --build-arg KIND_SHA256_AMD64='<sha256>' \
+  --build-arg KIND_SHA256_ARM64='<sha256>' \
+  --build-arg HELM_SHA256_AMD64='<sha256>' \
+  --build-arg HELM_SHA256_ARM64='<sha256>' \
+  --tag ghcr.io/sentenz/k8s:v0.32.0 \
+  --file container/kind/Dockerfile \
+  --push \
+  .
 ```
+
+## Run tools
+
+Explicit tool names are dispatched directly:
+
+```bash
+docker run --rm ghcr.io/sentenz/k8s:v0.32.0 kubectl version --client=true
+docker run --rm ghcr.io/sentenz/k8s:v0.32.0 kustomize version
+docker run --rm ghcr.io/sentenz/k8s:v0.32.0 kind version
+docker run --rm ghcr.io/sentenz/k8s:v0.32.0 helm version --short
+```
+
+For compatibility with the former kind-only image, arguments that do not begin with a supported tool name are treated as kind subcommands. Running the image without arguments displays the embedded kind version.
 
 Create the repository development cluster with the host Docker daemon:
 
@@ -46,13 +87,11 @@ docker run --rm \
   --volume /var/run/docker.sock:/var/run/docker.sock \
   --volume "$PWD:/workspace" \
   --workdir /workspace \
-  ghcr.io/sentenz/kind:v0.32.0 \
+  ghcr.io/sentenz/k8s:v0.32.0 \
   create cluster \
   --name template-k8s \
   --config config/kind-cluster.yaml
 ```
-
-The repository mount exposes the Kind configuration to the CLI container. The Docker socket allows kind to create and manage node containers on the host daemon. Host networking keeps the CLI container in the same loopback namespace as the Docker host so it can reach the Kubernetes API endpoint created by kind. On Docker Desktop, host networking must be supported and enabled; otherwise use a runtime-specific API address that is reachable from the CLI container.
 
 Delete the cluster with the same execution model:
 
@@ -60,7 +99,7 @@ Delete the cluster with the same execution model:
 docker run --rm \
   --network host \
   --volume /var/run/docker.sock:/var/run/docker.sock \
-  ghcr.io/sentenz/kind:v0.32.0 \
+  ghcr.io/sentenz/k8s:v0.32.0 \
   delete cluster \
   --name template-k8s
 ```
@@ -73,28 +112,17 @@ Accordingly:
 
 - do not expose the Docker socket to untrusted pull-request code or untrusted image contents;
 - use an isolated or ephemeral runner when containerized kind execution is required in automation;
-- prefer installing the kind release binary directly, or retain the repository's `helm/kind-action` integration, when a containerized toolchain is not required;
-- use a rootless Docker or Podman socket only where the selected runtime and kind configuration are explicitly supported, and mount the runtime-specific socket rather than assuming `/var/run/docker.sock`;
-- treat membership in the host runtime socket group as privileged access.
+- prefer direct tool installation when a containerized toolchain is not required;
+- use a rootless Docker or Podman socket only where the selected runtime and kind configuration are explicitly supported;
+- treat membership in the host runtime socket group as privileged access;
+- pin published image references by digest in production automation.
 
-The repository's existing `helm/kind-action` integration remains the default GitHub Actions path. The custom image is built, scanned, and smoke-tested independently.
+The installer additionally rejects unsafe archive members, symlinked installation targets, insecure installation directories, malformed versions, unsupported platforms, and checksum mismatches.
 
 ## Publication
 
-The `.github/workflows/kind-container.yml` workflow validates image changes on pull requests and relevant pushes to `main`. Trusted `kind-v*` tag pushes remain publication triggers.
+The `.github/workflows/kind-container.yml` workflow validates image changes on pull requests and relevant pushes to `main`. Trusted semantic-version tag pushes and explicit workflow dispatches can publish immutable tags to `ghcr.io/sentenz/k8s`.
 
-Immutable version publication uses either:
+Release candidates are built separately for `linux/amd64` and `linux/arm64`, scanned for critical operating-system and library vulnerabilities, and published by digest. The multi-platform version manifest is created only after both scans pass. Published images include OCI metadata, BuildKit provenance, and an SBOM.
 
-- a trusted tag named `kind-v<version>`, for example `kind-v0.32.0`; or
-- a manually dispatched workflow with `publish` enabled and an explicit `kind_version` value.
-
-For a new release, the workflow builds separate `linux/amd64` and `linux/arm64` candidates, publishes them by digest without a version tag, and scans each candidate for critical operating-system and library vulnerabilities. The immutable version manifest is created only after both scans pass. Published platform images include OCI metadata, BuildKit provenance, and an SBOM.
-
-Publication operations are serialized by the resolved kind version, and the workflow refuses to overwrite an existing version tag in `ghcr.io/sentenz/kind`.
-
-The moving `latest` tag is managed as a separate promotion operation:
-
-- publish a new version and promote it in one dispatch by enabling both `publish` and `update_latest`; or
-- promote an existing immutable version by setting `publish` to false, enabling `update_latest`, and selecting its `kind_version`.
-
-A full cluster-creation test is available only through explicit manual dispatch. It mounts the Docker socket on a trusted ephemeral GitHub-hosted runner and is intentionally excluded from pull-request execution.
+The workflow refuses to overwrite an existing immutable version tag. The moving `latest` tag is managed as an explicit promotion operation. A full cluster-creation test is available only through manual dispatch because it requires mounting the Docker socket on a trusted runner.
