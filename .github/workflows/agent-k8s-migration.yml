@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Agent Kubernetes migration
+
+on:
+  push:
+    branches:
+      - agent/harden-k8s-toolchain
+    paths:
+      - .github/workflows/agent-k8s-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-makefile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: agent/harden-k8s-toolchain
+
+      - name: Rename Kubernetes toolchain image
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("Makefile")
+          text = path.read_text()
+          old = "K8S_KIND_IMAGE ?= ghcr.io/sentenz/kind:v0.32.0@sha256:fe11a5f85fed99bd46b0dcb6c1acf86ebee86e2409c6f88a6680e1ee0e74b80c"
+          new = "# Pin this reference by digest after the first ghcr.io/sentenz/k8s release.\nK8S_TOOLS_IMAGE ?= ghcr.io/sentenz/k8s:v0.32.0"
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one legacy image declaration")
+          text = text.replace(old, new)
+          if text.count("$(K8S_KIND_IMAGE)") != 2:
+              raise SystemExit("expected exactly two legacy Makefile image references")
+          text = text.replace("$(K8S_KIND_IMAGE)", "$(K8S_TOOLS_IMAGE)")
+          path.write_text(text)
+
+      - name: Commit Makefile migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Makefile
+          git commit -m "rename Kubernetes toolchain image"
+          git push origin HEAD:agent/harden-k8s-toolchain
