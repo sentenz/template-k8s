@@ -10,21 +10,27 @@ ARG TARGETARCH
 ARG TARGETOS=linux
 ARG KUSTOMIZE_VERSION=v5.8.1
 
-ENV CGO_ENABLED=0 \
-    GOFLAGS=-trimpath \
-    GOPROXY=https://proxy.golang.org,direct \
-    GOSUMDB=sum.golang.org \
-    GOTOOLCHAIN=local
+RUN apk add --no-cache \
+      bash \
+      ca-certificates \
+      coreutils \
+      curl \
+      tar
+
+COPY --chmod=0755 scripts/install-k8s-tools.sh /usr/local/sbin/install-k8s-tools
 
 RUN --mount=type=cache,id=go-build,target=/root/.cache/go-build,sharing=locked \
     --mount=type=cache,id=go-mod,target=/go/pkg/mod,sharing=locked \
-    test "${TARGETOS}" = linux; \
-    case "${TARGETARCH}" in amd64|arm64) ;; *) exit 1 ;; esac; \
-    GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" GOBIN=/out \
-      go install -ldflags='-s -w' "sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VERSION}"; \
-    go version -m /out/kustomize \
-      | awk -v expected="${KUSTOMIZE_VERSION}" \
-          '$1 == "mod" && $2 == "sigs.k8s.io/kustomize/kustomize/v5" && $3 == expected { found = 1 } END { exit !found }'
+    INSTALL_DIR=/out \
+    TARGETOS="${TARGETOS}" \
+    TARGETARCH="${TARGETARCH}" \
+    TOOLS=kustomize \
+    CHECKSUM_POLICY=pinned \
+    KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION}" \
+    KUSTOMIZE_INSTALL_MODE=source \
+    KUSTOMIZE_GO_TOOLCHAIN=go1.24.13 \
+    VERIFY_EXECUTABLE=auto \
+    /usr/local/sbin/install-k8s-tools
 
 FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE} AS tools
 
