@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Fix Kustomize cross compilation
+
+on:
+  push:
+    branches:
+      - agent/harden-k8s-toolchain
+    paths:
+      - .github/workflows/agent-fix-kustomize-cross.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: agent/harden-k8s-toolchain
+
+      - name: Use an isolated GOPATH for cross compilation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("scripts/install-k8s-tools.sh")
+          text = path.read_text()
+
+          text = text.replace(
+              "  local build_dir binary metadata\n",
+              "  local build_dir go_path binary metadata\n",
+              1,
+          )
+
+          old = '''  build_dir="${TMP_ROOT}/kustomize-build"
+  mkdir -m 0700 -- "${build_dir}"
+  log "building Kustomize ${KUSTOMIZE_VERSION} with ${KUSTOMIZE_GO_TOOLCHAIN}"
+
+  CGO_ENABLED=0 \\
+  GOOS=linux \\
+  GOARCH="${ARCH}" \\
+  GOBIN="${build_dir}" \\
+  GOFLAGS=-trimpath \\
+  GOPROXY="${KUSTOMIZE_GOPROXY}" \\
+  GOSUMDB="${KUSTOMIZE_GOSUMDB}" \\
+  GOTOOLCHAIN="${KUSTOMIZE_GO_TOOLCHAIN}" \\
+    go install -ldflags='-s -w' \\
+      "sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VERSION}"
+
+  binary="${build_dir}/kustomize"
+'''
+          new = '''  build_dir="${TMP_ROOT}/kustomize-build"
+  go_path="${build_dir}/gopath"
+  mkdir -m 0700 -- "${build_dir}" "${go_path}"
+  log "building Kustomize ${KUSTOMIZE_VERSION} with ${KUSTOMIZE_GO_TOOLCHAIN}"
+
+  CGO_ENABLED=0 \\
+  GOOS=linux \\
+  GOARCH="${ARCH}" \\
+  GOPATH="${go_path}" \\
+  GOFLAGS=-trimpath \\
+  GOPROXY="${KUSTOMIZE_GOPROXY}" \\
+  GOSUMDB="${KUSTOMIZE_GOSUMDB}" \\
+  GOTOOLCHAIN="${KUSTOMIZE_GO_TOOLCHAIN}" \\
+    go install -ldflags='-s -w' \\
+      "sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VERSION}"
+
+  binary="${go_path}/bin/kustomize"
+  if [[ ! -f "${binary}" ]]; then
+    binary="${go_path}/bin/linux_${ARCH}/kustomize"
+  fi
+'''
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one Kustomize source-build block")
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+      - name: Validate and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/install-k8s-tools.sh
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/install-k8s-tools.sh
+          git commit -m "fix Kustomize cross compilation"
+          git push origin HEAD:agent/harden-k8s-toolchain
