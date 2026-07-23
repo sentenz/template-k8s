@@ -17,8 +17,8 @@ case "${K8S_BOOTSTRAP_FORCE}" in
   *) printf 'bootstrap.sh: error: K8S_BOOTSTRAP_FORCE must be 0 or 1\n' >&2; exit 1 ;;
 esac
 
-[[ -x "${INSTALLER}" ]] || {
-  printf 'bootstrap.sh: error: installer is missing or not executable: %s\n' "${INSTALLER}" >&2
+[[ -f "${INSTALLER}" && -r "${INSTALLER}" ]] || {
+  printf 'bootstrap.sh: error: installer is missing or unreadable: %s\n' "${INSTALLER}" >&2
   exit 1
 }
 
@@ -71,7 +71,7 @@ main() {
     return
   fi
 
-  INSTALL_DIR="${install_dir}" "${INSTALLER}" "${selected[@]}"
+  INSTALL_DIR="${install_dir}" bash "${INSTALLER}" "${selected[@]}"
 }
 
 main "$@"
