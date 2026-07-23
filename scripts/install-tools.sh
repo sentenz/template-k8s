@@ -19,9 +19,11 @@ readonly INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 readonly TOOLS="${TOOLS:-kubectl,kustomize,kind,helm}"
 
 readonly CURL_OPTIONS=(
+  --connect-timeout 15
   --fail
   --location
   --proto '=https'
+  --proto-redir '=https'
   --retry 5
   --retry-all-errors
   --retry-delay 2
@@ -98,9 +100,9 @@ read_sha256() {
 
   if [[ -n "${asset_name}" ]]; then
     checksum="$({ awk -v name="${asset_name}" '$2 == name || $2 == "*" name {print $1; exit}' "${checksum_file}"; } || true)"
-  fi
-
-  if [[ -z "${checksum}" ]]; then
+    [[ -n "${checksum}" ]] \
+      || fail "checksum manifest does not contain asset: ${asset_name}"
+  else
     checksum="$(awk 'NF {print $1; exit}' "${checksum_file}")"
   fi
 
