@@ -1,70 +1,65 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 
-set -euo pipefail
+set -Eeuo pipefail
+umask 022
 
-readonly KIND_VERSION="${KIND_VERSION:-v0.32.0}"
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly INSTALLER="${SCRIPT_DIR}/install-tools.sh"
 
-install_to_path() {
-  local src="$1"
-  local dest="$2"
-  local install_dir=""
-
-  if [[ -w /usr/local/bin ]]; then
-    install_dir="/usr/local/bin"
-  elif [[ -n "${HOME:-}" ]]; then
-    install_dir="${HOME}/.local/bin"
-    mkdir -p "${install_dir}"
-    export PATH="${install_dir}:${PATH}"
-    if ! grep -qF "${install_dir}" "${HOME}/.bashrc" 2>/dev/null; then
-      printf '\n# Added by template-k8s bootstrap\nexport PATH="%s:$PATH"\n' "${install_dir}" >> "${HOME}/.bashrc"
-    fi
-  else
-    echo "Unable to determine a writable install directory for ${dest}" >&2
-    exit 1
-  fi
-
-  install -m 0755 "${src}" "${install_dir}/${dest}"
+fail() {
+  printf '[bootstrap] error: %s\n' "$*" >&2
+  exit 1
 }
 
-if ! command -v kubectl &>/dev/null; then
-  kubectl_tmpdir="$(mktemp -d)"
-  trap 'rm -rf "${kubectl_tmpdir}"' EXIT
+select_install_dir() {
+  if [[ -d /usr/local/bin && -w /usr/local/bin ]]; then
+    printf '%s\n' /usr/local/bin
+    return
+  fi
 
-  curl -fsSLo "${kubectl_tmpdir}/kubectl" \
-    "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-  install_to_path "${kubectl_tmpdir}/kubectl" kubectl
-fi
+  [[ -n "${HOME:-}" ]] || fail 'HOME is not set and /usr/local/bin is not writable'
+  printf '%s\n' "${HOME}/.local/bin"
+}
 
-if ! command -v kustomize &>/dev/null; then
-  kustomize_tmpdir="$(mktemp -d)"
-  trap 'rm -rf "${kustomize_tmpdir}"' EXIT
+ensure_path() {
+  local install_dir="$1"
+  local shell_rc
 
-  (
-    cd "${kustomize_tmpdir}"
-    curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-  )
-  install_to_path "${kustomize_tmpdir}/kustomize" kustomize
-fi
-
-if ! command -v helm &>/dev/null; then
-  curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-fi
-
-if ! command -v kind &>/dev/null; then
-  case "$(uname -m)" in
-    x86_64) kind_arch="amd64" ;;
-    aarch64|arm64) kind_arch="arm64" ;;
-    *)
-      echo "Unsupported architecture for Kind: $(uname -m)" >&2
-      exit 1
-      ;;
+  case ":${PATH}:" in
+    *":${install_dir}:"*) return ;;
   esac
 
-  kind_binary="kind-linux-${kind_arch}"
-  kind_tmpdir="$(mktemp -d)"
-  trap 'rm -rf "${kind_tmpdir}"' EXIT
+  export PATH="${install_dir}:${PATH}"
+  [[ -n "${HOME:-}" ]] || return
 
-  curl -fsSLo "${kind_tmpdir}/${kind_binary}" \
-    "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/${kind_binary}"
-  install_to_path "${kind_tmpdir}/${kind_binary}" kind
-fi
+  shell_rc="${HOME}/.profile"
+  if [[ -n "${BASH_VERSION:-}" ]]; then
+    shell_rc="${HOME}/.bashrc"
+  fi
+
+  if ! grep -qF "${install_dir}" "${shell_rc}" 2>/dev/null; then
+    {
+      printf '\n# Added by template-k8s bootstrap\n'
+      printf 'export PATH="%s:$PATH"\n' "${install_dir}"
+    } >> "${shell_rc}"
+  fi
+}
+
+main() {
+  local install_dir
+
+  [[ -x "${INSTALLER}" ]] || fail "installer is not executable: ${INSTALLER}"
+  install_dir="${INSTALL_DIR:-$(select_install_dir)}"
+  mkdir -p -- "${install_dir}"
+
+  INSTALL_DIR="${install_dir}" "${INSTALLER}"
+  ensure_path "${install_dir}"
+
+  kubectl version --client=true --output=yaml
+  kustomize version
+  kind version
+  helm version --short
+}
+
+main "$@"
