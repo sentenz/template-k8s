@@ -1,49 +1,92 @@
 # syntax=docker/dockerfile:1.7
 # SPDX-License-Identifier: Apache-2.0
 
-FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+ARG ALPINE_IMAGE=alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
-ARG KIND_VERSION=v0.32.0
+FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE} AS tools
+
 ARG TARGETARCH
 ARG TARGETOS=linux
+ARG K8S_TOOLS="kubectl kustomize kind helm"
+ARG CHECKSUM_POLICY=remote
 
-LABEL org.opencontainers.image.title="kind CLI" \
-      org.opencontainers.image.description="Containerized client environment for the Kubernetes kind CLI" \
-      org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
-      org.opencontainers.image.licenses="Apache-2.0"
+ARG KUBECTL_VERSION=v1.36.1
+ARG KUSTOMIZE_VERSION=v5.8.1
+ARG KIND_VERSION=v0.32.0
+ARG HELM_VERSION=v4.1.4
 
-RUN set -eux; \
-    apk add --no-cache \
+ARG KUBECTL_SHA256=""
+ARG KUSTOMIZE_SHA256=""
+ARG KIND_SHA256=""
+ARG HELM_SHA256=""
+
+ARG KUBECTL_SHA256_AMD64=""
+ARG KUBECTL_SHA256_ARM64=""
+ARG KUSTOMIZE_SHA256_AMD64=""
+ARG KUSTOMIZE_SHA256_ARM64=""
+ARG KIND_SHA256_AMD64=""
+ARG KIND_SHA256_ARM64=""
+ARG HELM_SHA256_AMD64=""
+ARG HELM_SHA256_ARM64=""
+
+RUN apk add --no-cache \
+      bash \
       ca-certificates \
+      coreutils \
       curl \
-      docker-cli; \
-    if [ "${TARGETOS}" != "linux" ]; then \
-      echo "Unsupported target operating system: ${TARGETOS}" >&2; \
-      exit 1; \
-    fi; \
-    arch="${TARGETARCH}"; \
-    if [ -z "${arch}" ]; then \
-      case "$(uname -m)" in \
-        x86_64) arch="amd64" ;; \
-        aarch64) arch="arm64" ;; \
-        *) echo "Unsupported build architecture: $(uname -m)" >&2; exit 1 ;; \
-      esac; \
-    fi; \
-    case "${arch}" in \
-      amd64|arm64) ;; \
-      *) echo "Unsupported target architecture: ${arch}" >&2; exit 1 ;; \
-    esac; \
-    binary="kind-linux-${arch}"; \
-    release_url="https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}"; \
-    curl -fsSLo "/tmp/${binary}" "${release_url}/${binary}"; \
-    curl -fsSLo "/tmp/${binary}.sha256sum" "${release_url}/${binary}.sha256sum"; \
-    cd /tmp; \
-    sha256sum -c "${binary}.sha256sum"; \
-    mv "${binary}" /usr/local/bin/kind; \
-    chmod 0755 /usr/local/bin/kind; \
-    rm -f "${binary}.sha256sum"
+      tar
+
+COPY --chmod=0755 scripts/install-k8s-tools.sh /usr/local/sbin/install-k8s-tools
+
+RUN --mount=type=cache,id=k8s-tool-downloads,target=/var/cache/k8s-tools,sharing=locked \
+    INSTALL_DIR=/opt/k8s-tools \
+    DOWNLOAD_CACHE_DIR=/var/cache/k8s-tools \
+    TARGETOS="${TARGETOS}" \
+    TARGETARCH="${TARGETARCH}" \
+    TOOLS="${K8S_TOOLS}" \
+    CHECKSUM_POLICY="${CHECKSUM_POLICY}" \
+    KUBECTL_VERSION="${KUBECTL_VERSION}" \
+    KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION}" \
+    KIND_VERSION="${KIND_VERSION}" \
+    HELM_VERSION="${HELM_VERSION}" \
+    KUBECTL_SHA256="${KUBECTL_SHA256}" \
+    KUSTOMIZE_SHA256="${KUSTOMIZE_SHA256}" \
+    KIND_SHA256="${KIND_SHA256}" \
+    HELM_SHA256="${HELM_SHA256}" \
+    KUBECTL_SHA256_AMD64="${KUBECTL_SHA256_AMD64}" \
+    KUBECTL_SHA256_ARM64="${KUBECTL_SHA256_ARM64}" \
+    KUSTOMIZE_SHA256_AMD64="${KUSTOMIZE_SHA256_AMD64}" \
+    KUSTOMIZE_SHA256_ARM64="${KUSTOMIZE_SHA256_ARM64}" \
+    KIND_SHA256_AMD64="${KIND_SHA256_AMD64}" \
+    KIND_SHA256_ARM64="${KIND_SHA256_ARM64}" \
+    HELM_SHA256_AMD64="${HELM_SHA256_AMD64}" \
+    HELM_SHA256_ARM64="${HELM_SHA256_ARM64}" \
+    VERIFY_EXECUTABLE=auto \
+    /usr/local/sbin/install-k8s-tools
+
+FROM ${ALPINE_IMAGE}
+
+ARG KUBECTL_VERSION=v1.36.1
+ARG KUSTOMIZE_VERSION=v5.8.1
+ARG KIND_VERSION=v0.32.0
+ARG HELM_VERSION=v4.1.4
+
+LABEL org.opencontainers.image.title="Kubernetes CLI toolchain" \
+      org.opencontainers.image.description="Checksum-verified kubectl, Kustomize, kind, and Helm client environment" \
+      org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      io.sentenz.k8s.kubectl.version="${KUBECTL_VERSION}" \
+      io.sentenz.k8s.kustomize.version="${KUSTOMIZE_VERSION}" \
+      io.sentenz.k8s.kind.version="${KIND_VERSION}" \
+      io.sentenz.k8s.helm.version="${HELM_VERSION}"
+
+RUN apk add --no-cache \
+      ca-certificates \
+      docker-cli
+
+COPY --from=tools /opt/k8s-tools/ /usr/local/bin/
+COPY --chmod=0755 container/kind/k8s-entrypoint.sh /usr/local/bin/k8s-entrypoint
 
 WORKDIR /workspace
 
-ENTRYPOINT ["kind"]
-CMD ["version"]
+ENTRYPOINT ["/usr/local/bin/k8s-entrypoint"]
