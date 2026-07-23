@@ -44,9 +44,11 @@ docker buildx build \
   .
 ```
 
-The Dockerfile uses `scripts/install-k8s-tools.sh` for all tool downloads. Every artifact is downloaded over HTTPS and verified against either an upstream checksum sidecar or an explicitly supplied SHA-256 pin.
+The Dockerfile uses `scripts/install-k8s-tools.sh` for kubectl, kind, and Helm. Those release artifacts are downloaded over HTTPS and verified against either publisher-hosted checksum sidecars or explicitly supplied SHA-256 pins.
 
-For a fail-closed, repository-pinned build, set `CHECKSUM_POLICY=pinned` and provide architecture-specific digest arguments:
+Kustomize is compiled from its exact Go module tag with a digest-pinned Go `1.24.13` builder. Go module checksum verification remains enabled, and the resulting binary metadata is checked against the requested Kustomize module and version before it enters the runtime image. This avoids inheriting vulnerabilities from an upstream release binary built with an obsolete Go toolchain.
+
+For a fail-closed build of the downloaded tools, set `CHECKSUM_POLICY=pinned` and provide architecture-specific digest arguments:
 
 ```bash
 docker buildx build \
@@ -54,8 +56,6 @@ docker buildx build \
   --build-arg CHECKSUM_POLICY=pinned \
   --build-arg KUBECTL_SHA256_AMD64='<sha256>' \
   --build-arg KUBECTL_SHA256_ARM64='<sha256>' \
-  --build-arg KUSTOMIZE_SHA256_AMD64='<sha256>' \
-  --build-arg KUSTOMIZE_SHA256_ARM64='<sha256>' \
   --build-arg KIND_SHA256_AMD64='<sha256>' \
   --build-arg KIND_SHA256_ARM64='<sha256>' \
   --build-arg HELM_SHA256_AMD64='<sha256>' \
