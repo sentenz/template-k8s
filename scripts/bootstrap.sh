@@ -1,70 +1,77 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 
-set -euo pipefail
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 022
 
-readonly KIND_VERSION="${KIND_VERSION:-v0.32.0}"
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly INSTALLER="${SCRIPT_DIR}/install-k8s-tools.sh"
+readonly DEFAULT_TOOLS="kubectl kustomize kind helm"
 
-install_to_path() {
-  local src="$1"
-  local dest="$2"
-  local install_dir=""
+: "${K8S_BOOTSTRAP_TOOLS:=${DEFAULT_TOOLS}}"
+: "${K8S_BOOTSTRAP_FORCE:=0}"
 
-  if [[ -w /usr/local/bin ]]; then
-    install_dir="/usr/local/bin"
-  elif [[ -n "${HOME:-}" ]]; then
-    install_dir="${HOME}/.local/bin"
-    mkdir -p "${install_dir}"
-    export PATH="${install_dir}:${PATH}"
-    if ! grep -qF "${install_dir}" "${HOME}/.bashrc" 2>/dev/null; then
-      printf '\n# Added by template-k8s bootstrap\nexport PATH="%s:$PATH"\n' "${install_dir}" >> "${HOME}/.bashrc"
-    fi
-  else
-    echo "Unable to determine a writable install directory for ${dest}" >&2
-    exit 1
-  fi
+case "${K8S_BOOTSTRAP_FORCE}" in
+  0|1) ;;
+  *) printf 'bootstrap.sh: error: K8S_BOOTSTRAP_FORCE must be 0 or 1\n' >&2; exit 1 ;;
+esac
 
-  install -m 0755 "${src}" "${install_dir}/${dest}"
+[[ -x "${INSTALLER}" ]] || {
+  printf 'bootstrap.sh: error: installer is missing or not executable: %s\n' "${INSTALLER}" >&2
+  exit 1
 }
 
-if ! command -v kubectl &>/dev/null; then
-  kubectl_tmpdir="$(mktemp -d)"
-  trap 'rm -rf "${kubectl_tmpdir}"' EXIT
+choose_install_dir() {
+  if [[ -d /usr/local/bin && -w /usr/local/bin ]]; then
+    printf '%s\n' /usr/local/bin
+    return
+  fi
 
-  curl -fsSLo "${kubectl_tmpdir}/kubectl" \
-    "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-  install_to_path "${kubectl_tmpdir}/kubectl" kubectl
-fi
+  [[ -n "${HOME:-}" ]] || {
+    printf 'bootstrap.sh: error: HOME is unset and /usr/local/bin is not writable\n' >&2
+    exit 1
+  }
 
-if ! command -v kustomize &>/dev/null; then
-  kustomize_tmpdir="$(mktemp -d)"
-  trap 'rm -rf "${kustomize_tmpdir}"' EXIT
+  local user_bin="${HOME}/.local/bin"
+  mkdir -p -- "${user_bin}"
+  export PATH="${user_bin}:${PATH}"
 
-  (
-    cd "${kustomize_tmpdir}"
-    curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-  )
-  install_to_path "${kustomize_tmpdir}/kustomize" kustomize
-fi
+  local shell_profile="${HOME}/.bashrc"
+  local path_line='export PATH="$HOME/.local/bin:$PATH"'
+  if [[ ! -f "${shell_profile}" ]] || ! grep -Fqx -- "${path_line}" "${shell_profile}"; then
+    printf '\n# Added by template-k8s bootstrap\n%s\n' "${path_line}" >> "${shell_profile}"
+  fi
 
-if ! command -v helm &>/dev/null; then
-  curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-fi
+  printf '%s\n' "${user_bin}"
+}
 
-if ! command -v kind &>/dev/null; then
-  case "$(uname -m)" in
-    x86_64) kind_arch="amd64" ;;
-    aarch64|arm64) kind_arch="arm64" ;;
-    *)
-      echo "Unsupported architecture for Kind: $(uname -m)" >&2
-      exit 1
-      ;;
-  esac
+main() {
+  local install_dir raw tool
+  local -a requested=() selected=()
 
-  kind_binary="kind-linux-${kind_arch}"
-  kind_tmpdir="$(mktemp -d)"
-  trap 'rm -rf "${kind_tmpdir}"' EXIT
+  install_dir="$(choose_install_dir)"
+  raw="${K8S_BOOTSTRAP_TOOLS//,/ }"
+  read -r -a requested <<< "${raw}"
 
-  curl -fsSLo "${kind_tmpdir}/${kind_binary}" \
-    "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/${kind_binary}"
-  install_to_path "${kind_tmpdir}/${kind_binary}" kind
-fi
+  for tool in "${requested[@]}"; do
+    [[ -n "${tool}" ]] || continue
+    case "${tool}" in
+      kubectl|kustomize|kind|helm) ;;
+      *) printf 'bootstrap.sh: error: unsupported tool: %s\n' "${tool}" >&2; exit 1 ;;
+    esac
+
+    if [[ "${K8S_BOOTSTRAP_FORCE}" == 1 ]] || ! command -v "${tool}" >/dev/null 2>&1; then
+      selected+=("${tool}")
+    fi
+  done
+
+  if ((${#selected[@]} == 0)); then
+    printf 'Kubernetes CLI tools are already installed.\n'
+    return
+  fi
+
+  INSTALL_DIR="${install_dir}" "${INSTALLER}" "${selected[@]}"
+}
+
+main "$@"
