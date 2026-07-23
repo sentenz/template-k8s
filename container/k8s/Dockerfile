@@ -7,6 +7,7 @@ ARG KUBECTL_VERSION=v1.36.1
 ARG KUSTOMIZE_VERSION=v5.8.1
 ARG KIND_VERSION=v0.32.0
 ARG HELM_VERSION=v4.2.0
+ARG GO_VERSION=1.25.11
 ARG TARGETOS=linux
 ARG TARGETARCH
 
@@ -25,6 +26,7 @@ RUN INSTALL_DIR=/opt/k8s/bin \
     KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION}" \
     KIND_VERSION="${KIND_VERSION}" \
     HELM_VERSION="${HELM_VERSION}" \
+    GO_VERSION="${GO_VERSION}" \
     TARGETOS="${TARGETOS}" \
     TARGETARCH="${TARGETARCH}" \
     /usr/local/bin/install-tools.sh
@@ -35,6 +37,7 @@ ARG KUBECTL_VERSION=v1.36.1
 ARG KUSTOMIZE_VERSION=v5.8.1
 ARG KIND_VERSION=v0.32.0
 ARG HELM_VERSION=v4.2.0
+ARG GO_VERSION=1.25.11
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
       org.opencontainers.image.description="Verified kubectl, Kustomize, kind, and Helm toolchain for local Kubernetes workflows" \
@@ -43,7 +46,8 @@ LABEL org.opencontainers.image.title="Kubernetes toolchain" \
       io.sentenz.k8s.kubectl.version="${KUBECTL_VERSION}" \
       io.sentenz.k8s.kustomize.version="${KUSTOMIZE_VERSION}" \
       io.sentenz.k8s.kind.version="${KIND_VERSION}" \
-      io.sentenz.k8s.helm.version="${HELM_VERSION}"
+      io.sentenz.k8s.helm.version="${HELM_VERSION}" \
+      io.sentenz.k8s.kustomize.go.version="${GO_VERSION}"
 
 RUN apk upgrade --no-cache \
     && apk add --no-cache \
