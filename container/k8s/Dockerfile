@@ -10,7 +10,8 @@ ARG HELM_VERSION=v4.2.0
 ARG TARGETOS=linux
 ARG TARGETARCH
 
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
       bash \
       ca-certificates \
       coreutils \
@@ -44,7 +45,8 @@ LABEL org.opencontainers.image.title="Kubernetes toolchain" \
       io.sentenz.k8s.kind.version="${KIND_VERSION}" \
       io.sentenz.k8s.helm.version="${HELM_VERSION}"
 
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
       bash \
       ca-certificates \
       curl \
