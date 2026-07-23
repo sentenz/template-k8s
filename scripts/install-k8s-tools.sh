@@ -35,6 +35,14 @@ readonly DEFAULT_USER_AGENT="${SCRIPT_NAME}/1.0"
 : "${KIND_VERSION:=v0.32.0}"
 : "${HELM_VERSION:=v4.1.4}"
 
+# Kustomize defaults to a source build because the upstream v5.8.1 release
+# binary was produced with a Go toolchain affected by CVE-2025-68121. The
+# exact fixed toolchain is selected through Go's verified toolchain mechanism.
+: "${KUSTOMIZE_INSTALL_MODE:=source}"
+: "${KUSTOMIZE_GO_TOOLCHAIN:=go1.24.13}"
+: "${KUSTOMIZE_GOPROXY:=https://proxy.golang.org,direct}"
+: "${KUSTOMIZE_GOSUMDB:=sum.golang.org}"
+
 # Optional immutable SHA-256 pins. When CHECKSUM_POLICY=pinned, each selected
 # tool must have its corresponding variable populated.
 : "${KUBECTL_SHA256:=}"
@@ -109,7 +117,13 @@ Version pins:
   KIND_VERSION=v0.32.0
   HELM_VERSION=v4.1.4
 
-Optional immutable checksum pins:
+Kustomize source-build controls:
+  KUSTOMIZE_INSTALL_MODE=source|binary
+  KUSTOMIZE_GO_TOOLCHAIN=go1.24.13
+  KUSTOMIZE_GOPROXY=https://proxy.golang.org,direct
+  KUSTOMIZE_GOSUMDB=sum.golang.org
+
+Optional immutable checksum pins (binary artifacts only):
   KUBECTL_SHA256=<64 hex characters>
   KUSTOMIZE_SHA256=<64 hex characters>
   KIND_SHA256=<64 hex characters>
@@ -360,6 +374,8 @@ extract_sha256() {
   ' "${checksum_file}")
 
   if [[ -z "${result}" && -n "${asset_name}" ]]; then
+    # Sidecar checksum files sometimes contain only a single hash. Do not
+    # fall back when a manifest contains checksums for multiple assets.
     result=$(awk '
       {
         for (i = 1; i <= NF; i++) {
@@ -435,6 +451,8 @@ assert_safe_tar_gz() {
 
   (( count > 0 )) || die "archive is empty: ${archive}"
 
+  # Reject links, devices, FIFOs, and other special entries. This prevents an
+  # archive from redirecting extraction outside the temporary directory.
   while IFS= read -r listing; do
     type=${listing:0:1}
     case "${type}" in
@@ -541,13 +559,8 @@ install_kubectl() {
   verify_installed_version kubectl "${KUBECTL_VERSION}"
 }
 
-install_kustomize() {
+install_kustomize_binary() {
   local numeric asset base_url url checksum_url archive expected extract_dir binary
-  validate_version kustomize "${KUSTOMIZE_VERSION}"
-  case "${ARCH}" in
-    amd64|arm64|ppc64le|s390x) ;;
-    *) die "kustomize is not configured for linux/${ARCH}" ;;
-  esac
 
   numeric=${KUSTOMIZE_VERSION#v}
   asset="kustomize_v${numeric}_linux_${ARCH}.tar.gz"
@@ -556,6 +569,7 @@ install_kustomize() {
   checksum_url="${base_url}/checksums.txt"
   archive="${TMP_ROOT}/${asset}"
 
+  warn "installing the publisher-built Kustomize binary; source mode is recommended"
   download_https "${url}" "${archive}" "${asset}"
   assert_max_size "${archive}" 104857600
   expected=$(resolve_checksum KUSTOMIZE "$(checksum_pin KUSTOMIZE "${KUSTOMIZE_SHA256}")" "${checksum_url}" "${asset}" "kustomize-${KUSTOMIZE_VERSION}-checksums.txt")
@@ -568,6 +582,76 @@ install_kustomize() {
   binary="${extract_dir}/kustomize"
   [[ -f "${binary}" && ! -L "${binary}" ]] || die "kustomize archive did not contain a regular kustomize binary"
   atomic_install "${binary}" kustomize
+}
+
+install_kustomize_source() {
+  local build_dir binary metadata
+
+  require_command go
+  if [[ "${KUSTOMIZE_GO_TOOLCHAIN}" != local &&
+        ! "${KUSTOMIZE_GO_TOOLCHAIN}" =~ ^go[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    die "invalid KUSTOMIZE_GO_TOOLCHAIN: ${KUSTOMIZE_GO_TOOLCHAIN}"
+  fi
+  [[ "${KUSTOMIZE_GOPROXY}" == https://* || "${KUSTOMIZE_GOPROXY}" == off ]] ||
+    die "KUSTOMIZE_GOPROXY must begin with https:// or be off"
+  [[ -n "${KUSTOMIZE_GOSUMDB}" && "${KUSTOMIZE_GOSUMDB}" != off ]] ||
+    die "KUSTOMIZE_GOSUMDB must remain enabled for source verification"
+  validate_no_control_chars KUSTOMIZE_GOPROXY "${KUSTOMIZE_GOPROXY}"
+  validate_no_control_chars KUSTOMIZE_GOSUMDB "${KUSTOMIZE_GOSUMDB}"
+
+  if [[ "${OFFLINE}" == 1 ]]; then
+    [[ "${KUSTOMIZE_GOPROXY}" == off ]] ||
+      die "offline Kustomize source builds require KUSTOMIZE_GOPROXY=off"
+    [[ "${KUSTOMIZE_GO_TOOLCHAIN}" == local ]] ||
+      die "offline Kustomize source builds require KUSTOMIZE_GO_TOOLCHAIN=local"
+  fi
+
+  build_dir="${TMP_ROOT}/kustomize-build"
+  mkdir -m 0700 -- "${build_dir}"
+  log "building Kustomize ${KUSTOMIZE_VERSION} with ${KUSTOMIZE_GO_TOOLCHAIN}"
+
+  CGO_ENABLED=0 \
+  GOOS=linux \
+  GOARCH="${ARCH}" \
+  GOBIN="${build_dir}" \
+  GOFLAGS=-trimpath \
+  GOPROXY="${KUSTOMIZE_GOPROXY}" \
+  GOSUMDB="${KUSTOMIZE_GOSUMDB}" \
+  GOTOOLCHAIN="${KUSTOMIZE_GO_TOOLCHAIN}" \
+    go install -ldflags='-s -w' \
+      "sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VERSION}"
+
+  binary="${build_dir}/kustomize"
+  [[ -f "${binary}" && ! -L "${binary}" ]] ||
+    die "Kustomize source build did not produce a regular binary"
+
+  metadata=$(GOTOOLCHAIN="${KUSTOMIZE_GO_TOOLCHAIN}" go version -m "${binary}")
+  awk -v expected="${KUSTOMIZE_VERSION}" '
+    $1 == "mod" && $2 == "sigs.k8s.io/kustomize/kustomize/v5" && $3 == expected { found = 1 }
+    END { exit !found }
+  ' <<<"${metadata}" || die "Kustomize module metadata verification failed"
+
+  if [[ "${KUSTOMIZE_GO_TOOLCHAIN}" != local ]]; then
+    grep -Fq -- "${KUSTOMIZE_GO_TOOLCHAIN}" <<<"${metadata}" ||
+      die "Kustomize was not built with ${KUSTOMIZE_GO_TOOLCHAIN}"
+  fi
+
+  atomic_install "${binary}" kustomize
+}
+
+install_kustomize() {
+  validate_version kustomize "${KUSTOMIZE_VERSION}"
+  case "${ARCH}" in
+    amd64|arm64|ppc64le|s390x) ;;
+    *) die "kustomize is not configured for linux/${ARCH}" ;;
+  esac
+
+  case "${KUSTOMIZE_INSTALL_MODE}" in
+    source) install_kustomize_source ;;
+    binary) install_kustomize_binary ;;
+    *) die "KUSTOMIZE_INSTALL_MODE must be source or binary" ;;
+  esac
+
   verify_installed_version kustomize "${KUSTOMIZE_VERSION}"
 }
 
@@ -651,6 +735,10 @@ main() {
     remote|pinned) ;;
     *) die "CHECKSUM_POLICY must be remote or pinned" ;;
   esac
+  case "${KUSTOMIZE_INSTALL_MODE}" in
+    source|binary) ;;
+    *) die "KUSTOMIZE_INSTALL_MODE must be source or binary" ;;
+  esac
 
   require_command awk
   require_command chmod
@@ -685,12 +773,20 @@ main() {
       local selected_pin
       case "${tool}" in
         kubectl) selected_pin=$(checksum_pin KUBECTL "${KUBECTL_SHA256}") ;;
-        kustomize) selected_pin=$(checksum_pin KUSTOMIZE "${KUSTOMIZE_SHA256}") ;;
+        kustomize)
+          if [[ "${KUSTOMIZE_INSTALL_MODE}" == source ]]; then
+            selected_pin=source-verified
+          else
+            selected_pin=$(checksum_pin KUSTOMIZE "${KUSTOMIZE_SHA256}")
+          fi
+          ;;
         kind) selected_pin=$(checksum_pin KIND "${KIND_SHA256}") ;;
         helm) selected_pin=$(checksum_pin HELM "${HELM_SHA256}") ;;
       esac
       [[ -n "${selected_pin}" ]] || die "CHECKSUM_POLICY=pinned requires a ${tool} SHA-256 pin for ${ARCH}"
-      validate_sha256 "${tool}" "${selected_pin}"
+      if [[ "${selected_pin}" != source-verified ]]; then
+        validate_sha256 "${tool}" "${selected_pin}"
+      fi
     fi
 
     case "${tool}" in
