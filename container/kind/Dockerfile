@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ARG ALPINE_IMAGE=alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
-ARG GO_IMAGE=golang:1.24.13-alpine3.23
+ARG GO_IMAGE=golang:1.24.13-alpine3.23@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS kustomize
 
@@ -22,7 +22,9 @@ RUN --mount=type=cache,id=go-build,target=/root/.cache/go-build,sharing=locked \
     case "${TARGETARCH}" in amd64|arm64) ;; *) exit 1 ;; esac; \
     GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" GOBIN=/out \
       go install -ldflags='-s -w' "sigs.k8s.io/kustomize/kustomize/v5@${KUSTOMIZE_VERSION}"; \
-    go version -m /out/kustomize | grep -F "sigs.k8s.io/kustomize/kustomize/v5\t${KUSTOMIZE_VERSION}"
+    go version -m /out/kustomize \
+      | awk -v expected="${KUSTOMIZE_VERSION}" \
+          '$1 == "mod" && $2 == "sigs.k8s.io/kustomize/kustomize/v5" && $3 == expected { found = 1 } END { exit !found }'
 
 FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE} AS tools
 
