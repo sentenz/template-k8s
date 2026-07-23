@@ -1,15 +1,16 @@
 # `scripts/`
 
-1. Files and Folders
+- `install-tools.sh` installs pinned Kubernetes CLI tools from upstream release assets. Every binary or archive is verified with SHA-256 before installation. The script supports `linux/amd64` and `linux/arm64`, BuildKit `TARGETOS`/`TARGETARCH`, a configurable `INSTALL_DIR`, and a comma- or space-separated `TOOLS` selection.
+- `bootstrap.sh` selects a writable host installation directory and delegates all Kubernetes CLI installation to `install-tools.sh`.
+- `setup.sh` configures the remaining development environment.
+- `teardown.sh` removes development artifacts and reverses local setup where supported.
 
-    - `shell/`
-      > Contains a suite of modular shell scripts intended for system automation and orchestration of complex workflows.
+Default tool versions are intentionally pinned in `install-tools.sh` and mirrored as Docker build arguments. Override `KUBECTL_VERSION`, `KUSTOMIZE_VERSION`, `KIND_VERSION`, or `HELM_VERSION` only with an upstream release tag. Optional `*_SHA256` variables can supply externally pinned checksums for hermetic or controlled-network builds.
 
-    - `bootstrap.sh`
-      > Initializes the operating environment by setting up essential prerequisites and configuring dependencies.
+Example:
 
-    - `setup.sh`
-      > System configuration and preparation, ensuring that all required services and settings are in place for the successful execution of subsequent tasks or applications.
-
-    - `teardown.sh`
-      > Facilitates the graceful decommissioning of the environment by reversing configurations and cleaning up temporary artifacts.
+```bash
+INSTALL_DIR="$HOME/.local/bin" \
+TOOLS="kubectl,kustomize,kind,helm" \
+./scripts/install-tools.sh
+```
