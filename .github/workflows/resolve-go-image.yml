@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Resolve Go image digest
+
+on:
+  push:
+    branches:
+      - agent/harden-k8s-toolchain
+    paths:
+      - .github/workflows/resolve-go-image.yml
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Resolve multi-platform digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect docker.io/library/golang:1.24.13-alpine3.23
