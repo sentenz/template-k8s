@@ -49,11 +49,11 @@ ensure_path() {
 main() {
   local install_dir
 
-  [[ -x "${INSTALLER}" ]] || fail "installer is not executable: ${INSTALLER}"
+  [[ -f "${INSTALLER}" ]] || fail "installer not found: ${INSTALLER}"
   install_dir="${INSTALL_DIR:-$(select_install_dir)}"
   mkdir -p -- "${install_dir}"
 
-  INSTALL_DIR="${install_dir}" "${INSTALLER}"
+  INSTALL_DIR="${install_dir}" bash "${INSTALLER}"
   ensure_path "${install_dir}"
 
   kubectl version --client=true --output=yaml
