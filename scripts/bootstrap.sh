@@ -52,7 +52,7 @@ main() {
 
   install_dir="$(choose_install_dir)"
   raw="${K8S_BOOTSTRAP_TOOLS//,/ }"
-  read -r -a requested <<< "${raw}"
+  IFS=' ' read -r -a requested <<< "${raw}"
 
   for tool in "${requested[@]}"; do
     [[ -n "${tool}" ]] || continue
