@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-name: Kubernetes Toolchain Container
+name: Container
 
 on:
   pull_request:
@@ -169,7 +169,7 @@ jobs:
 
       - name: Validate installer syntax
         shell: bash
-        run: bash -n scripts/install-tools.sh container/k8s/entrypoint.sh
+        run: bash -n scripts/bootstrap.sh
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
