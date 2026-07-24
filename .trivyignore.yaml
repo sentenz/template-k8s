@@ -1,10 +1,1 @@
-misconfigurations:
-  - id: AVD-DS-0002
-    paths:
-      - container/kind/Dockerfile
-    expired_at: 2027-07-21
-    statement: >-
-      This image is a client for the host container runtime. Mounting the Docker
-      socket grants root-equivalent host control regardless of the container UID.
-      Socket access is documented as privileged and restricted to explicit,
-      trusted execution. Reassess this exception before its expiration.
+

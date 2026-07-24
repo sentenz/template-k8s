@@ -1,13 +1,4 @@
 cacert: ""
-cache:
-  backend: fs
-  dir: .cache/trivy
-  redis:
-    ca: ""
-    cert: ""
-    key: ""
-    tls: false
-  ttl: 0s
 config: trivy.yaml
 db:
   download-java-only: false
