@@ -18,7 +18,7 @@ RUN apk upgrade --no-cache \
       curl \
       tar
 
-COPY --chmod=0755 scripts/install-tools.sh /usr/local/bin/install-tools.sh
+COPY --chmod=0755 scripts/bootstrap.sh /usr/local/bin/bootstrap.sh
 
 RUN INSTALL_DIR=/opt/k8s/bin \
     KUBECTL_VERSION="${KUBECTL_VERSION}" \
@@ -27,7 +27,7 @@ RUN INSTALL_DIR=/opt/k8s/bin \
     HELM_VERSION="${HELM_VERSION}" \
     TARGETOS="${TARGETOS}" \
     TARGETARCH="${TARGETARCH}" \
-    /usr/local/bin/install-tools.sh
+    /usr/local/bin/bootstrap.sh
 
 FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
@@ -38,7 +38,7 @@ ARG HELM_VERSION=v4.2.0
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
       org.opencontainers.image.description="Verified kubectl, Kustomize, kind, and Helm toolchain for local Kubernetes workflows" \
-      org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
+      org.opencontainers.image.source="https://gitlab.samscm.net/alkl/kubernetes" \
       org.opencontainers.image.licenses="Apache-2.0" \
       io.k8s.tools.kubectl.version="${KUBECTL_VERSION}" \
       io.k8s.tools.kustomize.version="${KUSTOMIZE_VERSION}" \
