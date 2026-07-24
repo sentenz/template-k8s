@@ -6,8 +6,7 @@ on:
   pull_request:
     paths:
       - container/k8s/**
-      - scripts/install-tools.sh
-      - .trivyignore.yaml
+      - scripts/*.sh
       - .github/workflows/k8s-container.yml
   push:
     branches:
@@ -16,8 +15,7 @@ on:
       - "v*.*.*"
     paths:
       - container/k8s/**
-      - scripts/install-tools.sh
-      - .trivyignore.yaml
+      - scripts/*.sh
       - .github/workflows/k8s-container.yml
   workflow_dispatch:
     inputs:
