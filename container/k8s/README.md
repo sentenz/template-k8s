@@ -19,7 +19,7 @@ The image is a client-side tool environment. It does not replace `kindest/node`,
 ```bash
 docker build \
   --tag ghcr.io/sentenz/k8s:latest \
-  --file container/Dockerfile \
+  --file container/k8s/Dockerfile \
   .
 ```
 
@@ -40,7 +40,7 @@ docker build \
   --build-arg KIND_VERSION=v0.32.0 \
   --build-arg HELM_VERSION=v4.2.0 \
   --tag ghcr.io/sentenz/k8s:latest \
-  --file container/Dockerfile \
+  --file container/k8s/Dockerfile \
   .
 ```
 
