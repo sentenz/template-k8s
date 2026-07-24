@@ -78,6 +78,7 @@ skills-agent-update:
 
 # ── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
 
+# K8S_TOOLS_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
 K8S_TOOLS_IMAGE ?= ghcr.io/sentenz/kind:v0.32.0@sha256:fe11a5f85fed99bd46b0dcb6c1acf86ebee86e2409c6f88a6680e1ee0e74b80c
 K8S_TOOLS_CLI := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 
@@ -85,16 +86,16 @@ K8S_TOOLS_CLI := docker run --rm --network host --volume "$(CURDIR):/workspace" 
 k8s-setup:
 	@mkdir -p "$(dir $(K8S_KUBECONFIG))"
 	@if [[ ! -e "$(K8S_KUBECONFIG)" ]]; then \
-		install -m 0600 /dev/null "$(K8S_KUBECONFIG)"; \
+		install -m 0644 /dev/null "$(K8S_KUBECONFIG)"; \
 	fi
 
-	docker run --rm --network host --volume /var/run/docker.sock:/var/run/docker.sock --volume "$(CURDIR):/workspace" --workdir /workspace \
+	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock --volume "$(CURDIR):/workspace" --workdir /workspace \
 		"$(K8S_TOOLS_IMAGE)" kind create cluster --name "$(KIND_CLUSTER_NAME)" --config "$(KIND_CONFIG)" --kubeconfig "$(K8S_KUBECONFIG)" --wait 5m
 .PHONY: k8s-setup
 
 ## Tear down the local Kubernetes development cluster
 k8s-teardown:
-	docker run --rm --network host --volume /var/run/docker.sock:/var/run/docker.sock \
+	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock \
 		"$(K8S_TOOLS_IMAGE)" kind delete cluster --name "$(KIND_CLUSTER_NAME)"
 
 	@rm -f "$(K8S_KUBECONFIG)"
