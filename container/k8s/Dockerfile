@@ -38,7 +38,7 @@ ARG HELM_VERSION=v4.2.0
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
       org.opencontainers.image.description="Verified kubectl, Kustomize, kind, and Helm toolchain for local Kubernetes workflows" \
-      org.opencontainers.image.source="https://gitlab.samscm.net/alkl/kubernetes" \
+      org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
       org.opencontainers.image.licenses="Apache-2.0" \
       io.k8s.tools.kubectl.version="${KUBECTL_VERSION}" \
       io.k8s.tools.kustomize.version="${KUSTOMIZE_VERSION}" \
@@ -61,5 +61,7 @@ RUN apk upgrade --no-cache \
 COPY --from=installer /opt/k8s/bin/ /usr/local/bin/
 
 WORKDIR /workspace
+
+USER k8s
 
 CMD ["/bin/bash"]
