@@ -15,9 +15,20 @@ readonly KIND_VERSION="${KIND_VERSION:-${DEFAULT_KIND_VERSION}}"
 readonly HELM_VERSION="${HELM_VERSION:-${DEFAULT_HELM_VERSION}}"
 readonly TARGETOS="${TARGETOS:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
 readonly TARGETARCH="${TARGETARCH:-$(uname -m)}"
-readonly INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 readonly TOOLS="${TOOLS:-kubectl,kustomize,kind,helm}"
-
+readonly INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+if [[ -z "${INSTALL_DIR+x}" ]]; then
+  if [[ -w /usr/local/bin ]]; then
+    INSTALL_DIR=/usr/local/bin
+  elif [[ -n "${HOME:-}" ]]; then
+    INSTALL_DIR="${HOME}/.local/bin"
+    export PATH="${INSTALL_DIR}:${PATH}"
+  else
+    printf '[bootstrap] error: unable to determine a writable install directory\n' >&2
+    exit 1
+  fi
+fi
+readonly INSTALL_DIR
 readonly CURL_OPTIONS=(
   --connect-timeout 15
   --fail
