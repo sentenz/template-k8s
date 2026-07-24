@@ -44,13 +44,13 @@ Orchestration platform for automating deployment, scaling, and management of con
     - CI/CD
 
       ```yaml
-      - component: $CI_SERVER_FQDN/$development-environment/ci-cd/manager/kind@~latest
+      uses: sentenz/actions/kind@latest
       ```
 
     - Tasks
 
       ```bash
-      # Local Kubernetes cluster using kind
+      # Local Kubernetes Cluster using Kind
       make k8s-setup
       make k8s-deploy
       make k8s-destroy
