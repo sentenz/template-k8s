@@ -19,7 +19,6 @@ HELM_CHART_DIR ?= charts
 HELM_VALUES_FILE ?= values.yaml
 K8S_IMAGE_TAG ?= latest
 K8S_NAMESPACE ?= default
-K8S_KUSTOMIZE_BIN := kustomize
 K8S_KUBECONFIG ?= config/kubeconfig.yaml
 K8S_STACK_DIR ?= manifests/overlays
 KIND_CLUSTER_NAME ?= template-k8s
@@ -53,44 +52,59 @@ teardown:
 	cd $(@D)/scripts && ./teardown.sh
 .PHONY: teardown
 
-# ── Kubernetes Setup & Teardown ──────────────────────────────────────────────────────────────────
+# ── Git Hooks Manager ────────────────────────────────────────────────────────────────────────────
 
-K8S_KIND_IMAGE ?= ghcr.io/sentenz/kind:v0.32.0@sha256:fe11a5f85fed99bd46b0dcb6c1acf86ebee86e2409c6f88a6680e1ee0e74b80c
+## Initialize Lefthook Git hooks in the local repository
+githooks-lefthook-initialize:
+	lefthook install --force
+.PHONY: githooks-lefthook-initialize
+
+## Deinitialize Lefthook Git hooks from the local repository
+githooks-lefthook-deinitialize:
+	lefthook uninstall
+.PHONY: githooks-lefthook-deinitialize
+
+# ── Skills Manager ───────────────────────────────────────────────────────────────────────────────
+
+## Provision new Agent Skills into the project environment
+skills-agent-add:
+	DISABLE_TELEMETRY=1 skills add git@gitlab.samscm.net:development-environment/templates/skills.git
+.PHONY: skills-agent-add
+
+## Synchronize and update existing Agent Skills in the project environment
+skills-agent-update:
+	DISABLE_TELEMETRY=1 skills update git@gitlab.samscm.net:development-environment/templates/skills.git
+.PHONY: skills-agent-update
+
+# ── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
+
+K8S_TOOLS_IMAGE ?= ghcr.io/sentenz/kind:v0.32.0@sha256:fe11a5f85fed99bd46b0dcb6c1acf86ebee86e2409c6f88a6680e1ee0e74b80c
+K8S_TOOLS_CLI := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 
 ## Setup the local Kubernetes development cluster using Kind
 k8s-setup:
 	@mkdir -p "$(dir $(K8S_KUBECONFIG))"
-	@docker run --rm \
-		--network host \
-		--volume /var/run/docker.sock:/var/run/docker.sock \
-		--volume "$(CURDIR):/workspace" \
-		--workdir /workspace \
-		"$(K8S_KIND_IMAGE)" \
-		create cluster \
-		--name "$(KIND_CLUSTER_NAME)" \
-		--config "$(KIND_CONFIG)" \
-		--kubeconfig "$(K8S_KUBECONFIG)" \
-		--wait 5m
+	@if [[ ! -e "$(K8S_KUBECONFIG)" ]]; then \
+		install -m 0600 /dev/null "$(K8S_KUBECONFIG)"; \
+	fi
+
+	docker run --rm --network host --volume /var/run/docker.sock:/var/run/docker.sock --volume "$(CURDIR):/workspace" --workdir /workspace \
+		"$(K8S_TOOLS_IMAGE)" kind create cluster --name "$(KIND_CLUSTER_NAME)" --config "$(KIND_CONFIG)" --kubeconfig "$(K8S_KUBECONFIG)" --wait 5m
 .PHONY: k8s-setup
 
 ## Tear down the local Kubernetes development cluster
 k8s-teardown:
-	@docker run --rm \
-		--network host \
-		--volume /var/run/docker.sock:/var/run/docker.sock \
-		"$(K8S_KIND_IMAGE)" \
-		delete cluster \
-		--name "$(KIND_CLUSTER_NAME)"
+	docker run --rm --network host --volume /var/run/docker.sock:/var/run/docker.sock \
+		"$(K8S_TOOLS_IMAGE)" kind delete cluster --name "$(KIND_CLUSTER_NAME)"
+
 	@rm -f "$(K8S_KUBECONFIG)"
 .PHONY: k8s-teardown
-
-# ── Kubernetes Deploy & Destroy ──────────────────────────────────────────────────────────────────
 
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
 	@echo ""
-	@read -r -p "Confirm: Proceed with 'Kubernetes' in '$(K8S_ENV)'$(if $(K8S_STACK_DIR), targeting '$(K8S_STACK_DIR)',)? [yes $(K8S_ENV)/no] " confirm; \
-		if [[ "$$confirm" != "yes $(K8S_ENV)" ]]; then \
+	@read -r -p "Confirm: Proceed with 'Kubernetes' in '$(K8S_ENV)'$(if $(K8S_STACK_DIR), targeting '$(K8S_STACK_DIR)',)? [yes-$(K8S_ENV) / no] " confirm; \
+		if [[ "$$confirm" != "yes-$(K8S_ENV)" ]]; then \
 			echo "Aborted."; \
 			exit 1; \
 		fi
@@ -101,8 +115,8 @@ k8s-confirm:
 # Template to deploy Kubernetes manifests integrated Helm charts and Kustomize environment-specific overlays
 template-k8s-deploy-%:
 	@$(MAKE) -s k8s-confirm
-	@$(K8S_KUSTOMIZE_BIN) build manifests/overlays/$*/$(K8S_STACK_DIR) \
-		--enable-helm --load-restrictor=LoadRestrictionsNone \
+
+	@$(K8S_TOOLS_CLI) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
 		| kubectl apply --kubeconfig $(K8S_KUBECONFIG) -f -
 .PHONY: template-k8s-deploy-%
 
@@ -116,8 +130,8 @@ k8s-deploy-dependency-track:
 # Template to destroy Kubernetes manifests integrated Helm charts and Kustomize environment-specific overlays
 template-k8s-destroy-%:
 	@$(MAKE) -s k8s-confirm
-	@$(K8S_KUSTOMIZE_BIN) build manifests/overlays/$*/$(K8S_STACK_DIR) \
-		--enable-helm --load-restrictor=LoadRestrictionsNone \
+
+	@$(K8S_TOOLS_CLI) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
 		| kubectl delete --kubeconfig $(K8S_KUBECONFIG) -f -
 .PHONY: template-k8s-destroy-%
 
@@ -126,15 +140,11 @@ k8s-destroy-dependency-track:
 	@$(MAKE) template-k8s-destroy-$(K8S_ENV) K8S_STACK_DIR=dependency-track
 .PHONY: k8s-destroy-dependency-track
 
-# ── Kubernetes Rendering ─────────────────────────────────────────────────────────────────────────
-
 # Template to render Kubernetes manifests using Kustomize and Helm charts
 template-k8s-render-%:
 	@mkdir -p render/kustomize/$*/$(K8S_STACK_DIR)
-	@$(K8S_KUSTOMIZE_BIN) build \
-		manifests/overlays/$*/$(K8S_STACK_DIR) \
-		--enable-helm --load-restrictor=LoadRestrictionsNone \
-		--output=./render/kustomize/$*/$(K8S_STACK_DIR)
+
+	@$(K8S_TOOLS_CLI) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone --output=./render/kustomize/$*/$(K8S_STACK_DIR)
 .PHONY: template-k8s-render-%
 
 # Render Kubernetes manifests for Dependency-Track
@@ -147,39 +157,37 @@ k8s-render-manifests:
 	@$(MAKE) -s k8s-render-dependency-track
 .PHONY: k8s-render-manifests
 
-# ── Kubernetes Status & Monitoring ───────────────────────────────────────────────────────────────
+# Observe all services across all namespaces
+k8s-observability-service:
+	$(K8S_TOOLS_CLI) kubectl get services --kubeconfig $(K8S_KUBECONFIG)
+.PHONY: k8s-observability-service
 
-# List all services
-k8s-list-service:
-	kubectl get services --kubeconfig $(K8S_KUBECONFIG)
-.PHONY: k8s-list-service
+# Observe all namespaces
+k8s-observability-namespace:
+	$(K8S_TOOLS_CLI) kubectl get namespaces --kubeconfig $(K8S_KUBECONFIG)
+.PHONY: k8s-observability-namespace
 
-# List all namespaces
-k8s-list-namespace:
-	kubectl get namespaces --kubeconfig $(K8S_KUBECONFIG)
-.PHONY: k8s-list-namespace
+# Observe all pods across all namespaces
+k8s-observability-pod:
+	$(K8S_TOOLS_CLI) kubectl get pods -A --kubeconfig $(K8S_KUBECONFIG)
+.PHONY: k8s-observability-pod
 
-# List all pods
-k8s-list-pod:
-	kubectl get pods -A --kubeconfig $(K8S_KUBECONFIG)
-.PHONY: k8s-list-pod
+# Observe all ingress controllers across all namespaces
+k8s-observability-controller:
+	$(K8S_TOOLS_CLI) kubectl get ingressclass --kubeconfig $(K8S_KUBECONFIG)
+.PHONY: k8s-observability-controller
 
-# List all ingress controllers
-k8s-list-controller:
-	kubectl get ingressclass --kubeconfig $(K8S_KUBECONFIG)
-.PHONY: k8s-list-controller
-
-## Display Kubernetes observability information including services, namespaces, ingress controllers, and pods
-k8s-obserability:
+## Aggregate Kubernetes observability for services, namespaces, ingress controllers, and pods
+k8s-observability:
 	@echo "──── K8s Services ────────────────────────────────────────────────────────────────────────"
-	@$(MAKE) -s k8s-list-service
+	@$(MAKE) -s k8s-observability-service
 	@echo "──── K8s Namespaces ──────────────────────────────────────────────────────────────────────"
-	@$(MAKE) -s k8s-list-namespace
+	@$(MAKE) -s k8s-observability-namespace
 	@echo "──── K8s Ingress Controllers ─────────────────────────────────────────────────────────────"
-	@$(MAKE) -s k8s-list-controller
+	@$(MAKE) -s k8s-observability-controller
 	@echo "──── K8s Pods ────────────────────────────────────────────────────────────────────────────"
-	@$(MAKE) -s k8s-list-pod
-.PHONY: k8s-obserability
+	@$(MAKE) -s k8s-observability-pod
+.PHONY: k8s-observability
 
 # ── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
 
@@ -207,8 +215,6 @@ k8s-obserability:
 # 	@$(MAKE) helm-vendor-postgresql
 # 	@$(MAKE) helm-vendor-traefik
 # .PHONY: helm-vendor-charts
-
-# ── Helm Charts Rendering ────────────────────────────────────────────────────────────────────────
 
 # Render Helm charts templates with specified parameters
 helm-render:
@@ -257,30 +263,6 @@ helm-render-charts:
 	@$(MAKE) -s helm-render-traefik
 	@$(MAKE) -s helm-render-postgresql
 .PHONY: helm-render-charts
-
-# ── Git Hooks Manager ────────────────────────────────────────────────────────────────────────────
-
-## Initialize Lefthook Git hooks in the local repository
-githooks-lefthook-initialize:
-	lefthook install --force
-.PHONY: githooks-lefthook-initialize
-
-## Deinitialize Lefthook Git hooks from the local repository
-githooks-lefthook-deinitialize:
-	lefthook uninstall
-.PHONY: githooks-lefthook-deinitialize
-
-# ── Skills Manager ───────────────────────────────────────────────────────────────────────────────
-
-## Provision new Agent Skills into the project environment
-skills-agent-add:
-	skills add sentenz/skills
-.PHONY: skills-agent-add
-
-## Synchronize and update existing Agent Skills in the project environment
-skills-agent-update:
-	skills update sentenz/skills
-.PHONY: skills-agent-update
 
 # ── Dependency Manager ───────────────────────────────────────────────────────────────────────────
 
@@ -722,6 +704,25 @@ sast-cosign-verify:
 .PHONY: sast-cosign-verify
 
 # ── Container Manager ────────────────────────────────────────────────────────────────────────────
+
+CONTAINER_DOCKER_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null))
+CONTAINER_DOCKER_TAG ?= $(or $(shell git tag --sort=-creatordate | head -n 1),latest)
+CONTAINER_DOCKER_CONTEXT ?= .
+CONTAINER_DOCKER_FILE ?= container/Dockerfile
+
+# Usage: make container-docker-build [CONTAINER_DOCKER_IMAGE=<name>] [CONTAINER_DOCKER_TAG=<tag>] [CONTAINER_DOCKER_FILE=<file>] [CONTAINER_DOCKER_CONTEXT=<context>]
+#
+## Build the Docker container image with the specified name, tag, and context
+container-docker-build:
+	docker build -f "$(CONTAINER_DOCKER_FILE)" -t "$(CONTAINER_DOCKER_IMAGE):$(CONTAINER_DOCKER_TAG)" "$(CONTAINER_DOCKER_CONTEXT)"
+.PHONY: container-docker-build
+
+# Usage: make container-docker-run [CONTAINER_DOCKER_IMAGE=<name>] [CONTAINER_DOCKER_TAG=<tag>]
+#
+## Run the Docker container image with the specified name and tag
+container-docker-run:
+	docker run --rm "$(CONTAINER_DOCKER_IMAGE):$(CONTAINER_DOCKER_TAG)"
+.PHONY: container-docker-run
 
 ## Teardown Docker containers and remove all unused images, containers, volumes, and networks
 container-docker-teardown:
