@@ -79,7 +79,7 @@ skills-agent-update:
 # ── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
 
 # K8S_TOOLS_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
-K8S_TOOLS_IMAGE ?= ghcr.io/sentenz/kind:v0.32.0@sha256:fe11a5f85fed99bd46b0dcb6c1acf86ebee86e2409c6f88a6680e1ee0e74b80c
+K8S_TOOLS_IMAGE ?= ghcr.io/sentenz/k8s:v0.32.0@sha256:fe11a5f85fed99bd46b0dcb6c1acf86ebee86e2409c6f88a6680e1ee0e74b80c
 K8S_TOOLS_CLI := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 
 ## Setup the local Kubernetes development cluster using Kind
@@ -708,8 +708,8 @@ sast-cosign-verify:
 
 CONTAINER_DOCKER_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null))
 CONTAINER_DOCKER_TAG ?= $(or $(shell git tag --sort=-creatordate | head -n 1),latest)
+CONTAINER_DOCKER_FILE ?= container/k8s/Dockerfile
 CONTAINER_DOCKER_CONTEXT ?= .
-CONTAINER_DOCKER_FILE ?= container/Dockerfile
 
 # Usage: make container-docker-build [CONTAINER_DOCKER_IMAGE=<name>] [CONTAINER_DOCKER_TAG=<tag>] [CONTAINER_DOCKER_FILE=<file>] [CONTAINER_DOCKER_CONTEXT=<context>]
 #
