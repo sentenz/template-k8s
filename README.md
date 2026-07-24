@@ -7,7 +7,6 @@ Orchestration platform for automating deployment, scaling, and management of con
   - [1.2. Usage](#12-usage)
 - [2. Contribution](#2-contribution)
 - [3. Troubleshoot](#3-troubleshoot)
-  - [3.1. TODO](#31-todo)
 - [4. References](#4-references)
 
 ## 1. Details
@@ -102,8 +101,6 @@ Orchestration platform for automating deployment, scaling, and management of con
   > MkDocs for building and serving the documentation site.
 
 ## 3. Troubleshoot
-
-### 3.1. TODO
 
 - [Dependency Track](manifests/base/dependency-track/README.md#12-troubleshoot)
   > Troubleshooting for Dependency Track integration.
