@@ -10,7 +10,7 @@
 - `kubectl` v1.36.1
 - Kustomize v5.8.1
 - kind v0.32.0
-- Helm v4.2.0
+- Helm v4.2.2
 
 The image is a client-side tool environment. It does not replace `kindest/node`, which remains the Kubernetes node image used by clusters created with kind.
 
@@ -38,7 +38,7 @@ docker build \
   --build-arg KUBECTL_VERSION=v1.36.1 \
   --build-arg KUSTOMIZE_VERSION=v5.8.1 \
   --build-arg KIND_VERSION=v0.32.0 \
-  --build-arg HELM_VERSION=v4.2.0 \
+  --build-arg HELM_VERSION=v4.2.2 \
   --tag ghcr.io/sentenz/k8s:latest \
   --file container/k8s/Dockerfile \
   .
