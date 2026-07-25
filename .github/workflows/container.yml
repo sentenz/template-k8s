@@ -44,7 +44,7 @@ on:
       helm_version:
         description: Helm release version
         required: true
-        default: v4.2.0
+        default: v4.2.2
         type: string
       publish:
         description: Publish a new immutable version to GHCR
@@ -73,7 +73,7 @@ env:
   DEFAULT_KUBECTL_VERSION: v1.36.1
   DEFAULT_KUSTOMIZE_VERSION: v5.8.1
   DEFAULT_KIND_VERSION: v0.32.0
-  DEFAULT_HELM_VERSION: v4.2.0
+  DEFAULT_HELM_VERSION: v4.2.2
   IMAGE_NAME: ghcr.io/sentenz/k8s
   TRIVY_VERSION: v0.70.0
 
