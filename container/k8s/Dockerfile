@@ -6,7 +6,7 @@ FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6ee
 ARG KUBECTL_VERSION=v1.36.1
 ARG KUSTOMIZE_VERSION=v5.8.1
 ARG KIND_VERSION=v0.32.0
-ARG HELM_VERSION=v4.2.0
+ARG HELM_VERSION=v4.2.2
 ARG TARGETOS=linux
 ARG TARGETARCH
 
@@ -34,7 +34,7 @@ FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6ee
 ARG KUBECTL_VERSION=v1.36.1
 ARG KUSTOMIZE_VERSION=v5.8.1
 ARG KIND_VERSION=v0.32.0
-ARG HELM_VERSION=v4.2.0
+ARG HELM_VERSION=v4.2.2
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
       org.opencontainers.image.description="Verified kubectl, Kustomize, kind, and Helm toolchain for local Kubernetes workflows" \
