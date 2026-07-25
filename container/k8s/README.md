@@ -59,6 +59,7 @@ Create the repository development cluster with the host Docker daemon:
 
 ```bash
 docker run --rm \
+  --user root \
   --network host \
   --volume /var/run/docker.sock:/var/run/docker.sock \
   --volume "$PWD:/workspace" \
@@ -73,10 +74,10 @@ docker run --rm \
 
 Downloads require HTTPS, HTTPS-only redirects, TLS 1.2 or newer, fail-closed HTTP behavior, bounded retries, and an explicit connection timeout. Versions and checksum formats are validated; named checksum manifests must contain an exact asset match. All tools are installed from precompiled release binaries with SHA-256 verification. No upstream installation script is piped into a shell.
 
-Mounting `/var/run/docker.sock` grants effectively privileged control over the host Docker daemon. It is not a sandbox or least-privilege boundary. Do not expose the socket to untrusted pull-request code or untrusted images. Prefer isolated or ephemeral runners for containerized kind execution. The runtime image retains root as the default because socket group ownership is host-specific; use `--user` only where the mounted socket and workspace permissions are explicitly configured.
+The runtime image uses the unprivileged `k8s` user by default. Mounting `/var/run/docker.sock` grants effectively privileged control over the host Docker daemon and requires an explicit user override when the socket is owned by root. It is not a sandbox or least-privilege boundary. Do not expose the socket to untrusted pull-request code or untrusted images. Prefer isolated or ephemeral runners for containerized kind execution.
 
 ## 4. Publication
 
-`.github/workflows/k8s-container.yml` validates image changes on pull requests and pushes to `main`. A semantic Git tag such as `v1.2.3` publishes the immutable `ghcr.io/sentenz/k8s:v1.2.3` manifest after both architecture candidates pass smoke tests and critical-vulnerability scans. Stable tags also promote `latest`; prerelease tags do not.
+`.github/workflows/container.yml` validates image changes on pull requests and pushes to `main`. A semantic Git tag such as `v1.2.3` publishes the immutable `ghcr.io/sentenz/k8s:v1.2.3` manifest after both architecture candidates pass smoke tests and critical-vulnerability scans. Stable tags also promote `latest`; prerelease tags do not.
 
 Publication is serialized per image version and refuses to overwrite an existing immutable tag. Published images include OCI metadata, BuildKit provenance, and an SBOM.
