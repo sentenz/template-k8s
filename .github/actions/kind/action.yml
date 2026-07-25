@@ -31,7 +31,7 @@ inputs:
   helm-version:
     description: Helm version used by the Kustomize Helm inflator.
     required: false
-    default: v4.2.0
+    default: v4.2.2
   cluster-wait:
     description: Maximum duration for Kind control-plane readiness.
     required: false
