@@ -74,7 +74,8 @@ docker run --rm \
 
 Downloads require HTTPS, HTTPS-only redirects, TLS 1.2 or newer, fail-closed HTTP behavior, bounded retries, and an explicit connection timeout. Versions and checksum formats are validated; named checksum manifests must contain an exact asset match. All tools are installed from precompiled release binaries with SHA-256 verification. No upstream installation script is piped into a shell.
 
-The runtime image uses the unprivileged `k8s` user by default. Mounting `/var/run/docker.sock` grants effectively privileged control over the host Docker daemon and requires an explicit user override when the socket is owned by root. It is not a sandbox or least-privilege boundary. Do not expose the socket to untrusted pull-request code or untrusted images. Prefer isolated or ephemeral runners for containerized kind execution.
+> [!NOTE]
+> The runtime image uses the unprivileged `k8s` user by default. Mounting `/var/run/docker.sock` grants effectively privileged control over the host Docker daemon and requires an explicit user override when the socket is owned by root. It is not a sandbox or least-privilege boundary. Do not expose the socket to untrusted pull-request code or untrusted images. Prefer isolated or ephemeral runners for containerized kind execution.
 
 ## 4. Publication
 
