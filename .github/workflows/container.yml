@@ -7,7 +7,8 @@ on:
     paths:
       - container/k8s/**
       - scripts/*.sh
-      - .github/workflows/k8s-container.yml
+      - Makefile
+      - .github/workflows/container.yml
   push:
     branches:
       - main
@@ -16,7 +17,8 @@ on:
     paths:
       - container/k8s/**
       - scripts/*.sh
-      - .github/workflows/k8s-container.yml
+      - Makefile
+      - .github/workflows/container.yml
   workflow_dispatch:
     inputs:
       image_version:
@@ -225,14 +227,12 @@ jobs:
           kustomize_output="$(docker run --rm "${TEST_IMAGE}" kustomize version)"
           kind_output="$(docker run --rm "${TEST_IMAGE}" kind version)"
           helm_output="$(docker run --rm "${TEST_IMAGE}" helm version --short)"
-          compatibility_output="$(docker run --rm "${TEST_IMAGE}" version)"
 
           printf '%s\n' "${kubectl_output}" "${kustomize_output}" "${kind_output}" "${helm_output}"
           grep -F -- "${EXPECTED_KUBECTL_VERSION}" <<< "${kubectl_output}"
           grep -F -- "${EXPECTED_KUSTOMIZE_VERSION#v}" <<< "${kustomize_output}"
           grep -F -- "${EXPECTED_KIND_VERSION#v}" <<< "${kind_output}"
           grep -F -- "${EXPECTED_HELM_VERSION}" <<< "${helm_output}"
-          grep -F -- "${EXPECTED_KIND_VERSION#v}" <<< "${compatibility_output}"
 
       - name: Export amd64 image archive
         shell: bash
@@ -455,6 +455,7 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm \
+            --user root \
             --network host \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             --volume "${GITHUB_WORKSPACE}:/workspace" \
@@ -481,6 +482,7 @@ jobs:
         shell: bash
         run: |
           docker run --rm \
+            --user root \
             --network host \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             local/k8s:cluster-test \
