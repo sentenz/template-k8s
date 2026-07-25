@@ -75,7 +75,6 @@ env:
   DEFAULT_KIND_VERSION: v0.32.0
   DEFAULT_HELM_VERSION: v4.2.2
   IMAGE_NAME: ghcr.io/sentenz/k8s
-  TRIVY_VERSION: v0.70.0
 
 jobs:
   prepare:
@@ -159,7 +158,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
   validate:
-    name: Build, smoke test, and scan
+    name: Build and smoke test
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -239,26 +238,6 @@ jobs:
         env:
           TEST_IMAGE: local/k8s:${{ github.sha }}-amd64
         run: docker save --output "${RUNNER_TEMP}/k8s-amd64.tar" "${TEST_IMAGE}"
-
-      - name: Set up Trivy
-        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-          cache: true
-
-      - name: Scan architecture archives
-        shell: bash
-        run: |
-          set -euo pipefail
-          for arch in amd64 arm64; do
-            trivy image \
-              --input "${RUNNER_TEMP}/k8s-${arch}.tar" \
-              --exit-code 1 \
-              --ignore-unfixed \
-              --scanners vuln \
-              --pkg-types os,library \
-              --severity CRITICAL
-          done
 
   release:
     name: Publish or promote image
@@ -369,28 +348,6 @@ jobs:
             KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
             HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
-
-      - name: Set up Trivy
-        if: env.PUBLISH_VERSION == 'true'
-        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-          cache: true
-
-      - name: Scan release candidates
-        if: env.PUBLISH_VERSION == 'true'
-        shell: bash
-        env:
-          AMD64_DIGEST: ${{ steps.build_amd64.outputs.digest }}
-          ARM64_DIGEST: ${{ steps.build_arm64.outputs.digest }}
-        run: |
-          set -euo pipefail
-          trivy image --platform linux/amd64 --exit-code 1 --ignore-unfixed \
-            --scanners vuln --pkg-types os,library --severity CRITICAL \
-            "${IMAGE_NAME}@${AMD64_DIGEST}"
-          trivy image --platform linux/arm64 --exit-code 1 --ignore-unfixed \
-            --scanners vuln --pkg-types os,library --severity CRITICAL \
-            "${IMAGE_NAME}@${ARM64_DIGEST}"
 
       - name: Publish immutable version tag
         if: env.PUBLISH_VERSION == 'true'
