@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.3](https://github.com/sentenz/template-k8s/compare/2.1.2...2.1.3) (2026-07-25)
+
+### Bug Fixes
+
+* update installer Helm default ([c937db6](https://github.com/sentenz/template-k8s/commit/c937db640843e1cfcf2d2f61621a2fb43d16b558))
+* update Kind action Helm default ([dd010c4](https://github.com/sentenz/template-k8s/commit/dd010c4eab90435dbb9a3f70bda0111c079af385))
+* upgrade Helm to v4.2.2 ([f42dd89](https://github.com/sentenz/template-k8s/commit/f42dd89aa3eb5aa7908332c33622994e425b0902))
+* use patched Helm release in container CI ([824bcf8](https://github.com/sentenz/template-k8s/commit/824bcf8fbe3178765504d65c84a182b13641d7aa))
+
 ## [2.1.2](https://github.com/sentenz/template-k8s/compare/2.1.1...2.1.2) (2026-07-21)
 
 ### Bug Fixes
