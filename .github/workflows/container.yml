@@ -8,9 +8,16 @@ on:
       - container/k8s/**
       - scripts/bootstrap.sh
       - .github/workflows/container.yml
-  release:
-    types:
-      - published
+  workflow_call:
+    inputs:
+      publish:
+        description: Publish the container image to GHCR
+        required: true
+        type: boolean
+      version:
+        description: Container image version and Git tag to publish
+        required: true
+        type: string
 
 concurrency:
   group: container-image-${{ github.workflow }}-${{ github.ref }}
@@ -43,7 +50,7 @@ jobs:
 
   publish:
     name: Publish Container Image
-    if: github.event_name == 'release'
+    if: inputs.publish
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -53,13 +60,13 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ inputs.version }}
           persist-credentials: false
 
       - name: Publish Container Image
         uses: sentenz/actions/container-image@edd5e1e574e3eaa1254fbd19f4d2f0a5854c574d # 1.2.1
         with:
-          version: ${{ github.event.release.tag_name }}
+          version: ${{ inputs.version }}
           context: .
           file: container/k8s/Dockerfile
           image-name: k8s
