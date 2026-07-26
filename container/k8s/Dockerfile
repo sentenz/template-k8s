@@ -35,15 +35,10 @@ ARG KUBECTL_VERSION=v1.36.1
 ARG KUSTOMIZE_VERSION=v5.8.1
 ARG KIND_VERSION=v0.32.0
 ARG HELM_VERSION=v4.2.2
-ARG IMAGE_VERSION=dev
-ARG VCS_REF=unknown
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
       org.opencontainers.image.description="Verified kubectl, Kustomize, kind, and Helm toolchain for local Kubernetes workflows" \
-      org.opencontainers.image.url="https://github.com/sentenz/template-k8s" \
       org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
-      org.opencontainers.image.version="${IMAGE_VERSION}" \
-      org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.licenses="Apache-2.0" \
       io.k8s.tools.kubectl.version="${KUBECTL_VERSION}" \
       io.k8s.tools.kustomize.version="${KUSTOMIZE_VERSION}" \
