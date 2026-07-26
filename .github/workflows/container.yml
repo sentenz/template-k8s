@@ -32,7 +32,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate container image
-        uses: sentenz/actions/container-image@3e3a5a186498edf6b52f5f80b30a1b637c8be23a # PR sentenz/actions#57
+        uses: sentenz/actions/container-image@5c5271be112f7544262538c2b7ee6701efc9921f # PR sentenz/actions#57
         with:
           operation: build
           version: sha-${{ github.sha }}
@@ -60,7 +60,7 @@ jobs:
           persist-credentials: false
 
       - name: Publish container image
-        uses: sentenz/actions/container-image@3e3a5a186498edf6b52f5f80b30a1b637c8be23a # PR sentenz/actions#57
+        uses: sentenz/actions/container-image@5c5271be112f7544262538c2b7ee6701efc9921f # PR sentenz/actions#57
         with:
           operation: publish
           version: ${{ github.event.release.tag_name }}
