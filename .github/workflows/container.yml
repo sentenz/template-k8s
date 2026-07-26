@@ -8,10 +8,13 @@ on:
       - container/k8s/**
       - scripts/bootstrap.sh
       - .github/workflows/container.yml
+  release:
+    types:
+      - published
 
 concurrency:
   group: container-image-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -19,6 +22,7 @@ permissions:
 jobs:
   build:
     name: Build container image
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -36,3 +40,29 @@ jobs:
           image-name: k8s
           platforms: linux/amd64,linux/arm64
           push: false
+
+  publish:
+    name: Publish container image
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Build and publish container image
+        uses: sentenz/actions/container-image@edd5e1e574e3eaa1254fbd19f4d2f0a5854c574d # 1.2.1
+        with:
+          version: ${{ github.event.release.tag_name }}
+          context: .
+          file: container/k8s/Dockerfile
+          image-name: k8s
+          platforms: linux/amd64,linux/arm64
+          push: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
