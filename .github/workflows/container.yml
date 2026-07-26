@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   build:
-    name: Build container image
+    name: Build Container Image
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -31,7 +31,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Build container image
+      - name: Build Container Image
         uses: sentenz/actions/container-image@edd5e1e574e3eaa1254fbd19f4d2f0a5854c574d # 1.2.1
         with:
           version: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
@@ -42,7 +42,7 @@ jobs:
           push: false
 
   publish:
-    name: Publish container image
+    name: Publish Container Image
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -56,7 +56,7 @@ jobs:
           ref: ${{ github.event.release.tag_name }}
           persist-credentials: false
 
-      - name: Build and publish container image
+      - name: Publish Container Image
         uses: sentenz/actions/container-image@edd5e1e574e3eaa1254fbd19f4d2f0a5854c574d # 1.2.1
         with:
           version: ${{ github.event.release.tag_name }}
