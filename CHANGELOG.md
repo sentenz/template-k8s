@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.5](https://github.com/sentenz/template-k8s/compare/2.1.4...2.1.5) (2026-07-26)
+
+### Bug Fixes
+
+* bump k8s tools version in Dockerfile ([493119d](https://github.com/sentenz/template-k8s/commit/493119d0e8ff7ee4742d7269969cf187117f90a4))
+
 ## [2.1.4](https://github.com/sentenz/template-k8s/compare/2.1.3...2.1.4) (2026-07-26)
 
 ### Bug Fixes
