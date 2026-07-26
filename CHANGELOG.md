@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.4](https://github.com/sentenz/template-k8s/compare/2.1.3...2.1.4) (2026-07-26)
+
+### Bug Fixes
+
+* **deps:** bump k8s tools version bootstrap.sh ([cc9f704](https://github.com/sentenz/template-k8s/commit/cc9f7040cad0a1322cc09d9326af72995d42a785))
+
 ## [2.1.3](https://github.com/sentenz/template-k8s/compare/2.1.2...2.1.3) (2026-07-25)
 
 ### Bug Fixes
