@@ -8,59 +8,9 @@ on:
       - container/k8s/**
       - scripts/bootstrap.sh
       - .github/workflows/container.yml
-  push:
-    branches:
-      - main
-    tags:
-      - "v*.*.*"
-    paths:
-      - container/k8s/**
-      - scripts/bootstrap.sh
-      - .github/workflows/container.yml
-  workflow_dispatch:
-    inputs:
-      operation:
-        description: Container image operation
-        required: true
-        default: build
-        type: choice
-        options:
-          - build
-          - publish
-          - promote
-      image_version:
-        description: Immutable image version for manual publish or promote operations
-        required: false
-        type: string
-      publish_latest:
-        description: Latest-tag policy
-        required: true
-        default: auto
-        type: choice
-        options:
-          - auto
-          - "true"
-          - "false"
-      kubectl_version:
-        description: kubectl release version
-        required: true
-        default: v1.36.1
-        type: string
-      kustomize_version:
-        description: Kustomize release version
-        required: true
-        default: v5.8.1
-        type: string
-      kind_version:
-        description: kind release version
-        required: true
-        default: v0.32.0
-        type: string
-      helm_version:
-        description: Helm release version
-        required: true
-        default: v4.2.2
-        type: string
+  release:
+    types:
+      - published
 
 concurrency:
   group: container-${{ github.workflow }}-${{ github.ref }}
@@ -68,11 +18,11 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  image:
-    name: Build or Publish Kubernetes Toolchain
+  validate:
+    name: Validate Kubernetes Toolchain Image
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -81,19 +31,47 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Build, publish, or promote image
+      - name: Validate container image
         uses: sentenz/actions/container-image@3e3a5a186498edf6b52f5f80b30a1b637c8be23a # PR sentenz/actions#57
         with:
-          operation: ${{ inputs.operation || 'auto' }}
-          version: ${{ inputs.image_version }}
-          publish-latest: ${{ inputs.publish_latest || 'auto' }}
+          operation: build
+          version: sha-${{ github.sha }}
+          image-name: k8s
+          file: container/k8s/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            KUBECTL_VERSION=v1.36.1
+            KUSTOMIZE_VERSION=v5.8.1
+            KIND_VERSION=v0.32.0
+            HELM_VERSION=v4.2.2
+
+  publish:
+    name: Publish Kubernetes Toolchain Image
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Publish container image
+        uses: sentenz/actions/container-image@3e3a5a186498edf6b52f5f80b30a1b637c8be23a # PR sentenz/actions#57
+        with:
+          operation: publish
+          version: ${{ github.event.release.tag_name }}
+          publish-latest: auto
           immutable: true
           image-name: k8s
           file: container/k8s/Dockerfile
           platforms: linux/amd64,linux/arm64
           github-token: ${{ secrets.GITHUB_TOKEN }}
           build-args: |
-            KUBECTL_VERSION=${{ inputs.kubectl_version || 'v1.36.1' }}
-            KUSTOMIZE_VERSION=${{ inputs.kustomize_version || 'v5.8.1' }}
-            KIND_VERSION=${{ inputs.kind_version || 'v0.32.0' }}
-            HELM_VERSION=${{ inputs.helm_version || 'v4.2.2' }}
+            KUBECTL_VERSION=v1.36.1
+            KUSTOMIZE_VERSION=v5.8.1
+            KIND_VERSION=v0.32.0
+            HELM_VERSION=v4.2.2
