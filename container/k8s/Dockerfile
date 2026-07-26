@@ -3,10 +3,10 @@
 
 FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS installer
 
-ARG KUBECTL_VERSION=v1.36.1
+ARG KUBECTL_VERSION=v1.36.3
 ARG KUSTOMIZE_VERSION=v5.8.1
 ARG KIND_VERSION=v0.32.0
-ARG HELM_VERSION=v4.2.2
+ARG HELM_VERSION=v4.2.3
 ARG TARGETOS=linux
 ARG TARGETARCH
 
@@ -31,10 +31,10 @@ RUN INSTALL_DIR=/opt/k8s/bin \
 
 FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
-ARG KUBECTL_VERSION=v1.36.1
+ARG KUBECTL_VERSION=v1.36.3
 ARG KUSTOMIZE_VERSION=v5.8.1
 ARG KIND_VERSION=v0.32.0
-ARG HELM_VERSION=v4.2.2
+ARG HELM_VERSION=v4.2.3
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
       org.opencontainers.image.description="Verified kubectl, Kustomize, kind, and Helm toolchain for local Kubernetes workflows" \
