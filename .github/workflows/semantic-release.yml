@@ -73,7 +73,7 @@ jobs:
     name: Publish Container Image
     needs:
       - semantic-release
-    if: needs.semantic-release.outputs.new-release-published == 'true'
+    if: always() && needs.semantic-release.outputs.new-release-published == 'true'
     permissions:
       contents: read
       packages: write
