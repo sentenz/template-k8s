@@ -172,44 +172,46 @@ jobs:
         shell: bash
         run: bash -n scripts/bootstrap.sh
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+      - name: Validate multi-platform image build
+        uses: sentenz/actions/container-image@edd5e1e574e3eaa1254fbd19f4d2f0a5854c574d # v1.2.1
         with:
-          platforms: amd64,arm64
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
-
-      - name: Build local amd64 image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: .
+          version: validate-${{ github.sha }}
+          image-name: k8s
           file: container/k8s/Dockerfile
-          platforms: linux/amd64
-          load: true
-          tags: local/k8s:${{ github.sha }}-amd64
-          provenance: false
-          sbom: false
+          platforms: linux/amd64,linux/arm64
+          push: false
           build-args: |
             KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
             KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
             HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+            IMAGE_VERSION=${{ needs.prepare.outputs.image_version }}
+            VCS_REF=${{ github.sha }}
 
-      - name: Build arm64 image archive
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: .
-          file: container/k8s/Dockerfile
-          platforms: linux/arm64
-          outputs: type=docker,dest=${{ runner.temp }}/k8s-arm64.tar
-          provenance: false
-          sbom: false
-          build-args: |
-            KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
-            KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
-            KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
-            HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+      - name: Build local amd64 smoke-test image
+        shell: bash
+        env:
+          IMAGE_VERSION: ${{ needs.prepare.outputs.image_version }}
+          KUBECTL_VERSION: ${{ needs.prepare.outputs.kubectl_version }}
+          KUSTOMIZE_VERSION: ${{ needs.prepare.outputs.kustomize_version }}
+          KIND_VERSION: ${{ needs.prepare.outputs.kind_version }}
+          HELM_VERSION: ${{ needs.prepare.outputs.helm_version }}
+          TEST_IMAGE: local/k8s:${{ github.sha }}-amd64
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform linux/amd64 \
+            --file container/k8s/Dockerfile \
+            --tag "${TEST_IMAGE}" \
+            --load \
+            --provenance=false \
+            --build-arg "KUBECTL_VERSION=${KUBECTL_VERSION}" \
+            --build-arg "KUSTOMIZE_VERSION=${KUSTOMIZE_VERSION}" \
+            --build-arg "KIND_VERSION=${KIND_VERSION}" \
+            --build-arg "HELM_VERSION=${HELM_VERSION}" \
+            --build-arg "IMAGE_VERSION=${IMAGE_VERSION}" \
+            --build-arg "VCS_REF=${GITHUB_SHA}" \
+            .
 
       - name: Smoke test toolchain
         shell: bash
@@ -232,12 +234,6 @@ jobs:
           grep -F -- "${EXPECTED_KUSTOMIZE_VERSION#v}" <<< "${kustomize_output}"
           grep -F -- "${EXPECTED_KIND_VERSION#v}" <<< "${kind_output}"
           grep -F -- "${EXPECTED_HELM_VERSION}" <<< "${helm_output}"
-
-      - name: Export amd64 image archive
-        shell: bash
-        env:
-          TEST_IMAGE: local/k8s:${{ github.sha }}-amd64
-        run: docker save --output "${RUNNER_TEMP}/k8s-amd64.tar" "${TEST_IMAGE}"
 
   release:
     name: Publish or promote image
@@ -266,13 +262,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up QEMU
-        if: env.PUBLISH_VERSION == 'true'
+      - name: Set up QEMU for immutable-only publication
+        if: env.PUBLISH_VERSION == 'true' && env.UPDATE_LATEST != 'true'
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
         with:
           platforms: amd64,arm64
 
-      - name: Set up Docker Buildx
+      - name: Set up Docker Buildx for manual release operations
+        if: env.PUBLISH_VERSION != 'true' || env.UPDATE_LATEST != 'true'
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Log in to GHCR
@@ -289,7 +286,7 @@ jobs:
           version_image="${IMAGE_NAME}:${IMAGE_VERSION}"
 
           if [[ "${PUBLISH_VERSION}" == true ]]; then
-            if docker buildx imagetools inspect "${version_image}" >/dev/null 2>&1; then
+            if docker manifest inspect "${version_image}" >/dev/null 2>&1; then
               echo "Refusing to overwrite existing immutable tag: ${version_image}" >&2
               exit 1
             fi
@@ -298,82 +295,59 @@ jobs:
             exit 1
           fi
 
-      - name: Generate OCI metadata
-        if: env.PUBLISH_VERSION == 'true'
-        id: metadata
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # v5.9.0
+      - name: Build and publish version with latest
+        if: env.PUBLISH_VERSION == 'true' && env.UPDATE_LATEST == 'true'
+        id: image
+        uses: sentenz/actions/container-image@edd5e1e574e3eaa1254fbd19f4d2f0a5854c574d # v1.2.1
         with:
-          images: ${{ env.IMAGE_NAME }}
-          labels: |
-            org.opencontainers.image.title=Kubernetes toolchain
-            org.opencontainers.image.description=Verified kubectl, Kustomize, kind, and Helm toolchain
-            org.opencontainers.image.url=https://github.com/sentenz/template-k8s
-            org.opencontainers.image.source=https://github.com/sentenz/template-k8s
-            org.opencontainers.image.version=${{ needs.prepare.outputs.image_version }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.licenses=Apache-2.0
-
-      - name: Build and push amd64 release candidate
-        if: env.PUBLISH_VERSION == 'true'
-        id: build_amd64
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: .
+          version: ${{ env.IMAGE_VERSION }}
+          image-name: k8s
           file: container/k8s/Dockerfile
-          platforms: linux/amd64
-          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          labels: ${{ steps.metadata.outputs.labels }}
-          provenance: mode=max
-          sbom: true
+          platforms: linux/amd64,linux/arm64
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           build-args: |
             KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
             KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
             HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+            IMAGE_VERSION=${{ needs.prepare.outputs.image_version }}
+            VCS_REF=${{ github.sha }}
 
-      - name: Build and push arm64 release candidate
-        if: env.PUBLISH_VERSION == 'true'
-        id: build_arm64
+      - name: Build and publish immutable version only
+        if: env.PUBLISH_VERSION == 'true' && env.UPDATE_LATEST != 'true'
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
           file: container/k8s/Dockerfile
-          platforms: linux/arm64
-          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          labels: ${{ steps.metadata.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}
           provenance: mode=max
           sbom: true
+          cache-from: type=gha,scope=${{ env.IMAGE_NAME }}
+          cache-to: type=gha,mode=max,scope=${{ env.IMAGE_NAME }}
           build-args: |
             KUBECTL_VERSION=${{ needs.prepare.outputs.kubectl_version }}
             KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
             HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
-
-      - name: Publish immutable version tag
-        if: env.PUBLISH_VERSION == 'true'
-        shell: bash
-        env:
-          AMD64_DIGEST: ${{ steps.build_amd64.outputs.digest }}
-          ARM64_DIGEST: ${{ steps.build_arm64.outputs.digest }}
-        run: |
-          set -euo pipefail
-          version_image="${IMAGE_NAME}:${IMAGE_VERSION}"
-          docker buildx imagetools create \
-            --tag "${version_image}" \
-            "${IMAGE_NAME}@${AMD64_DIGEST}" \
-            "${IMAGE_NAME}@${ARM64_DIGEST}"
-          docker buildx imagetools inspect "${version_image}"
+            IMAGE_VERSION=${{ needs.prepare.outputs.image_version }}
+            VCS_REF=${{ github.sha }}
 
       - name: Promote immutable version to latest
-        if: env.UPDATE_LATEST == 'true'
+        if: env.PUBLISH_VERSION != 'true' && env.UPDATE_LATEST == 'true'
         shell: bash
         run: |
           set -euo pipefail
           version_image="${IMAGE_NAME}:${IMAGE_VERSION}"
           latest_image="${IMAGE_NAME}:latest"
-          docker buildx imagetools inspect "${version_image}"
           docker buildx imagetools create --tag "${latest_image}" "${version_image}"
           docker buildx imagetools inspect "${latest_image}"
+
+      - name: Verify immutable version
+        if: env.PUBLISH_VERSION == 'true'
+        shell: bash
+        run: docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_VERSION}"
 
   cluster-test:
     name: Create cluster through toolchain container
@@ -406,6 +380,8 @@ jobs:
             KUSTOMIZE_VERSION=${{ needs.prepare.outputs.kustomize_version }}
             KIND_VERSION=${{ needs.prepare.outputs.kind_version }}
             HELM_VERSION=${{ needs.prepare.outputs.helm_version }}
+            IMAGE_VERSION=cluster-test
+            VCS_REF=${{ github.sha }}
 
       - name: Create cluster
         shell: bash
