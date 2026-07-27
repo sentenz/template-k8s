@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.9](https://github.com/sentenz/template-k8s/compare/2.1.8...2.1.9) (2026-07-27)
+
+### Bug Fixes
+
+* **traefik:** migrate v41 log values ([b68f669](https://github.com/sentenz/template-k8s/commit/b68f6695e51213eecdd1c621b48a2bd66d4cefc2))
+
 ## [2.1.8](https://github.com/sentenz/template-k8s/compare/2.1.7...2.1.8) (2026-07-27)
 
 ### Bug Fixes
