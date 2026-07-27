@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.8](https://github.com/sentenz/template-k8s/compare/2.1.7...2.1.8) (2026-07-27)
+
+### Bug Fixes
+
+* **renovate:** require image paths in action regex ([37d34c6](https://github.com/sentenz/template-k8s/commit/37d34c623216639a6f7ada60054431ffbfa0e6ce))
+* **renovate:** update Renovate action version and remove cron comment ([34aa35a](https://github.com/sentenz/template-k8s/commit/34aa35a83e5f2cb3006ae574d7416984b932186f))
+
 ## [2.1.7](https://github.com/sentenz/template-k8s/compare/2.1.6...2.1.7) (2026-07-27)
 
 ### Bug Fixes
