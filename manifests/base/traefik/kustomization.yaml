@@ -11,7 +11,7 @@ helmGlobals:
 
 helmCharts:
   - name: traefik
-    version: 40.3.0
+    version: 41.0.2
     repo: https://traefik.github.io/charts
     releaseName: traefik
     namespace: traefik
