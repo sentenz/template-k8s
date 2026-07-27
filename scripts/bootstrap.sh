@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
+#
+# Usage:
+#   ./scripts/bootstrap.sh [OPTIONS] [TOOL...]
+#
+# Examples:
+#   ./scripts/bootstrap.sh
+#   ./scripts/bootstrap.sh kubectl helm
+#   ./scripts/bootstrap.sh --tool kubectl --tool kind
+#   TOOLS=kubectl,kustomize ./scripts/bootstrap.sh
+#
+# Run ./scripts/bootstrap.sh --help for all options.
 
 set -Eeuo pipefail
 umask 022
