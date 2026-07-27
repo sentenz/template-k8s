@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.7](https://github.com/sentenz/template-k8s/compare/2.1.6...2.1.7) (2026-07-27)
+
+### Bug Fixes
+
+* update Renovate token to use RENOVATE_TOKEN ([ef7cc83](https://github.com/sentenz/template-k8s/commit/ef7cc83503b84554f7fa75960d8ed000f70819a9))
+
 ## [2.1.6](https://github.com/sentenz/template-k8s/compare/2.1.5...2.1.6) (2026-07-27)
 
 ### Bug Fixes
