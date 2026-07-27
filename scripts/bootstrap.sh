@@ -20,6 +20,7 @@ readonly DEFAULT_KUSTOMIZE_VERSION="v5.8.1"
 readonly DEFAULT_KIND_VERSION="v0.32.0"
 readonly DEFAULT_HELM_VERSION="v4.2.3"
 readonly DEFAULT_TOOLS="kubectl,kustomize,kind,helm"
+readonly SUPPORTED_TOOLS=(kubectl kustomize kind helm)
 
 readonly KUBECTL_VERSION="${KUBECTL_VERSION:-${DEFAULT_KUBECTL_VERSION}}"
 readonly KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION:-${DEFAULT_KUSTOMIZE_VERSION}}"
@@ -29,6 +30,7 @@ readonly TARGETOS="${TARGETOS:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
 readonly TARGETARCH="${TARGETARCH:-$(uname -m)}"
 TOOLS="${TOOLS:-${DEFAULT_TOOLS}}"
 INSTALL_DIR="${INSTALL_DIR:-}"
+
 readonly CURL_OPTIONS=(
   --connect-timeout 15
   --fail
@@ -62,10 +64,12 @@ cleanup() {
     rm -rf -- "${TMP_DIR}"
   fi
 }
+
 trap cleanup EXIT INT TERM HUP
 
 usage() {
   printf 'Usage: %s [OPTIONS] [TOOL...]\n' "${0##*/}"
+
   cat <<'EOF_USAGE'
 
 Install Kubernetes command-line tools. Without a selection, all supported tools
@@ -90,7 +94,18 @@ EOF_USAGE
 }
 
 list_tools() {
-  printf '%s\n' kubectl kustomize kind helm
+  printf '%s\n' "${SUPPORTED_TOOLS[@]}"
+}
+
+is_supported_tool() {
+  local candidate="$1"
+  local supported
+
+  for supported in "${SUPPORTED_TOOLS[@]}"; do
+    [[ "${candidate}" == "${supported}" ]] && return 0
+  done
+
+  return 1
 }
 
 parse_args() {
@@ -138,7 +153,8 @@ parse_args() {
 }
 
 require_command() {
-  command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+  command -v "$1" >/dev/null 2>&1 \
+    || fail "required command not found: $1"
 }
 
 resolve_install_dir() {
@@ -167,24 +183,28 @@ resolve_requested_tools() {
   local -a requested=()
   declare -A seen=()
 
+  REQUESTED_TOOLS=()
+
   normalized="${TOOLS//,/ }"
   read -r -a requested <<< "${normalized}"
-  (( ${#requested[@]} > 0 )) || fail "select at least one tool"
+
+  (( ${#requested[@]} > 0 )) \
+    || fail "select at least one tool"
 
   for tool in "${requested[@]}"; do
     [[ -n "${tool}" ]] || continue
-    [[ -z "${seen[${tool}]:-}" ]] || continue
 
-    case "${tool}" in
-      kubectl|kustomize|kind|helm) ;;
-      *) fail "unsupported tool: ${tool}" ;;
-    esac
+    is_supported_tool "${tool}" \
+      || fail "unsupported tool: ${tool}"
+
+    [[ -z "${seen[${tool}]:-}" ]] || continue
 
     seen["${tool}"]=1
     REQUESTED_TOOLS+=("${tool}")
   done
 
-  (( ${#REQUESTED_TOOLS[@]} > 0 )) || fail "select at least one tool"
+  (( ${#REQUESTED_TOOLS[@]} > 0 )) \
+    || fail "select at least one tool"
 }
 
 require_selected_commands() {
@@ -199,7 +219,9 @@ require_selected_commands() {
 
   for tool in "${REQUESTED_TOOLS[@]}"; do
     case "${tool}" in
-      kustomize|helm) requires_tar=true ;;
+      kustomize|helm)
+        requires_tar=true
+        ;;
     esac
   done
 
@@ -213,30 +235,51 @@ validate_selected_versions() {
 
   for tool in "${REQUESTED_TOOLS[@]}"; do
     case "${tool}" in
-      kubectl) validate_version kubectl "${KUBECTL_VERSION}" ;;
-      kustomize) validate_version kustomize "${KUSTOMIZE_VERSION}" ;;
-      kind) validate_version kind "${KIND_VERSION}" ;;
-      helm) validate_version helm "${HELM_VERSION}" ;;
+      kubectl)
+        validate_version kubectl "${KUBECTL_VERSION}"
+        ;;
+      kustomize)
+        validate_version kustomize "${KUSTOMIZE_VERSION}"
+        ;;
+      kind)
+        validate_version kind "${KIND_VERSION}"
+        ;;
+      helm)
+        validate_version helm "${HELM_VERSION}"
+        ;;
     esac
   done
 }
 
 normalize_platform() {
   case "${TARGETOS}" in
-    linux) OS=linux ;;
-    *) fail "unsupported target operating system: ${TARGETOS}" ;;
+    linux)
+      OS=linux
+      ;;
+    *)
+      fail "unsupported target operating system: ${TARGETOS}"
+      ;;
   esac
 
   case "${TARGETARCH}" in
-    amd64|x86_64) ARCH=amd64 ;;
-    arm64|aarch64) ARCH=arm64 ;;
-    *) fail "unsupported target architecture: ${TARGETARCH}" ;;
+    amd64|x86_64)
+      ARCH=amd64
+      ;;
+    arm64|aarch64)
+      ARCH=arm64
+      ;;
+    *)
+      fail "unsupported target architecture: ${TARGETARCH}"
+      ;;
   esac
 }
 
 validate_install_dir() {
-  [[ "${INSTALL_DIR}" == /* ]] || fail "INSTALL_DIR must be an absolute path"
+  [[ "${INSTALL_DIR}" == /* ]] \
+    || fail "INSTALL_DIR must be an absolute path"
+
   mkdir -p -- "${INSTALL_DIR}"
+
   [[ -d "${INSTALL_DIR}" && -w "${INSTALL_DIR}" ]] \
     || fail "INSTALL_DIR is not writable: ${INSTALL_DIR}"
 }
@@ -247,7 +290,9 @@ download() {
 
   log "downloading ${url}"
   curl "${CURL_OPTIONS[@]}" --output "${output}" -- "${url}"
-  [[ -s "${output}" ]] || fail "downloaded file is empty: ${url}"
+
+  [[ -s "${output}" ]] \
+    || fail "downloaded file is empty: ${url}"
 }
 
 read_sha256() {
@@ -256,7 +301,14 @@ read_sha256() {
   local checksum=""
 
   if [[ -n "${asset_name}" ]]; then
-    checksum="$({ awk -v name="${asset_name}" '$2 == name || $2 == "*" name {print $1; exit}' "${checksum_file}"; } || true)"
+    checksum="$(
+      {
+        awk -v name="${asset_name}" \
+          '$2 == name || $2 == "*" name {print $1; exit}' \
+          "${checksum_file}"
+      } || true
+    )"
+
     [[ -n "${checksum}" ]] \
       || fail "checksum manifest does not contain asset: ${asset_name}"
   else
@@ -265,6 +317,7 @@ read_sha256() {
 
   [[ "${checksum}" =~ ^[0-9A-Fa-f]{64}$ ]] \
     || fail "invalid SHA-256 checksum in ${checksum_file}"
+
   printf '%s\n' "${checksum,,}"
 }
 
@@ -274,15 +327,19 @@ verify_sha256() {
   local actual
 
   actual="$(sha256sum "${file}" | awk '{print $1}')"
+
   [[ "${actual}" == "${expected}" ]] \
-    || fail "checksum mismatch for $(basename "${file}"): expected ${expected}, got ${actual}"
+    || fail \
+      "checksum mismatch for $(basename "${file}"): expected ${expected}, got ${actual}"
 }
 
 install_binary() {
   local source="$1"
   local name="$2"
 
-  [[ -f "${source}" ]] || fail "binary not found after extraction: ${source}"
+  [[ -f "${source}" ]] \
+    || fail "binary not found after extraction: ${source}"
+
   install -m 0755 -- "${source}" "${INSTALL_DIR}/${name}"
   log "installed ${name} to ${INSTALL_DIR}/${name}"
 }
@@ -295,13 +352,17 @@ install_kubectl() {
   checksum_file="${TMP_DIR}/${asset}.sha256"
 
   download "${base_url}/${asset}" "${TMP_DIR}/${asset}"
+
   if [[ -n "${KUBECTL_SHA256:-}" ]]; then
     expected="${KUBECTL_SHA256,,}"
   else
     download "${base_url}/${asset}.sha256" "${checksum_file}"
     expected="$(read_sha256 "${checksum_file}")"
   fi
-  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid KUBECTL_SHA256"
+
+  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "invalid KUBECTL_SHA256"
+
   verify_sha256 "${TMP_DIR}/${asset}" "${expected}"
   install_binary "${TMP_DIR}/${asset}" kubectl
 }
@@ -314,13 +375,17 @@ install_kind() {
   checksum_file="${TMP_DIR}/${asset}.sha256sum"
 
   download "${base_url}/${asset}" "${TMP_DIR}/${asset}"
+
   if [[ -n "${KIND_SHA256:-}" ]]; then
     expected="${KIND_SHA256,,}"
   else
     download "${base_url}/${asset}.sha256sum" "${checksum_file}"
     expected="$(read_sha256 "${checksum_file}" "${asset}")"
   fi
-  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid KIND_SHA256"
+
+  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "invalid KIND_SHA256"
+
   verify_sha256 "${TMP_DIR}/${asset}" "${expected}"
   install_binary "${TMP_DIR}/${asset}" kind
 }
@@ -335,17 +400,27 @@ install_kustomize() {
   extract_dir="${TMP_DIR}/kustomize"
 
   download "${base_url}/${asset}" "${archive}"
+
   if [[ -n "${KUSTOMIZE_SHA256:-}" ]]; then
     expected="${KUSTOMIZE_SHA256,,}"
   else
     download "${base_url}/checksums.txt" "${checksum_file}"
     expected="$(read_sha256 "${checksum_file}" "${asset}")"
   fi
-  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid KUSTOMIZE_SHA256"
+
+  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "invalid KUSTOMIZE_SHA256"
+
   verify_sha256 "${archive}" "${expected}"
 
   mkdir -p -- "${extract_dir}"
-  tar --extract --gzip --file "${archive}" --directory "${extract_dir}" --no-same-owner
+  tar \
+    --extract \
+    --gzip \
+    --file "${archive}" \
+    --directory "${extract_dir}" \
+    --no-same-owner
+
   install_binary "${extract_dir}/kustomize" kustomize
 }
 
@@ -360,17 +435,27 @@ install_helm() {
   extract_dir="${TMP_DIR}/helm"
 
   download "${base_url}/${asset}" "${archive}"
+
   if [[ -n "${HELM_SHA256:-}" ]]; then
     expected="${HELM_SHA256,,}"
   else
     download "${base_url}/${asset}.sha256sum" "${checksum_file}"
     expected="$(read_sha256 "${checksum_file}" "${asset}")"
   fi
-  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid HELM_SHA256"
+
+  [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "invalid HELM_SHA256"
+
   verify_sha256 "${archive}" "${expected}"
 
   mkdir -p -- "${extract_dir}"
-  tar --extract --gzip --file "${archive}" --directory "${extract_dir}" --no-same-owner
+  tar \
+    --extract \
+    --gzip \
+    --file "${archive}" \
+    --directory "${extract_dir}" \
+    --no-same-owner
+
   install_binary "${extract_dir}/${OS}-${ARCH}/helm" helm
 }
 
@@ -379,10 +464,18 @@ install_requested_tools() {
 
   for tool in "${REQUESTED_TOOLS[@]}"; do
     case "${tool}" in
-      kubectl) install_kubectl ;;
-      kustomize) install_kustomize ;;
-      kind) install_kind ;;
-      helm) install_helm ;;
+      kubectl)
+        install_kubectl
+        ;;
+      kustomize)
+        install_kustomize
+        ;;
+      kind)
+        install_kind
+        ;;
+      helm)
+        install_helm
+        ;;
     esac
   done
 }
@@ -397,7 +490,9 @@ main() {
   validate_install_dir
 
   TMP_DIR="$(mktemp -d)"
-  [[ -d "${TMP_DIR}" ]] || fail "unable to create temporary directory"
+
+  [[ -d "${TMP_DIR}" ]] \
+    || fail "unable to create temporary directory"
 
   install_requested_tools
 }
