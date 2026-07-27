@@ -8,6 +8,7 @@ readonly DEFAULT_KUBECTL_VERSION="v1.36.3"
 readonly DEFAULT_KUSTOMIZE_VERSION="v5.8.1"
 readonly DEFAULT_KIND_VERSION="v0.32.0"
 readonly DEFAULT_HELM_VERSION="v4.2.3"
+readonly DEFAULT_TOOLS="kubectl,kustomize,kind,helm"
 
 readonly KUBECTL_VERSION="${KUBECTL_VERSION:-${DEFAULT_KUBECTL_VERSION}}"
 readonly KUSTOMIZE_VERSION="${KUSTOMIZE_VERSION:-${DEFAULT_KUSTOMIZE_VERSION}}"
@@ -15,20 +16,8 @@ readonly KIND_VERSION="${KIND_VERSION:-${DEFAULT_KIND_VERSION}}"
 readonly HELM_VERSION="${HELM_VERSION:-${DEFAULT_HELM_VERSION}}"
 readonly TARGETOS="${TARGETOS:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
 readonly TARGETARCH="${TARGETARCH:-$(uname -m)}"
-readonly TOOLS="${TOOLS:-kubectl,kustomize,kind,helm}"
-readonly INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
-if [[ -z "${INSTALL_DIR+x}" ]]; then
-  if [[ -w /usr/local/bin ]]; then
-    INSTALL_DIR=/usr/local/bin
-  elif [[ -n "${HOME:-}" ]]; then
-    INSTALL_DIR="${HOME}/.local/bin"
-    export PATH="${INSTALL_DIR}:${PATH}"
-  else
-    printf '[bootstrap] error: unable to determine a writable install directory\n' >&2
-    exit 1
-  fi
-fi
-readonly INSTALL_DIR
+TOOLS="${TOOLS:-${DEFAULT_TOOLS}}"
+INSTALL_DIR="${INSTALL_DIR:-}"
 readonly CURL_OPTIONS=(
   --connect-timeout 15
   --fail
@@ -46,6 +35,7 @@ readonly CURL_OPTIONS=(
 TMP_DIR=""
 OS=""
 ARCH=""
+declare -a REQUESTED_TOOLS=()
 
 log() {
   printf '[bootstrap] %s\n' "$*" >&2
@@ -63,8 +53,93 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
+usage() {
+  printf 'Usage: %s [OPTIONS] [TOOL...]\n' "${0##*/}"
+  cat <<'EOF_USAGE'
+
+Install Kubernetes command-line tools. Without a selection, all supported tools
+are installed. Tool names may be supplied as separate arguments or as a
+comma-separated list.
+
+Options:
+  -t, --tool TOOL  Select a tool to install; may be repeated
+      --list-tools List supported tools and exit
+  -h, --help       Show this help and exit
+
+Environment:
+  TOOLS            Comma- or space-separated tools used when no CLI selection
+                   is supplied (default: kubectl,kustomize,kind,helm)
+  INSTALL_DIR      Absolute destination directory for installed binaries
+
+Examples:
+  ./scripts/bootstrap.sh kubectl helm
+  ./scripts/bootstrap.sh --tool kubectl --tool kind
+  TOOLS=kubectl,kustomize ./scripts/bootstrap.sh
+EOF_USAGE
+}
+
+list_tools() {
+  printf '%s\n' kubectl kustomize kind helm
+}
+
+parse_args() {
+  local -a selected=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      -t|--tool)
+        (( $# > 1 )) || fail "$1 requires a tool name"
+        selected+=("$2")
+        shift 2
+        ;;
+      --tool=*)
+        [[ -n "${1#*=}" ]] || fail "--tool requires a tool name"
+        selected+=("${1#*=}")
+        shift
+        ;;
+      --list-tools)
+        list_tools
+        exit 0
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --)
+        shift
+        selected+=("$@")
+        break
+        ;;
+      -*)
+        fail "unknown option: $1"
+        ;;
+      *)
+        selected+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  if (( ${#selected[@]} > 0 )); then
+    TOOLS="${selected[*]}"
+  fi
+}
+
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+}
+
+resolve_install_dir() {
+  if [[ -z "${INSTALL_DIR}" ]]; then
+    if [[ -w /usr/local/bin ]]; then
+      INSTALL_DIR=/usr/local/bin
+    elif [[ -n "${HOME:-}" ]]; then
+      INSTALL_DIR="${HOME}/.local/bin"
+      export PATH="${INSTALL_DIR}:${PATH}"
+    else
+      fail "unable to determine a writable install directory"
+    fi
+  fi
 }
 
 validate_version() {
@@ -73,6 +148,65 @@ validate_version() {
 
   [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] \
     || fail "invalid ${tool} version: ${version}"
+}
+
+resolve_requested_tools() {
+  local normalized tool
+  local -a requested=()
+  declare -A seen=()
+
+  normalized="${TOOLS//,/ }"
+  read -r -a requested <<< "${normalized}"
+  (( ${#requested[@]} > 0 )) || fail "select at least one tool"
+
+  for tool in "${requested[@]}"; do
+    [[ -n "${tool}" ]] || continue
+    [[ -z "${seen[${tool}]:-}" ]] || continue
+
+    case "${tool}" in
+      kubectl|kustomize|kind|helm) ;;
+      *) fail "unsupported tool: ${tool}" ;;
+    esac
+
+    seen["${tool}"]=1
+    REQUESTED_TOOLS+=("${tool}")
+  done
+
+  (( ${#REQUESTED_TOOLS[@]} > 0 )) || fail "select at least one tool"
+}
+
+require_selected_commands() {
+  local tool
+  local requires_tar=false
+
+  require_command awk
+  require_command curl
+  require_command install
+  require_command mktemp
+  require_command sha256sum
+
+  for tool in "${REQUESTED_TOOLS[@]}"; do
+    case "${tool}" in
+      kustomize|helm) requires_tar=true ;;
+    esac
+  done
+
+  if [[ "${requires_tar}" == true ]]; then
+    require_command tar
+  fi
+}
+
+validate_selected_versions() {
+  local tool
+
+  for tool in "${REQUESTED_TOOLS[@]}"; do
+    case "${tool}" in
+      kubectl) validate_version kubectl "${KUBECTL_VERSION}" ;;
+      kustomize) validate_version kustomize "${KUSTOMIZE_VERSION}" ;;
+      kind) validate_version kind "${KIND_VERSION}" ;;
+      helm) validate_version helm "${HELM_VERSION}" ;;
+    esac
+  done
 }
 
 normalize_platform() {
@@ -229,41 +363,25 @@ install_helm() {
 }
 
 install_requested_tools() {
-  local normalized tool
-  local -a requested=()
-  declare -A seen=()
+  local tool
 
-  normalized="${TOOLS//,/ }"
-  read -r -a requested <<< "${normalized}"
-  (( ${#requested[@]} > 0 )) || fail "TOOLS must select at least one tool"
-
-  for tool in "${requested[@]}"; do
-    [[ -n "${tool}" ]] || continue
-    [[ -z "${seen[${tool}]:-}" ]] || continue
-    seen["${tool}"]=1
-
+  for tool in "${REQUESTED_TOOLS[@]}"; do
     case "${tool}" in
       kubectl) install_kubectl ;;
       kustomize) install_kustomize ;;
       kind) install_kind ;;
       helm) install_helm ;;
-      *) fail "unsupported tool in TOOLS: ${tool}" ;;
     esac
   done
 }
 
 main() {
-  require_command curl
-  require_command install
-  require_command mktemp
-  require_command sha256sum
-  require_command tar
-
-  validate_version kubectl "${KUBECTL_VERSION}"
-  validate_version kustomize "${KUSTOMIZE_VERSION}"
-  validate_version kind "${KIND_VERSION}"
-  validate_version helm "${HELM_VERSION}"
+  parse_args "$@"
+  resolve_requested_tools
+  require_selected_commands
+  validate_selected_versions
   normalize_platform
+  resolve_install_dir
   validate_install_dir
 
   TMP_DIR="$(mktemp -d)"
