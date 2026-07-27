@@ -25,6 +25,5 @@ jobs:
       - name: Run Renovate
         uses: sentenz/actions/renovate@edd5e1e574e3eaa1254fbd19f4d2f0a5854c574d # 1.2.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RENOVATE_TOKEN }}
           autodiscover: "true"
-          log-level: "info"
