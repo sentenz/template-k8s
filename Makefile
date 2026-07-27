@@ -79,7 +79,7 @@ skills-agent-update:
 # ── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
 
 # K8S_TOOLS_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
-K8S_TOOLS_IMAGE ?= ghcr.io/sentenz/k8s:2.1.7@sha256:c8cd6741e0c379b708856d2848f2702f03376a1fa0bd1c783fdfbdcb7ccc17f7
+K8S_TOOLS_IMAGE ?= ghcr.io/sentenz/k8s:2.1.9@sha256:3ffc9209314007018140c79f82c5e439a545b4506fb88272a054e8a0e8e39876
 K8S_TOOLS_CLI := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 
 ## Setup the local Kubernetes development cluster using Kind
