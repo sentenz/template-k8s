@@ -100,6 +100,7 @@ parse_args() {
     case "$1" in
       -t|--tool)
         (( $# > 1 )) || fail "$1 requires a tool name"
+        [[ -n "$2" ]] || fail "$1 requires a tool name"
         selected+=("$2")
         shift 2
         ;;
