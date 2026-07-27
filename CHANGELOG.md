@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.6](https://github.com/sentenz/template-k8s/compare/2.1.5...2.1.6) (2026-07-27)
+
+### Bug Fixes
+
+* resolve renovate branch write permission ([#56](https://github.com/sentenz/template-k8s/issues/56)) ([d814789](https://github.com/sentenz/template-k8s/commit/d814789fbe92b4e51a174064ac7d88e113ff07e1))
+
 ## [2.1.5](https://github.com/sentenz/template-k8s/compare/2.1.4...2.1.5) (2026-07-26)
 
 ### Bug Fixes
