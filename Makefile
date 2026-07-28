@@ -190,7 +190,7 @@ k8s-observability:
 # ── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
 
 K8S_HELM_IMAGE ?= alpine/helm:4.2.3@sha256:b97ba4f9b27fe7af16ee3d37e6815783c9d4a51289b6240a9024ec471611ae9b
-K8S_HELM_ALIAS := docker run -ti --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
+K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
 
 # # Vendor Helm chart for Dependency-Track
 # helm-vendor-dependency-track:
