@@ -13,6 +13,9 @@ Orchestration platform for automating deployment, scaling, and management of con
 
 ### 1.1. Prerequisites
 
+> [!TIP]
+> [Alpine Linux Collection](https://hub.docker.com/u/alpine) of verified tools for local Kubernetes workflows based on a security-oriented, lightweight Linux distribution image.
+
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
   > Command-line tool for interacting with Kubernetes clusters.
 
