@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.10](https://github.com/sentenz/template-k8s/compare/2.1.9...2.1.10) (2026-07-28)
+
+### Bug Fixes
+
+* **deps:** update docker.io/renovate/renovate docker tag to v43.285.0 ([#65](https://github.com/sentenz/template-k8s/issues/65)) ([e13ebbe](https://github.com/sentenz/template-k8s/commit/e13ebbe81224dd6b199f5155a60b85991680eac6))
+
 ## [2.1.9](https://github.com/sentenz/template-k8s/compare/2.1.8...2.1.9) (2026-07-27)
 
 ### Bug Fixes
