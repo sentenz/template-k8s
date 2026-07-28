@@ -70,7 +70,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   trigger:
-    name: Trigger Docker Action
+    name: Trigger Workflows
     needs:
       - semantic-release
     if: always() && needs.semantic-release.outputs.new-release-published == 'true'
