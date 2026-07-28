@@ -267,7 +267,7 @@ helm-render-charts:
 
 # ── Dependency Manager ───────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_IMAGE_RENOVATE ?= docker.io/renovate/renovate:43.283.0@sha256:db02a747c25e2e3a2fa3ccac92c4ce5bd5b91244ca9ac014e6fb5939bca9b4f2
+DEPENDENCY_IMAGE_RENOVATE ?= docker.io/renovate/renovate:43.285.0@sha256:e22ae7e3b8714761de6dc0ccde43ab4897e61fe4bf7108de713f458953327955
 
 ## Update project dependencies locally using Renovate and generate a report
 dependency-renovate-update:
