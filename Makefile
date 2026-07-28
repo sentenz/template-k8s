@@ -78,9 +78,8 @@ skills-agent-update:
 
 # ── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
 
-# K8S_TOOLS_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
-K8S_TOOLS_IMAGE ?= ghcr.io/sentenz/k8s:2.1.9@sha256:3ffc9209314007018140c79f82c5e439a545b4506fb88272a054e8a0e8e39876
-K8S_TOOLS_CLI := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
+# K8S_KIND_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
+K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.9@sha256:3ffc9209314007018140c79f82c5e439a545b4506fb88272a054e8a0e8e39876
 
 ## Setup the local Kubernetes development cluster using Kind
 k8s-setup:
@@ -90,16 +89,19 @@ k8s-setup:
 	fi
 
 	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock --volume "$(CURDIR):/workspace" --workdir /workspace \
-		"$(K8S_TOOLS_IMAGE)" kind create cluster --name "$(KIND_CLUSTER_NAME)" --config "$(KIND_CONFIG)" --kubeconfig "$(K8S_KUBECONFIG)" --wait 5m
+		"$(K8S_KIND_IMAGE)" kind create cluster --name "$(KIND_CLUSTER_NAME)" --config "$(KIND_CONFIG)" --kubeconfig "$(K8S_KUBECONFIG)" --wait 5m
 .PHONY: k8s-setup
 
 ## Tear down the local Kubernetes development cluster
 k8s-teardown:
 	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock \
-		"$(K8S_TOOLS_IMAGE)" kind delete cluster --name "$(KIND_CLUSTER_NAME)"
+		"$(K8S_KIND_IMAGE)" kind delete cluster --name "$(KIND_CLUSTER_NAME)"
 
 	@rm -f "$(K8S_KUBECONFIG)"
 .PHONY: k8s-teardown
+
+K8S_TOOLS_IMAGE ?= alpine/k8s:1.36.2@sha256:44ef4942e171939b9c665a4a84beb80e2dcdb9a24330d4651cfdfd2e9deecc47
+K8S_TOOLS_ALIAS := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
@@ -117,14 +119,14 @@ k8s-confirm:
 template-k8s-deploy-%:
 	@$(MAKE) -s k8s-confirm
 
-	@$(K8S_TOOLS_CLI) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
+	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
 		| kubectl apply --kubeconfig $(K8S_KUBECONFIG) -f -
 .PHONY: template-k8s-deploy-%
 
-## Deploy Kubernetes manifests for Dependency-Track
-k8s-deploy-dependency-track:
+## Deploy Kubernetes manifests
+k8s-deploy:
 	@$(MAKE) template-k8s-deploy-$(K8S_ENV) K8S_STACK_DIR=dependency-track
-.PHONY: k8s-deploy-dependency-track
+.PHONY: k8s-deploy
 
 # Usage: make k8s-destroy-<env>
 #
@@ -132,50 +134,45 @@ k8s-deploy-dependency-track:
 template-k8s-destroy-%:
 	@$(MAKE) -s k8s-confirm
 
-	@$(K8S_TOOLS_CLI) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
+	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
 		| kubectl delete --kubeconfig $(K8S_KUBECONFIG) -f -
 .PHONY: template-k8s-destroy-%
 
-## Destroy Kubernetes manifests for Dependency-Track
-k8s-destroy-dependency-track:
+## Destroy Kubernetes manifests
+k8s-destroy:
 	@$(MAKE) template-k8s-destroy-$(K8S_ENV) K8S_STACK_DIR=dependency-track
-.PHONY: k8s-destroy-dependency-track
+.PHONY: k8s-destroy
 
 # Template to render Kubernetes manifests using Kustomize and Helm charts
 template-k8s-render-%:
 	@mkdir -p render/kustomize/$*/$(K8S_STACK_DIR)
 
-	@$(K8S_TOOLS_CLI) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone --output=./render/kustomize/$*/$(K8S_STACK_DIR)
+	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone --output=./render/kustomize/$*/$(K8S_STACK_DIR)
 .PHONY: template-k8s-render-%
 
-# Render Kubernetes manifests for Dependency-Track
-k8s-render-dependency-track:
-	@$(MAKE) template-k8s-render-$(K8S_ENV) K8S_STACK_DIR=dependency-track
-.PHONY: k8s-render-dependency-track
-
-## Render all Kubernetes manifests
-k8s-render-manifests:
-	@$(MAKE) -s k8s-render-dependency-track
-.PHONY: k8s-render-manifests
+## Render Kubernetes manifests
+k8s-render:
+	$(MAKE) template-k8s-render-$(K8S_ENV) K8S_STACK_DIR=dependency-track
+.PHONY: k8s-render
 
 # Observe all services across all namespaces
 k8s-observability-service:
-	$(K8S_TOOLS_CLI) kubectl get services --kubeconfig $(K8S_KUBECONFIG)
+	$(K8S_TOOLS_ALIAS) kubectl get services --kubeconfig $(K8S_KUBECONFIG)
 .PHONY: k8s-observability-service
 
 # Observe all namespaces
 k8s-observability-namespace:
-	$(K8S_TOOLS_CLI) kubectl get namespaces --kubeconfig $(K8S_KUBECONFIG)
+	$(K8S_TOOLS_ALIAS) kubectl get namespaces --kubeconfig $(K8S_KUBECONFIG)
 .PHONY: k8s-observability-namespace
 
 # Observe all pods across all namespaces
 k8s-observability-pod:
-	$(K8S_TOOLS_CLI) kubectl get pods -A --kubeconfig $(K8S_KUBECONFIG)
+	$(K8S_TOOLS_ALIAS) kubectl get pods -A --kubeconfig $(K8S_KUBECONFIG)
 .PHONY: k8s-observability-pod
 
 # Observe all ingress controllers across all namespaces
 k8s-observability-controller:
-	$(K8S_TOOLS_CLI) kubectl get ingressclass --kubeconfig $(K8S_KUBECONFIG)
+	$(K8S_TOOLS_ALIAS) kubectl get ingressclass --kubeconfig $(K8S_KUBECONFIG)
 .PHONY: k8s-observability-controller
 
 ## Aggregate Kubernetes observability for services, namespaces, ingress controllers, and pods
@@ -191,6 +188,9 @@ k8s-observability:
 .PHONY: k8s-observability
 
 # ── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
+
+K8S_HELM_IMAGE ?= alpine/helm:4.2.3@sha256:b97ba4f9b27fe7af16ee3d37e6815783c9d4a51289b6240a9024ec471611ae9b
+K8S_HELM_ALIAS := docker run -ti --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
 
 # # Vendor Helm chart for Dependency-Track
 # helm-vendor-dependency-track:
@@ -219,7 +219,7 @@ k8s-observability:
 
 # Render Helm charts templates with specified parameters
 helm-render:
-	@helm template \
+	$(K8S_HELM_ALIAS) template \
 		$(HELM_RELEASE_NAME) \
 		$(HELM_CHART_DIR) \
 		--namespace=$(K8S_NAMESPACE) \
@@ -267,7 +267,7 @@ helm-render-charts:
 
 # ── Dependency Manager ───────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_IMAGE_RENOVATE ?= docker.io/renovate/renovate:43.281.1@sha256:2a4e6df0330b0aa42b21f40589666b678bbd19bcd9a14c3c24ce0492c237c2ff
+DEPENDENCY_IMAGE_RENOVATE ?= docker.io/renovate/renovate:43.283.0@sha256:db02a747c25e2e3a2fa3ccac92c4ce5bd5b91244ca9ac014e6fb5939bca9b4f2
 
 ## Update project dependencies locally using Renovate and generate a report
 dependency-renovate-update:
@@ -708,8 +708,8 @@ sast-cosign-verify:
 
 CONTAINER_DOCKER_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null))
 CONTAINER_DOCKER_TAG ?= $(or $(shell git tag --sort=-creatordate | head -n 1),latest)
-CONTAINER_DOCKER_FILE ?= container/k8s/Dockerfile
 CONTAINER_DOCKER_CONTEXT ?= .
+CONTAINER_DOCKER_FILE ?= container/k8s/Dockerfile
 
 # Usage: make container-docker-build [CONTAINER_DOCKER_IMAGE=<name>] [CONTAINER_DOCKER_TAG=<tag>] [CONTAINER_DOCKER_FILE=<file>] [CONTAINER_DOCKER_CONTEXT=<context>]
 #
