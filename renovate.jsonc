@@ -101,6 +101,24 @@
       "automerge": false
     },
     {
+      "description": "Container image tag and digest updates.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "container images",
+      "groupSlug": "container-images",
+      "automerge": false
+    },
+    {
       "description": "Container image tag and digest updates in GitHub Actions files.",
       "matchManagers": [
         "custom.regex"
@@ -124,23 +142,5 @@
       "semanticCommitType": "ci",
       "semanticCommitScope": "deps"
     }
-,
-    {
-      "description": "Container image tag and digest updates.",
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchUpdateTypes": [
-        "major",
-        "minor",
-        "patch",
-        "digest"
-      ],
-      "groupName": "container images",
-      "groupSlug": "container-images",
-      "automerge": false
-    }  ]
+  ]
 }
