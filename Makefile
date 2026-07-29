@@ -268,13 +268,13 @@ helm-render-charts:
 # ── Dependency Manager ───────────────────────────────────────────────────────────────────────────
 
 DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:43.285.0@sha256:e22ae7e3b8714761de6dc0ccde43ab4897e61fe4bf7108de713f458953327955
-DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(DEPENDENCY_RENOVATE_IMAGE)"
+DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_RENOVATE_IMAGE)"
 
 ## Update project dependencies locally using Renovate and generate a report
 dependency-renovate-update:
 	@mkdir -p logs/dependency
 
-	$(DEPENDENCY_RENOVATE_ALIAS) -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) renovate --platform=local --repository-cache=reset > logs/dependency/renovate.log 2>&1
+	$(DEPENDENCY_RENOVATE_ALIAS) renovate --platform=local --repository-cache=reset > logs/dependency/renovate.log 2>&1
 .PHONY: dependency-renovate-update
 
 # ── Secrets Manager ──────────────────────────────────────────────────────────────────────────────
