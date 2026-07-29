@@ -101,12 +101,18 @@
       "automerge": false
     },
     {
-      "description": "Container image tag and digest updates.",
+      "description": "Container image tag and digest updates in Makefiles and KinD configuration.",
       "matchManagers": [
         "custom.regex"
       ],
       "matchDatasources": [
         "docker"
+      ],
+      "matchFileNames": [
+        "**/[Mm]akefile",
+        "**/GNUMakefile",
+        "**/*.mk",
+        "**/kind-cluster.{yml,yaml}"
       ],
       "matchUpdateTypes": [
         "major",
