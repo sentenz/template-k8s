@@ -19,6 +19,9 @@ Orchestration platform for automating deployment, scaling, and management of con
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
   > Command-line tool for interacting with Kubernetes clusters.
 
+- [Helm](https://helm.sh/)
+  > Package manager for Kubernetes for application deployment and management.
+
 - [kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/)
   > Command-line tool for customizing Kubernetes resource configurations.
 
@@ -53,7 +56,7 @@ Orchestration platform for automating deployment, scaling, and management of con
     - Tasks
 
       ```bash
-      # Local Kubernetes Cluster using Kind
+      # Local Kubernetes Cluster using KinD
       make k8s-setup
       make k8s-deploy
       make k8s-destroy
