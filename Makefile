@@ -79,7 +79,7 @@ skills-agent-update:
 # ── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
 
 # K8S_KIND_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
-K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.9@sha256:3ffc9209314007018140c79f82c5e439a545b4506fb88272a054e8a0e8e39876
+K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.10@sha256:e7c9af93d2c44d1bdeba763fb5606da99e8dafa03b446618951041d826bfcdbd
 
 ## Setup the local Kubernetes development cluster using Kind
 k8s-setup:
@@ -450,7 +450,7 @@ policy-regal-lint:
 
 # ── SAST Manager ─────────────────────────────────────────────────────────────────────────────────
 
-SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.171.0@sha256:bdf7013b2c3634a487671158da77c554f531742326b543a9464d2adf6c433ac8
+SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
 SAST_SEMGREP_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_SEMGREP_IMAGE)"
 SAST_SEMGREP_FILES ?= .
 SAST_SEMGREP_FILTER = $(if $(strip $(SAST_SEMGREP_FILES)),$(SAST_SEMGREP_FILES),.)
