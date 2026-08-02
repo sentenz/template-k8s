@@ -81,6 +81,18 @@
       "automerge": false
     },
     {
+      "description": "Classifies Helm chart dependency updates as fixes.",
+      "matchDatasources": [
+        "helm"
+      ],
+      "groupName": "helm chart {{updateType}} versions",
+      "groupSlug": "helm-chart-{{updateType}}-versions",
+      "automerge": false,
+      "semanticCommits": "enabled",
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps"
+    },
+    {
       "description": "Container image digest bumps across Dockerfiles and Containerfiles.",
       "matchManagers": [
         "dockerfile",
