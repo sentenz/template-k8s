@@ -85,6 +85,19 @@
       "semanticCommitScope": "deps"
     },
     {
+      "description": "Groups all Helm chart dependency updates into a separate pull request.",
+      "matchDatasources": [
+        "helm"
+      ],
+      "groupName": "helm chart updates",
+      "groupSlug": "helm-chart-updates",
+      "separateMajorMinor": false,
+      "automerge": false,
+      "semanticCommits": "enabled",
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps"
+    },
+    {
       "description": "Groups GitHub Actions dependency updates into a separate pull request.",
       "matchManagers": [
         "github-actions"
