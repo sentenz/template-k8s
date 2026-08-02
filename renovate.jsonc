@@ -94,7 +94,7 @@
       "separateMajorMinor": false,
       "automerge": false,
       "semanticCommits": "enabled",
-      "semanticCommitType": "chore",
+      "semanticCommitType": "fix",
       "semanticCommitScope": "deps"
     },
     {
