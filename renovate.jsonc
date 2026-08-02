@@ -108,12 +108,6 @@
       "matchFileNames": [
         "**/action.{yml,yaml}"
       ],
-      "matchUpdateTypes": [
-        "major",
-        "minor",
-        "patch",
-        "digest"
-      ],
       "groupName": "github actions updates",
       "groupSlug": "github-actions-updates",
       "separateMajorMinor": false,
