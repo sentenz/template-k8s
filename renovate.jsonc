@@ -54,47 +54,7 @@
   ],
   "packageRules": [
     {
-      "description": "Introduces breaking changes or requires code adjustments due to changes in public APIs.",
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "groupName": "major versions",
-      "groupSlug": "major-versions",
-      "automerge": false
-    },
-    {
-      "description": "Introduces backward-compatible functionality improvements and feature additions.",
-      "matchUpdateTypes": [
-        "minor"
-      ],
-      "groupName": "minor versions",
-      "groupSlug": "minor-versions",
-      "automerge": false
-    },
-    {
-      "description": "Introduces backward-compatible bug fixes and small corrections.",
-      "matchUpdateTypes": [
-        "patch"
-      ],
-      "groupName": "patch versions",
-      "groupSlug": "patch-versions",
-      "automerge": false
-    },
-    {
-      "description": "Groups all Helm chart dependency updates into a single pull request and classifies them as fixes.",
-      "matchDatasources": [
-        "helm"
-      ],
-      "groupName": "helm chart updates",
-      "groupSlug": "helm-chart-updates",
-      "separateMajorMinor": false,
-      "automerge": false,
-      "semanticCommits": "enabled",
-      "semanticCommitType": "fix",
-      "semanticCommitScope": "deps"
-    },
-    {
-      "description": "Container image digest bumps across Dockerfiles and Containerfiles.",
+      "description": "Pins and updates container image digests across Dockerfiles and Containerfiles.",
       "matchManagers": [
         "dockerfile",
         "containerfile"
@@ -108,37 +68,37 @@
         "patch",
         "digest"
       ],
-      "groupName": "container digests",
-      "groupSlug": "container-digests",
       "pinDigests": true,
       "automerge": false
     },
     {
-      "description": "Container image tag and digest updates in Makefiles and KinD configuration.",
-      "matchManagers": [
-        "custom.regex"
+      "description": "Groups all dependency updates into a single pull request.",
+      "matchPackageNames": [
+        "*"
       ],
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchFileNames": [
-        "**/[Mm]akefile",
-        "**/GNUMakefile",
-        "**/*.mk",
-        "**/kind-cluster.{yml,yaml}"
-      ],
-      "matchUpdateTypes": [
-        "major",
-        "minor",
-        "patch",
-        "digest"
-      ],
-      "groupName": "container images",
-      "groupSlug": "container-images",
-      "automerge": false
+      "groupName": "dependency updates",
+      "groupSlug": "dependency-updates",
+      "separateMajorMinor": false,
+      "automerge": false,
+      "semanticCommits": "enabled",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
     },
     {
-      "description": "Container image tag and digest updates in GitHub Actions files.",
+      "description": "Groups GitHub Actions dependency updates into a separate pull request.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions updates",
+      "groupSlug": "github-actions-updates",
+      "separateMajorMinor": false,
+      "automerge": false,
+      "semanticCommits": "enabled",
+      "semanticCommitType": "ci",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "Groups container image updates in GitHub Actions metadata into the GitHub Actions pull request.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -154,8 +114,9 @@
         "patch",
         "digest"
       ],
-      "groupName": "github actions container images",
-      "groupSlug": "github-actions-container-images",
+      "groupName": "github actions updates",
+      "groupSlug": "github-actions-updates",
+      "separateMajorMinor": false,
       "automerge": false,
       "semanticCommits": "enabled",
       "semanticCommitType": "ci",
