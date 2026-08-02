@@ -81,12 +81,13 @@
       "automerge": false
     },
     {
-      "description": "Classifies Helm chart dependency updates as fixes.",
+      "description": "Groups all Helm chart dependency updates into a single pull request and classifies them as fixes.",
       "matchDatasources": [
         "helm"
       ],
-      "groupName": "helm chart {{updateType}} versions",
-      "groupSlug": "helm-chart-{{updateType}}-versions",
+      "groupName": "helm chart updates",
+      "groupSlug": "helm-chart-updates",
+      "separateMajorMinor": false,
       "automerge": false,
       "semanticCommits": "enabled",
       "semanticCommitType": "fix",
