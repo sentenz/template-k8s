@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.11](https://github.com/sentenz/template-k8s/compare/2.1.10...2.1.11) (2026-08-02)
+
+### Bug Fixes
+
+* **deps:** update helm chart updates ([#82](https://github.com/sentenz/template-k8s/issues/82)) ([fa85c3d](https://github.com/sentenz/template-k8s/commit/fa85c3d8c6ea429608c8b9ff5ff024d6859d61dd))
+
 ## [2.1.10](https://github.com/sentenz/template-k8s/compare/2.1.9...2.1.10) (2026-07-28)
 
 ### Bug Fixes
