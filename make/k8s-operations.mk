@@ -125,27 +125,25 @@ k8s-troubleshoot: k8s-require-resource
 
 ## Create a recovery-ready snapshot of the rendered Kubernetes desired state
 k8s-backup: k8s-require-env
-	@overlay_dir="manifests/overlays/$(K8S_ENV)/$(K8S_SERVICE)"
-	@if [[ ! -f "$$overlay_dir/kustomization.yaml" ]]; then \
+	@set -euo pipefail; \
+	overlay_dir="manifests/overlays/$(K8S_ENV)/$(K8S_SERVICE)"; \
+	if [[ ! -f "$$overlay_dir/kustomization.yaml" ]]; then \
 		echo "error: Kubernetes overlay does not exist: $$overlay_dir" >&2; \
 		exit 2; \
-	fi
-
-	@umask 077
-	@mkdir -p "$(K8S_BACKUP_DIR)"
-	@tmp_file="$$(mktemp "$(K8S_BACKUP_DIR)/.snapshot.XXXXXX")"
-	@trap 'rm -f "$$tmp_file"' EXIT
-
-	@$(K8S_TOOLS_ALIAS) kustomize build \
+	fi; \
+	umask 077; \
+	mkdir -p "$(K8S_BACKUP_DIR)"; \
+	tmp_file="$$(mktemp "$(K8S_BACKUP_DIR)/.snapshot.XXXXXX")"; \
+	trap 'rm -f "$$tmp_file"' EXIT; \
+	$(K8S_TOOLS_ALIAS) kustomize build \
 		"$$overlay_dir" \
 		--enable-helm \
 		--load-restrictor=LoadRestrictionsNone \
-		> "$$tmp_file"
-
-	@chmod 0600 "$$tmp_file"
-	@mv "$$tmp_file" "$(K8S_BACKUP_FILE)"
-	@trap - EXIT
-	@echo "Kubernetes recovery snapshot: $(K8S_BACKUP_FILE)"
+		> "$$tmp_file"; \
+	chmod 0600 "$$tmp_file"; \
+	mv "$$tmp_file" "$(K8S_BACKUP_FILE)"; \
+	trap - EXIT; \
+	echo "Kubernetes recovery snapshot: $(K8S_BACKUP_FILE)"
 .PHONY: k8s-backup
 
 ## Recover Kubernetes resources from a previously rendered recovery snapshot
