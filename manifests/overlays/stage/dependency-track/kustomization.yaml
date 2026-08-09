@@ -3,8 +3,9 @@ kind: Kustomization
 
 resources:
   - ../../../base/dependency-track
-  - ../../../base/postgresql
   - ../../../base/traefik
+
+# PostgreSQL is external in stage (AWS RDS); the in-cluster PostgreSQL base is intentionally omitted.
 
 # Patches to adapt Traefik for a remote (EKS) cluster
 patches:
