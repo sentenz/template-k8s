@@ -1,29 +1,30 @@
-Stage overlay notes for AWS EKS
+# Stage overlay notes for AWS EKS
 
-This overlay adapts the base manifests for a remote staging cluster (EKS).
+This overlay adapts the base manifests for a remote staging cluster on EKS.
 
-What this overlay does
-- Patches the Traefik Service to `type: LoadBalancer` so EKS will provision a
-  cloud Load Balancer (NLB/ELB) and expose ports 80/443.
-- Ensures `hostNetwork: false` for Traefik (don't bind to node host network).
+## Runtime architecture
 
-TLS and certificates
-- Do not use the overlay's self-signed `secretGenerator` in staging. Instead
-  use cert-manager or an existing Kubernetes TLS secret backed by ACM or a
-  certificate issued for your staging domain.
+- PostgreSQL is external and supplied by AWS RDS; the in-cluster PostgreSQL base is intentionally omitted.
+- The shared RDS patches remove the development chart-managed database and KEK Secrets.
+- Provision `dependency-track-db` and `dependency-track-kek` in the `dependency-track` namespace before deployment. See `manifests/patches/dependency-track-rds/README.md` for the required keys.
+- The frontend uses same-host relative API routing rather than the development `dependency-track.localhost` URL.
 
-Access
-- After applying the overlay, find the external LB address:
+## Traefik
 
-  kubectl -n traefik get svc traefik
+- The Traefik Service is patched to `type: LoadBalancer` so EKS can provision a cloud load balancer for ports 80/443.
+- `hostNetwork` is disabled for the remote cluster.
+- The Dependency-Track Ingress uses `dependency-track.staging.example.com`; replace this template hostname with the staging DNS name before deployment.
 
-  Use the external IP/DNS returned by the LoadBalancer and point your DNS or
-  /etc/hosts accordingly to access:
+## TLS and certificates
 
-  - dependency-track.staging.example.com
-  - api.dependency-track.staging.example.com
+Do not use the development overlay's self-signed `secretGenerator` in staging. Use cert-manager, an existing Kubernetes TLS Secret, or load-balancer certificate integration suitable for the cluster.
 
-Recommendations
-- Use cert-manager with a ClusterIssuer for ACME or import an ACM certificate
-  into the Load Balancer, then reference the TLS secret in the Ingress.
+## Access
 
+After applying the overlay, inspect the Traefik load-balancer address:
+
+```sh
+kubectl -n traefik get svc traefik
+```
+
+Point staging DNS at the returned external address and configure TLS for the selected hostname.
