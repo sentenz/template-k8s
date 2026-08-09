@@ -3,8 +3,9 @@ kind: Kustomization
 
 resources:
   - ../../../base/dependency-track
-  - ../../../base/postgresql
   - ../../../base/traefik
+
+# PostgreSQL is external in prod (AWS RDS); the in-cluster PostgreSQL base is intentionally omitted.
 
 # patches:
 #   - path: patch.yaml
