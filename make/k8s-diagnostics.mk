@@ -13,7 +13,6 @@ K8S_SMOKE_TEST_TIMEOUT ?= 10
 K8S_DATABASE_HOST ?=
 K8S_DATABASE_PORT ?= 5432
 K8S_POSTGRES_NAMESPACE ?= postgresql
-K8S_TOOLS_STDIN_ALIAS := docker run --rm --interactive --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 K8S_TOOLS_INTERACTIVE_ALIAS := docker run --rm --interactive --tty --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 K8S_DIAGNOSTIC_RUN = $(K8S_TOOLS_ALIAS) kubectl run
 K8S_DIAGNOSTIC_RUN_FLAGS = --namespace "$(K8S_OPERATIONS_NAMESPACE)" --kubeconfig "$(K8S_KUBECONFIG)" --image="$(K8S_DIAGNOSTIC_IMAGE)" --restart=Never --attach=true --rm --command --
@@ -179,7 +178,7 @@ k8s-database-diagnose: k8s-require-env
 
 ## Compare rendered Kustomize/Helm desired state with live Kubernetes resources
 k8s-diff: k8s-require-overlay
-	@$(K8S_KUSTOMIZE_BUILD) \
+	@$(call K8S_KUSTOMIZE_BUILD,$(K8S_ENV),$(K8S_SERVICE)) \
 		| $(K8S_TOOLS_STDIN_ALIAS) kubectl diff \
 			--kubeconfig "$(K8S_KUBECONFIG)" \
 			-f -
