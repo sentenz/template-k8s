@@ -114,7 +114,7 @@ Orchestration platform for automating deployment, scaling, and management of con
       > Run the default read-only troubleshooting workflow for cluster connectivity, workload health, namespace scanning, rollout information, logs, networking, and RBAC checks.
 
       ```bash
-      make k8s-troubleshoot K8S_RESOURCE_NAME=dependency-track
+      make k8s-troubleshoot K8S_RESOURCE_NAME=<deployment>
       ```
 
     - Cluster and Namespace Health
@@ -131,11 +131,11 @@ Orchestration platform for automating deployment, scaling, and management of con
       > Inspect workload state, rollout information, current and previous container logs, or follow live multi-Pod logs using containerized Stern.
 
       ```bash
-      make k8s-monitor K8S_RESOURCE_NAME=dependency-track
-      make k8s-describe K8S_RESOURCE_NAME=dependency-track
-      make k8s-logs K8S_RESOURCE_NAME=dependency-track
-      make k8s-logs-previous K8S_RESOURCE_NAME=dependency-track
-      make k8s-logs-follow K8S_RESOURCE_NAME=dependency-track
+      make k8s-monitor K8S_RESOURCE_NAME=<deployment>
+      make k8s-describe K8S_RESOURCE_NAME=<deployment>
+      make k8s-logs K8S_RESOURCE_NAME=<deployment>
+      make k8s-logs-previous K8S_RESOURCE_NAME=<deployment>
+      make k8s-logs-follow K8S_RESOURCE_NAME=<deployment>
       ```
 
     - Pod and Node Diagnostics
@@ -178,7 +178,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 
       ```bash
       make k8s-smoke-test K8S_SMOKE_TEST_URL=<url>
-      make k8s-diff K8S_ENV=stage
+      make k8s-diff K8S_ENV=<dev|stage|prod>
       ```
 
     - Ephemeral Debug
