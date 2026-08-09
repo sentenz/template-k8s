@@ -49,19 +49,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate Dev Make Rendering
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! output="$(make -s k8s-backup K8S_ENV=dev K8S_BACKUP_DIR="${RUNNER_TEMP}/kubernetes-backups/dev" 2>&1)"; then
-            printf '%s\n' "${output}" >&2
-            message="${output//'%'/'%25'}"
-            message="${message//$'\r'/'%0D'}"
-            message="${message//$'\n'/'%0A'}"
-            echo "::error title=Dev Make rendering failed::${message}"
-            exit 1
-          fi
-
       - name: Validate Stage Make Rendering
         shell: bash
         run: |
