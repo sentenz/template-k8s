@@ -59,7 +59,7 @@ githooks-lefthook-initialize:
 	lefthook install --force
 .PHONY: githooks-lefthook-initialize
 
-## Deinitialize Lefthook Git hooks in the local repository
+## Deinitialize Lefthook Git hooks from the local repository
 githooks-lefthook-deinitialize:
 	lefthook uninstall
 .PHONY: githooks-lefthook-deinitialize
@@ -181,7 +181,7 @@ K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S
 # 	helm pull traefik/traefik --version 37.0.0 --untar --untardir charts/
 # .PHONY: helm-vendor-traefik
 
-# # Vendor all Helm charts
+# ## Vendor all Helm charts
 # helm-vendor-charts:
 # 	@$(MAKE) helm-vendor-dependency-track
 # 	@$(MAKE) helm-vendor-postgresql
