@@ -202,19 +202,32 @@ Path-Based DNS Routing ([Ingress Fan-Out](https://kubernetes.io/docs/concepts/se
 
 ### 1.2. Troubleshoot
 
+Generic Kubernetes cluster and workload diagnostics are provided by the root [Troubleshoot](../../../README.md#3-troubleshoot) runbook. The checks below focus on Dependency Track-specific ingress, TLS, and host-network behavior.
+
 #### 1.2.1. Kubernetes Resources
 
-Ensure the resources are created and running correctly.
+Start with the shared read-only Kubernetes diagnostics for the Dependency Track workloads and their Service routing.
 
 ```bash
-kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get secret dependency-track-tls
-kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get ingress
-kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get pods
+# API Server
+make k8s-troubleshoot K8S_RESOURCE_NAME=dependency-track-api-server
+make k8s-network-diagnose K8S_SERVICE_NAME=dependency-track-api-server
+
+# Frontend
+make k8s-troubleshoot K8S_RESOURCE_NAME=dependency-track-frontend
+make k8s-network-diagnose K8S_SERVICE_NAME=dependency-track-frontend
 ```
+
+- TLS Secret
+  > If HTTPS or Ingress TLS termination fails, inspect `secret/dependency-track-tls` and `ingress/dependency-track` using the containerized K9s console in read-only mode.
+
+  ```bash
+  make k8s-console
+  ```
 
 #### 1.2.2. Host Services
 
-Verify the services are accessible via HTTP. The `-k` flag skips TLS verification for self-signed certificates.
+Verify the external client-to-Traefik-to-Service path from the host. The in-cluster `k8s-smoke-test` validates a different network boundary and does not replace these client-side checks. The `-k` flag skips TLS verification for self-signed certificates.
 
 - Path-Based
 
