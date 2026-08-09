@@ -192,7 +192,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 4. Integration Diagnostics
 
     - [Dependency Track](manifests/base/dependency-track/README.md#12-troubleshoot)
-      > Troubleshooting for Dependency Track integration.
+      > Integration-specific troubleshooting for ingress routing, TLS, external host reachability, and local Kind host-network or DNS behavior.
 
 ## 4. References
 
