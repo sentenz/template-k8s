@@ -55,7 +55,9 @@ jobs:
           set -euo pipefail
 
           for environment in dev stage prod; do
-            make -s k8s-render K8S_ENV="${environment}"
+            make -s k8s-backup \
+              K8S_ENV="${environment}" \
+              K8S_BACKUP_DIR="${RUNNER_TEMP}/kubernetes-backups/${environment}"
           done
 
       - name: Test Kind Deployment
