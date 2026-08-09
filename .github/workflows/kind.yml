@@ -12,7 +12,9 @@ on:
       - "charts/**"
       - "config/**"
       - "manifests/**"
+      - "GNUmakefile"
       - "Makefile"
+      - "make/**"
       - "scripts/bootstrap.sh"
   pull_request:
     branches:
@@ -23,7 +25,9 @@ on:
       - "charts/**"
       - "config/**"
       - "manifests/**"
+      - "GNUmakefile"
       - "Makefile"
+      - "make/**"
       - "scripts/bootstrap.sh"
   workflow_dispatch:
 
@@ -44,6 +48,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Validate Make Kubernetes Rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          make -pn | grep -q '^k8s-backup:'
+          make -pn | grep -q '^k8s-image-hotfix:'
+
+          for environment in dev stage prod; do
+            make -s k8s-render K8S_ENV="${environment}"
+          done
 
       - name: Test Kind Deployment
         uses: ./.github/actions/kind
