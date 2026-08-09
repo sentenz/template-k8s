@@ -126,14 +126,6 @@ k8s-monitor: k8s-require-resource
 		--sort-by=.lastTimestamp
 .PHONY: k8s-monitor
 
-## Continuously watch Kubernetes pods for service availability and rollout changes
-k8s-watch:
-	@$(K8S_TOOLS_ALIAS) kubectl get pods \
-		--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
-		--kubeconfig "$(K8S_KUBECONFIG)" \
-		--watch
-.PHONY: k8s-watch
-
 ## Describe a Kubernetes workload and display its rollout revision history
 k8s-describe: k8s-require-resource
 	@echo "──── Workload Description ────────────────────────────────────────────────────────────────"
