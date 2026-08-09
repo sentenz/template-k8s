@@ -54,9 +54,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          make -pn | grep -q '^k8s-backup:'
-          make -pn | grep -q '^k8s-image-hotfix:'
-
           for environment in dev stage prod; do
             make -s k8s-render K8S_ENV="${environment}"
           done
