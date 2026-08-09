@@ -13,7 +13,6 @@ K8S_ROLLOUT_TIMEOUT ?= 5m
 K8S_ROLLBACK_REVISION ?=
 K8S_AUTO_ROLLBACK ?= true
 K8S_OPERATIONS_NAMESPACE ?= $(if $(filter default,$(K8S_NAMESPACE)),$(K8S_SERVICE),$(K8S_NAMESPACE))
-K8S_OVERLAY_DIR ?= manifests/overlays/$(K8S_ENV)/$(K8S_SERVICE)
 ifndef K8S_BACKUP_TIMESTAMP
 K8S_BACKUP_TIMESTAMP := $(shell date -u +%Y%m%dT%H%M%SZ)
 endif
@@ -21,7 +20,6 @@ K8S_BACKUP_DIR ?= logs/kubernetes/backups/$(K8S_ENV)/$(K8S_SERVICE)
 K8S_BACKUP_FILE ?= $(K8S_BACKUP_DIR)/$(K8S_BACKUP_TIMESTAMP).yaml
 K8S_RECOVERY_FILE ?=
 
-K8S_KUSTOMIZE_BUILD = $(K8S_TOOLS_ALIAS) kustomize build "$(K8S_OVERLAY_DIR)" --enable-helm --load-restrictor=LoadRestrictionsNone
 K8S_LOG_PREVIOUS_FLAG = $(if $(filter true,$(K8S_LOG_PREVIOUS)),--previous=true,)
 
 # Validate that a Kubernetes environment was specified
@@ -57,8 +55,8 @@ k8s-require-upgrade: k8s-require-env k8s-require-resource
 
 # Validate that the selected Kustomize overlay exists
 k8s-require-overlay: k8s-require-env
-	@if [[ ! -f "$(K8S_OVERLAY_DIR)/kustomization.yaml" ]]; then \
-		echo "error: Kubernetes overlay does not exist: $(K8S_OVERLAY_DIR)" >&2; \
+	@if [[ ! -f "$(call K8S_OVERLAY_DIR,$(K8S_ENV),$(K8S_SERVICE))/kustomization.yaml" ]]; then \
+		echo "error: Kubernetes overlay does not exist: $(call K8S_OVERLAY_DIR,$(K8S_ENV),$(K8S_SERVICE))" >&2; \
 		exit 2; \
 	fi
 .PHONY: k8s-require-overlay
@@ -162,7 +160,7 @@ k8s-backup: k8s-require-overlay
 	mkdir -p "$(K8S_BACKUP_DIR)"; \
 	tmp_file="$$(mktemp "$(K8S_BACKUP_DIR)/.snapshot.XXXXXX")"; \
 	trap 'rm -f "$$tmp_file"' EXIT; \
-	$(K8S_KUSTOMIZE_BUILD) > "$$tmp_file"; \
+	$(call K8S_KUSTOMIZE_BUILD,$(K8S_ENV),$(K8S_SERVICE)) > "$$tmp_file"; \
 	chmod 0600 "$$tmp_file"; \
 	mv "$$tmp_file" "$(K8S_BACKUP_FILE)"; \
 	trap - EXIT; \
