@@ -14,7 +14,10 @@ K8S_SMOKE_TEST_TIMEOUT ?= 10
 K8S_DATABASE_HOST ?=
 K8S_DATABASE_PORT ?= 5432
 K8S_POSTGRES_NAMESPACE ?= postgresql
+K8S_TOOLS_STDIN_ALIAS := docker run --rm --interactive --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 K8S_TOOLS_INTERACTIVE_ALIAS := docker run --rm --interactive --tty --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
+K8S_DIAGNOSTIC_RUN = $(K8S_TOOLS_ALIAS) kubectl run
+K8S_DIAGNOSTIC_RUN_FLAGS = --namespace "$(K8S_OPERATIONS_NAMESPACE)" --kubeconfig "$(K8S_KUBECONFIG)" --image="$(K8S_DIAGNOSTIC_IMAGE)" --restart=Never --attach=true --rm --command --
 
 # Validate parameters required for ephemeral container debugging
 k8s-require-debug:
@@ -91,19 +94,6 @@ k8s-node-diagnose:
 		$(K8S_TOOLS_ALIAS) kubectl describe "node/$(K8S_NODE)" --kubeconfig "$(K8S_KUBECONFIG)"; \
 	fi
 .PHONY: k8s-node-diagnose
-
-## Retrieve logs from the previous terminated container instances of a Kubernetes workload
-k8s-logs-previous: k8s-require-resource
-	@$(K8S_TOOLS_ALIAS) kubectl logs \
-		"$(K8S_RESOURCE_KIND)/$(K8S_RESOURCE_NAME)" \
-		--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
-		--kubeconfig "$(K8S_KUBECONFIG)" \
-		--all-containers=true \
-		--all-pods=true \
-		--prefix=true \
-		--previous=true \
-		--tail="$(K8S_LOG_TAIL)"
-.PHONY: k8s-logs-previous
 
 ## Diagnose Service selectors, EndpointSlices, ingress routing, and NetworkPolicies
 k8s-network-diagnose:
@@ -188,29 +178,14 @@ k8s-database-diagnose: k8s-require-env
 	fi; \
 	echo "Testing database connectivity from namespace '$(K8S_OPERATIONS_NAMESPACE)' to $$db_host:$(K8S_DATABASE_PORT)"; \
 	pod_name="k8s-db-diagnose-$$(date +%s)-$${RANDOM}"; \
-	$(K8S_TOOLS_ALIAS) kubectl run "$$pod_name" \
-		--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
-		--kubeconfig "$(K8S_KUBECONFIG)" \
-		--image="$(K8S_DIAGNOSTIC_IMAGE)" \
-		--restart=Never \
-		--attach=true \
-		--rm \
-		--command -- sh -ec 'nslookup "$$1"; timeout 5 nc "$$1" "$$2" </dev/null >/dev/null' _ "$$db_host" "$(K8S_DATABASE_PORT)"
+	$(K8S_DIAGNOSTIC_RUN) "$$pod_name" $(K8S_DIAGNOSTIC_RUN_FLAGS) \
+		sh -ec 'nslookup "$$1"; timeout 5 nc "$$1" "$$2" </dev/null >/dev/null' _ "$$db_host" "$(K8S_DATABASE_PORT)"
 .PHONY: k8s-database-diagnose
 
 ## Compare rendered Kustomize/Helm desired state with live Kubernetes resources
-k8s-diff: k8s-require-env
-	@set -euo pipefail; \
-	overlay_dir="manifests/overlays/$(K8S_ENV)/$(K8S_SERVICE)"; \
-	if [[ ! -f "$$overlay_dir/kustomization.yaml" ]]; then \
-		echo "error: Kubernetes overlay does not exist: $$overlay_dir" >&2; \
-		exit 2; \
-	fi; \
-	$(K8S_TOOLS_ALIAS) kustomize build \
-		"$$overlay_dir" \
-		--enable-helm \
-		--load-restrictor=LoadRestrictionsNone \
-		| $(K8S_TOOLS_ALIAS) kubectl diff \
+k8s-diff: k8s-require-overlay
+	@$(K8S_KUSTOMIZE_BUILD) \
+		| $(K8S_TOOLS_STDIN_ALIAS) kubectl diff \
 			--kubeconfig "$(K8S_KUBECONFIG)" \
 			-f -
 .PHONY: k8s-diff
@@ -219,14 +194,8 @@ k8s-diff: k8s-require-env
 k8s-smoke-test: k8s-require-smoke-test
 	@set -euo pipefail; \
 	pod_name="k8s-smoke-$$(date +%s)-$${RANDOM}"; \
-	$(K8S_TOOLS_ALIAS) kubectl run "$$pod_name" \
-		--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
-		--kubeconfig "$(K8S_KUBECONFIG)" \
-		--image="$(K8S_DIAGNOSTIC_IMAGE)" \
-		--restart=Never \
-		--attach=true \
-		--rm \
-		--command -- wget -S -T "$(K8S_SMOKE_TEST_TIMEOUT)" -O /dev/null "$(K8S_SMOKE_TEST_URL)"
+	$(K8S_DIAGNOSTIC_RUN) "$$pod_name" $(K8S_DIAGNOSTIC_RUN_FLAGS) \
+		wget -S -T "$(K8S_SMOKE_TEST_TIMEOUT)" -O /dev/null "$(K8S_SMOKE_TEST_URL)"
 .PHONY: k8s-smoke-test
 
 ## Launch an interactive ephemeral debug container in a Kubernetes Pod
@@ -240,14 +209,16 @@ k8s-debug: k8s-require-debug
 		--tty
 .PHONY: k8s-debug
 
-# Run supplemental read-only diagnostics before the existing k8s-troubleshoot recipe
-k8s-troubleshoot-diagnostics: k8s-require-resource
+## Troubleshoot a Kubernetes service using cluster, workload, pod, network, RBAC, event, and log diagnostics
+k8s-troubleshoot: k8s-require-resource
 	@$(MAKE) -s k8s-preflight || echo "Preflight diagnostics reported an issue."
+	@$(MAKE) -s k8s-monitor
 	@$(MAKE) -s k8s-pod-diagnose || echo "Pod diagnostics unavailable."
+	@$(MAKE) -s k8s-describe
+	@echo "──── Recent Logs ─────────────────────────────────────────────────────────────────────────"
+	@$(MAKE) -s k8s-logs || echo "Logs unavailable for the selected workload."
 	@echo "──── Previous Container Logs ─────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-logs-previous || echo "No previous container logs are available."
 	@$(MAKE) -s k8s-network-diagnose || echo "Network diagnostics reported an issue."
 	@$(MAKE) -s k8s-auth-diagnose || echo "RBAC diagnostics reported an issue."
-.PHONY: k8s-troubleshoot-diagnostics
-
-k8s-troubleshoot: k8s-troubleshoot-diagnostics
+.PHONY: k8s-troubleshoot
