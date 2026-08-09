@@ -40,8 +40,8 @@ k8s-require-resource:
 	fi
 .PHONY: k8s-require-resource
 
-# Validate parameters required for an image upgrade
-k8s-require-upgrade: k8s-require-env k8s-require-resource
+# Validate parameters required for a temporary live image hotfix
+k8s-require-image-hotfix: k8s-require-env k8s-require-resource
 	@if [[ -z "$(strip $(K8S_CONTAINER))" ]]; then \
 		echo "error: K8S_CONTAINER is required" >&2; \
 		exit 2; \
@@ -51,7 +51,7 @@ k8s-require-upgrade: k8s-require-env k8s-require-resource
 		echo "error: K8S_IMAGE is required" >&2; \
 		exit 2; \
 	fi
-.PHONY: k8s-require-upgrade
+.PHONY: k8s-require-image-hotfix
 
 # Validate that the selected Kustomize overlay exists
 k8s-require-overlay: k8s-require-env
@@ -191,14 +191,16 @@ k8s-recover: k8s-require-env
 	fi
 .PHONY: k8s-recover
 
-## Upgrade a Kubernetes workload image with pre-change backup, rollout verification, and automatic rollback
-k8s-upgrade: k8s-require-upgrade k8s-backup
+## Apply a temporary live image hotfix with pre-change backup, rollout verification, and automatic rollback
+k8s-image-hotfix: k8s-require-image-hotfix k8s-backup
+	@echo "WARNING: k8s-image-hotfix changes only the live workload and does not update the declarative overlay."
+	@echo "Update the Kustomize/Helm image configuration before the next k8s-deploy or the hotfix may be reverted."
 	@echo "──── Current Rollout History ─────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-rollout-history
 
 	@$(MAKE) -s k8s-confirm K8S_STACK_DIR="$(K8S_SERVICE)"
 
-	@echo "──── Upgrade ─────────────────────────────────────────────────────────────────────────────"
+	@echo "──── Image Hotfix ────────────────────────────────────────────────────────────────────────"
 	@$(K8S_TOOLS_ALIAS) kubectl set image \
 		"$(K8S_RESOURCE_KIND)/$(K8S_RESOURCE_NAME)" \
 		"$(K8S_CONTAINER)=$(K8S_IMAGE)" \
@@ -206,7 +208,7 @@ k8s-upgrade: k8s-require-upgrade k8s-backup
 		--kubeconfig "$(K8S_KUBECONFIG)"
 
 	@if ! $(MAKE) -s k8s-rollout-status; then \
-		echo "Upgrade rollout failed."; \
+		echo "Image hotfix rollout failed."; \
 		if [[ "$(K8S_AUTO_ROLLBACK)" == "true" ]]; then \
 			echo "Automatic rollback initiated."; \
 			$(MAKE) -s k8s-rollout-undo; \
@@ -215,8 +217,8 @@ k8s-upgrade: k8s-require-upgrade k8s-backup
 		exit 1; \
 	fi
 
-	@echo "Upgrade completed successfully."
-.PHONY: k8s-upgrade
+	@echo "Image hotfix completed; reconcile the declarative overlay before the next deployment."
+.PHONY: k8s-image-hotfix
 
 ## Roll back a Kubernetes workload to its previous or explicitly selected revision
 k8s-rollback: k8s-require-env k8s-require-resource
