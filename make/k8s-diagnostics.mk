@@ -6,9 +6,8 @@ K8S_POD ?=
 K8S_NODE ?=
 K8S_SERVICE_NAME ?=
 K8S_SERVICE_ACCOUNT ?=
-K8S_DEBUG_IMAGE ?=
+K8S_DEBUG_IMAGE ?= $(K8S_NETSHOOT_IMAGE)
 K8S_DEBUG_TARGET ?=
-K8S_DIAGNOSTIC_IMAGE ?= busybox:1.37.0@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
 K8S_SMOKE_TEST_URL ?=
 K8S_SMOKE_TEST_TIMEOUT ?= 10
 K8S_DATABASE_HOST ?=
@@ -23,12 +22,7 @@ K8S_DIAGNOSTIC_RUN_FLAGS = --namespace "$(K8S_OPERATIONS_NAMESPACE)" --kubeconfi
 k8s-require-debug:
 	@if [[ -z "$(strip $(K8S_POD))" ]]; then \
 		echo "error: K8S_POD is required" >&2; \
-		echo "usage: make k8s-debug K8S_POD=<pod> K8S_DEBUG_IMAGE=<image> [K8S_DEBUG_TARGET=<container>]" >&2; \
-		exit 2; \
-	fi
-
-	@if [[ -z "$(strip $(K8S_DEBUG_IMAGE))" ]]; then \
-		echo "error: K8S_DEBUG_IMAGE is required" >&2; \
+		echo "usage: make k8s-debug K8S_POD=<pod> [K8S_DEBUG_IMAGE=<image>] [K8S_DEBUG_TARGET=<container>]" >&2; \
 		exit 2; \
 	fi
 .PHONY: k8s-require-debug
@@ -195,10 +189,10 @@ k8s-smoke-test: k8s-require-smoke-test
 	@set -euo pipefail; \
 	pod_name="k8s-smoke-$$(date +%s)-$${RANDOM}"; \
 	$(K8S_DIAGNOSTIC_RUN) "$$pod_name" $(K8S_DIAGNOSTIC_RUN_FLAGS) \
-		wget -S -T "$(K8S_SMOKE_TEST_TIMEOUT)" -O /dev/null "$(K8S_SMOKE_TEST_URL)"
+		curl --fail --show-error --silent --max-time "$(K8S_SMOKE_TEST_TIMEOUT)" --output /dev/null "$(K8S_SMOKE_TEST_URL)"
 .PHONY: k8s-smoke-test
 
-## Launch an interactive ephemeral debug container in a Kubernetes Pod
+## Launch an interactive Netshoot ephemeral debug container in a Kubernetes Pod
 k8s-debug: k8s-require-debug
 	@$(K8S_TOOLS_INTERACTIVE_ALIAS) kubectl debug \
 		"pod/$(K8S_POD)" \
