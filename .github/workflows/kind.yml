@@ -49,16 +49,29 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate Make Kubernetes Rendering
+      - name: Validate Dev Make Rendering
         shell: bash
         run: |
           set -euo pipefail
+          make -s k8s-backup \
+            K8S_ENV=dev \
+            K8S_BACKUP_DIR="${RUNNER_TEMP}/kubernetes-backups/dev"
 
-          for environment in dev stage prod; do
-            make -s k8s-backup \
-              K8S_ENV="${environment}" \
-              K8S_BACKUP_DIR="${RUNNER_TEMP}/kubernetes-backups/${environment}"
-          done
+      - name: Validate Stage Make Rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -s k8s-backup \
+            K8S_ENV=stage \
+            K8S_BACKUP_DIR="${RUNNER_TEMP}/kubernetes-backups/stage"
+
+      - name: Validate Prod Make Rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -s k8s-backup \
+            K8S_ENV=prod \
+            K8S_BACKUP_DIR="${RUNNER_TEMP}/kubernetes-backups/prod"
 
       - name: Test Kind Deployment
         uses: ./.github/actions/kind
