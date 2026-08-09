@@ -108,6 +108,68 @@ Orchestration platform for automating deployment, scaling, and management of con
 
 ## 3. Troubleshoot
 
+- Service Diagnostics
+  > Run the default read-only troubleshooting workflow for a Kubernetes workload, including cluster preflight, workload health, Popeye scanning, rollout information, logs, networking, and RBAC checks.
+
+  ```bash
+  make k8s-troubleshoot K8S_RESOURCE_NAME=dependency-track
+  ```
+
+- Workload Diagnostics
+  > Inspect workload health and capture current, previous, or live multi-Pod container logs.
+
+  ```bash
+  make k8s-monitor K8S_RESOURCE_NAME=dependency-track
+  make k8s-describe K8S_RESOURCE_NAME=dependency-track
+  make k8s-logs K8S_RESOURCE_NAME=dependency-track
+  make k8s-logs-previous K8S_RESOURCE_NAME=dependency-track
+  make k8s-logs-follow K8S_RESOURCE_NAME=dependency-track
+  ```
+
+- Kubernetes Health
+  > Scan namespace resources with containerized Popeye or explore Kubernetes resources interactively with containerized K9s in read-only mode by default.
+
+  ```bash
+  make k8s-health-scan
+  make k8s-console
+  ```
+
+- Pod and Node Diagnostics
+  > Drill down into a selected Pod or Node after the general health checks identify a specific failing resource.
+
+  ```bash
+  make k8s-pod-diagnose K8S_POD=<pod>
+  make k8s-node-diagnose K8S_NODE=<node>
+  ```
+
+- Network and Authorization Diagnostics
+  > Inspect Services, EndpointSlices, Ingresses, NetworkPolicies, and effective Kubernetes RBAC permissions.
+
+  ```bash
+  make k8s-network-diagnose K8S_SERVICE_NAME=<service>
+  make k8s-auth-diagnose
+  make k8s-auth-diagnose K8S_SERVICE_ACCOUNT=<service-account>
+  ```
+
+- Database and Storage Diagnostics
+  > Validate application-to-database DNS and TCP connectivity. Development uses the Kubernetes PostgreSQL service, while stage and production require the AWS RDS endpoint. Kubernetes-managed PostgreSQL storage diagnostics apply to development only.
+
+  ```bash
+  make k8s-database-diagnose K8S_ENV=dev
+  make k8s-database-diagnose K8S_ENV=stage K8S_DATABASE_HOST=<rds-endpoint>
+  make k8s-database-diagnose K8S_ENV=prod K8S_DATABASE_HOST=<rds-endpoint>
+  make k8s-storage-diagnose K8S_ENV=dev
+  ```
+
+- Runtime and Desired State Diagnostics
+  > Verify application reachability from inside the namespace, compare rendered Kustomize and Helm desired state against live resources, or attach a containerized Netshoot ephemeral debug container to a selected Pod.
+
+  ```bash
+  make k8s-smoke-test K8S_SMOKE_TEST_URL=<url>
+  make k8s-diff K8S_ENV=<dev|stage|prod>
+  make k8s-debug K8S_POD=<pod> [K8S_DEBUG_TARGET=<container>]
+  ```
+
 - [Dependency Track](manifests/base/dependency-track/README.md#12-troubleshoot)
   > Troubleshooting for Dependency Track integration.
 
