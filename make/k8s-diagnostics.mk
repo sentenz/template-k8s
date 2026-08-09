@@ -18,14 +18,23 @@ K8S_TOOLS_INTERACTIVE_ALIAS := docker run --rm --interactive --tty --network hos
 K8S_DIAGNOSTIC_RUN = $(K8S_TOOLS_ALIAS) kubectl run
 K8S_DIAGNOSTIC_RUN_FLAGS = --namespace "$(K8S_OPERATIONS_NAMESPACE)" --kubeconfig "$(K8S_KUBECONFIG)" --image="$(K8S_DIAGNOSTIC_IMAGE)" --restart=Never --attach=true --rm --command --
 
-# Validate parameters required for ephemeral container debugging
-k8s-require-debug:
+# Validate that a Kubernetes Pod was specified for drill-down diagnostics
+k8s-require-pod:
 	@if [[ -z "$(strip $(K8S_POD))" ]]; then \
 		echo "error: K8S_POD is required" >&2; \
-		echo "usage: make k8s-debug K8S_POD=<pod> [K8S_DEBUG_IMAGE=<image>] [K8S_DEBUG_TARGET=<container>]" >&2; \
+		echo "usage: make <target> K8S_POD=<pod>" >&2; \
 		exit 2; \
 	fi
-.PHONY: k8s-require-debug
+.PHONY: k8s-require-pod
+
+# Validate that a Kubernetes Node was specified for drill-down diagnostics
+k8s-require-node:
+	@if [[ -z "$(strip $(K8S_NODE))" ]]; then \
+		echo "error: K8S_NODE is required" >&2; \
+		echo "usage: make k8s-node-diagnose K8S_NODE=<node>" >&2; \
+		exit 2; \
+	fi
+.PHONY: k8s-require-node
 
 # Validate parameters required for an application smoke test
 k8s-require-smoke-test:
@@ -36,7 +45,7 @@ k8s-require-smoke-test:
 	fi
 .PHONY: k8s-require-smoke-test
 
-## Verify Kubernetes API connectivity, control-plane readiness, versions, and node health
+## Verify Kubernetes API connectivity, control-plane readiness, versions, and node visibility
 k8s-preflight:
 	@echo "──── Kubernetes Version ──────────────────────────────────────────────────────────────────"
 	@$(K8S_TOOLS_ALIAS) kubectl version --kubeconfig "$(K8S_KUBECONFIG)"
@@ -52,41 +61,33 @@ k8s-preflight:
 	@$(K8S_TOOLS_ALIAS) kubectl get nodes --kubeconfig "$(K8S_KUBECONFIG)" -o wide
 .PHONY: k8s-preflight
 
-## Diagnose pod readiness, restart counts, container states, probes, scheduling, and events
-k8s-pod-diagnose:
-	@echo "──── Pod State Summary ───────────────────────────────────────────────────────────────────"
-	@$(K8S_TOOLS_ALIAS) kubectl get pods \
+## Diagnose one Kubernetes Pod's readiness, restart counts, container states, scheduling, probes, and events
+k8s-pod-diagnose: k8s-require-pod
+	@echo "──── Pod State ────────────────────────────────────────────────────────────────────────────"
+	@$(K8S_TOOLS_ALIAS) kubectl get "pod/$(K8S_POD)" \
 		--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
 		--kubeconfig "$(K8S_KUBECONFIG)" \
 		-o custom-columns='NAME:.metadata.name,READY:.status.containerStatuses[*].ready,RESTARTS:.status.containerStatuses[*].restartCount,WAITING:.status.containerStatuses[*].state.waiting.reason,PREVIOUS:.status.containerStatuses[*].lastState.terminated.reason,NODE:.spec.nodeName'
 
 	@echo "──── Pod Description ─────────────────────────────────────────────────────────────────────"
-	@if [[ -n "$(strip $(K8S_POD))" ]]; then \
-		$(K8S_TOOLS_ALIAS) kubectl describe "pod/$(K8S_POD)" \
-			--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
-			--kubeconfig "$(K8S_KUBECONFIG)"; \
-	else \
-		$(K8S_TOOLS_ALIAS) kubectl describe pods \
-			--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
-			--kubeconfig "$(K8S_KUBECONFIG)"; \
-	fi
+	@$(K8S_TOOLS_ALIAS) kubectl describe "pod/$(K8S_POD)" \
+		--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
+		--kubeconfig "$(K8S_KUBECONFIG)"
 .PHONY: k8s-pod-diagnose
 
-## Diagnose node readiness, pressure conditions, resource usage, taints, and capacity
-k8s-node-diagnose:
+## Diagnose one Kubernetes Node's readiness, pressure conditions, taints, capacity, and workloads
+k8s-node-diagnose: k8s-require-node
 	@echo "──── Node State ──────────────────────────────────────────────────────────────────────────"
-	@$(K8S_TOOLS_ALIAS) kubectl get nodes \
+	@$(K8S_TOOLS_ALIAS) kubectl get "node/$(K8S_NODE)" \
 		--kubeconfig "$(K8S_KUBECONFIG)" \
 		-o custom-columns='NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,MEMORY-PRESSURE:.status.conditions[?(@.type=="MemoryPressure")].status,DISK-PRESSURE:.status.conditions[?(@.type=="DiskPressure")].status,PID-PRESSURE:.status.conditions[?(@.type=="PIDPressure")].status,VERSION:.status.nodeInfo.kubeletVersion'
 
-	@echo "──── Node Resource Usage ─────────────────────────────────────────────────────────────────"
-	@$(K8S_TOOLS_ALIAS) kubectl top nodes --kubeconfig "$(K8S_KUBECONFIG)" \
+	@echo "──── Selected Node Resource Usage ────────────────────────────────────────────────────────"
+	@$(K8S_TOOLS_ALIAS) kubectl top "node/$(K8S_NODE)" --kubeconfig "$(K8S_KUBECONFIG)" \
 		|| echo "Metrics API unavailable; skipping node resource usage."
 
-	@if [[ -n "$(strip $(K8S_NODE))" ]]; then \
-		echo "──── Selected Node Description ───────────────────────────────────────────────────────────"; \
-		$(K8S_TOOLS_ALIAS) kubectl describe "node/$(K8S_NODE)" --kubeconfig "$(K8S_KUBECONFIG)"; \
-	fi
+	@echo "──── Node Description ────────────────────────────────────────────────────────────────────"
+	@$(K8S_TOOLS_ALIAS) kubectl describe "node/$(K8S_NODE)" --kubeconfig "$(K8S_KUBECONFIG)"
 .PHONY: k8s-node-diagnose
 
 ## Diagnose Service selectors, EndpointSlices, ingress routing, and NetworkPolicies
@@ -193,7 +194,7 @@ k8s-smoke-test: k8s-require-smoke-test
 .PHONY: k8s-smoke-test
 
 ## Launch an interactive Netshoot ephemeral debug container in a Kubernetes Pod
-k8s-debug: k8s-require-debug
+k8s-debug: k8s-require-pod
 	@$(K8S_TOOLS_INTERACTIVE_ALIAS) kubectl debug \
 		"pod/$(K8S_POD)" \
 		--namespace "$(K8S_OPERATIONS_NAMESPACE)" \
@@ -203,11 +204,11 @@ k8s-debug: k8s-require-debug
 		--tty
 .PHONY: k8s-debug
 
-## Troubleshoot a Kubernetes service using cluster, workload, pod, network, RBAC, event, and log diagnostics
+## Troubleshoot a Kubernetes service using deterministic checks plus a Popeye health scan
 k8s-troubleshoot: k8s-require-resource
 	@$(MAKE) -s k8s-preflight || echo "Preflight diagnostics reported an issue."
 	@$(MAKE) -s k8s-monitor
-	@$(MAKE) -s k8s-pod-diagnose || echo "Pod diagnostics unavailable."
+	@$(MAKE) -s k8s-health-scan || echo "Popeye health scan reported an issue."
 	@$(MAKE) -s k8s-describe
 	@echo "──── Recent Logs ─────────────────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-logs || echo "Logs unavailable for the selected workload."
