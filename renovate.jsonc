@@ -66,7 +66,8 @@
         "!kubernetes",
         "!kustomize",
         "!helm-values",
-        "!helmv3"
+        "!helmv3",
+        "!github-actions"
       ],
       "matchDatasources": [
         "!docker"
@@ -84,7 +85,8 @@
         "!kubernetes",
         "!kustomize",
         "!helm-values",
-        "!helmv3"
+        "!helmv3",
+        "!github-actions"
       ],
       "matchDatasources": [
         "!docker"
@@ -102,7 +104,8 @@
         "!kubernetes",
         "!kustomize",
         "!helm-values",
-        "!helmv3"
+        "!helmv3",
+        "!github-actions"
       ],
       "matchDatasources": [
         "!docker"
@@ -236,6 +239,23 @@
       "groupSlug": "kind-container-images",
       "semanticCommits": "enabled",
       "semanticCommitType": "fix",
+      "semanticCommitScope": "deps",
+      "automerge": false
+    },
+    {
+      "description": "Group non-container GitHub Actions dependency updates.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "action",
+        "uses-with",
+        "github-runner"
+      ],
+      "groupName": "github actions dependencies",
+      "groupSlug": "github-actions-dependencies",
+      "semanticCommits": "enabled",
+      "semanticCommitType": "ci",
       "semanticCommitScope": "deps",
       "automerge": false
     },
