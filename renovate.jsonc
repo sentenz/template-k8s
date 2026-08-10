@@ -11,6 +11,7 @@
   "prHourlyLimit": 0,
   "prConcurrentLimit": 0,
   "ignorePaths": [
+    "**/vendor/**",
     "**/node_modules/**",
     "**/bower_components/**",
     "**/charts/**",
@@ -21,6 +22,11 @@
     "ignorePaths": [
       "tests/**",
       "**/tests/**"
+    ]
+  },
+  "kubernetes": {
+    "managerFilePatterns": [
+      "/^manifests/.+\\.ya?ml$/"
     ]
   },
   "labels": [
@@ -36,7 +42,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Update versioned container image references.",
+      "description": "Update versioned Docker image references in Kubernetes support files.",
       "managerFilePatterns": [
         "**/action.{yml,yaml}",
         "**/[Mm]akefile",
@@ -44,6 +50,7 @@
         "**/*.mk",
         "**/kind-cluster.{yml,yaml}"
       ],
+      "matchStringsStrategy": "any",
       "matchStrings": [
         "(?<depName>(?:(?:[A-Za-z0-9.-]+(?::[0-9]+)?/)?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+)):(?<currentValue>v?\\d[0-9A-Za-z_.-]*)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
       ],
@@ -54,10 +61,108 @@
   ],
   "packageRules": [
     {
-      "description": "Pins and updates container image digests across Dockerfiles and Containerfiles.",
+      "description": "Group major updates.",
       "matchManagers": [
-        "dockerfile",
-        "containerfile"
+        "!kubernetes",
+        "!kustomize",
+        "!helm-values",
+        "!helmv3"
+      ],
+      "matchDatasources": [
+        "!docker"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "major versions",
+      "groupSlug": "major-versions",
+      "automerge": false
+    },
+    {
+      "description": "Group minor updates.",
+      "matchManagers": [
+        "!kubernetes",
+        "!kustomize",
+        "!helm-values",
+        "!helmv3"
+      ],
+      "matchDatasources": [
+        "!docker"
+      ],
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "groupName": "minor versions",
+      "groupSlug": "minor-versions",
+      "automerge": false
+    },
+    {
+      "description": "Group patch updates.",
+      "matchManagers": [
+        "!kubernetes",
+        "!kustomize",
+        "!helm-values",
+        "!helmv3"
+      ],
+      "matchDatasources": [
+        "!docker"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "groupName": "patch versions",
+      "groupSlug": "patch-versions",
+      "automerge": false
+    },
+    {
+      "description": "Group Kubernetes dependency updates from Kubernetes, Kustomize, and Helm files.",
+      "matchManagers": [
+        "kubernetes",
+        "kustomize",
+        "helm-values",
+        "helmv3"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "kubernetes dependencies",
+      "groupSlug": "kubernetes-dependencies",
+      "semanticCommits": "enabled",
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps",
+      "automerge": false
+    },
+    {
+      "description": "Pin Kubernetes-managed Docker images to immutable digests.",
+      "matchManagers": [
+        "kubernetes",
+        "kustomize",
+        "helm-values"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "pinDigests": true,
+      "automerge": false
+    },
+    {
+      "description": "Pin Dockerfile and Containerfile images to immutable digests.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "pinDigests": true,
+      "automerge": false
+    },
+    {
+      "description": "Group Dockerfile and Containerfile image updates.",
+      "matchManagers": [
+        "dockerfile"
       ],
       "matchDatasources": [
         "docker"
@@ -69,49 +174,23 @@
         "digest"
       ],
       "pinDigests": true,
+      "groupName": "dockerfile container images",
+      "groupSlug": "dockerfile-container-images",
       "automerge": false
     },
     {
-      "description": "Groups all dependency updates into a single pull request.",
-      "matchPackageNames": [
-        "*"
-      ],
-      "groupName": "dependency updates",
-      "groupSlug": "dependency-updates",
-      "separateMajorMinor": false,
-      "automerge": false,
-      "semanticCommits": "enabled",
-      "semanticCommitType": "chore",
-      "semanticCommitScope": "deps"
-    },
-    {
-      "description": "Groups all Helm chart dependency updates into a separate pull request.",
-      "matchDatasources": [
-        "helm"
-      ],
-      "groupName": "helm chart updates",
-      "groupSlug": "helm-chart-updates",
-      "separateMajorMinor": false,
-      "automerge": false,
-      "semanticCommits": "enabled",
-      "semanticCommitType": "fix",
-      "semanticCommitScope": "deps"
-    },
-    {
-      "description": "Groups GitHub Actions dependency updates into a separate pull request.",
+      "description": "Pin custom-manager Docker images to immutable digests.",
       "matchManagers": [
-        "github-actions"
+        "custom.regex"
       ],
-      "groupName": "github actions updates",
-      "groupSlug": "github-actions-updates",
-      "separateMajorMinor": false,
-      "automerge": false,
-      "semanticCommits": "enabled",
-      "semanticCommitType": "ci",
-      "semanticCommitScope": "deps"
+      "matchDatasources": [
+        "docker"
+      ],
+      "pinDigests": true,
+      "automerge": false
     },
     {
-      "description": "Groups container image updates in GitHub Actions metadata into the GitHub Actions pull request.",
+      "description": "Group Docker image updates in Makefiles.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -119,15 +198,83 @@
         "docker"
       ],
       "matchFileNames": [
-        "**/action.{yml,yaml}"
+        "**/[Mm]akefile",
+        "**/GNUMakefile",
+        "**/*.mk"
       ],
-      "groupName": "github actions updates",
-      "groupSlug": "github-actions-updates",
-      "separateMajorMinor": false,
-      "automerge": false,
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "pinDigests": true,
+      "groupName": "makefile container images",
+      "groupSlug": "makefile-container-images",
+      "automerge": true
+    },
+    {
+      "description": "Group Kind node image updates across Kind configuration and GitHub Action metadata.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "**/action.{yml,yaml}",
+        "**/kind-cluster.{yml,yaml}"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "pinDigests": true,
+      "groupName": "kind container images",
+      "groupSlug": "kind-container-images",
+      "semanticCommits": "enabled",
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps",
+      "automerge": false
+    },
+    {
+      "description": "Pin Docker images used by GitHub Actions to immutable digests.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "docker",
+        "container",
+        "service"
+      ],
+      "pinDigests": true,
+      "automerge": true
+    },
+    {
+      "description": "Group Docker image updates used by GitHub Actions.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "docker",
+        "container",
+        "service"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "pinDigests": true,
+      "groupName": "github actions container images",
+      "groupSlug": "github-actions-container-images",
       "semanticCommits": "enabled",
       "semanticCommitType": "ci",
-      "semanticCommitScope": "deps"
+      "semanticCommitScope": "deps",
+      "automerge": true
     }
   ]
 }
