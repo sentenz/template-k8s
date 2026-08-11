@@ -189,7 +189,59 @@ Orchestration platform for automating deployment, scaling, and management of con
       make k8s-debug K8S_POD=<pod> K8S_DEBUG_TARGET=<container>
       ```
 
-4. Integration Diagnostics
+4. Rollout and Rollback Workflows
+
+    - Declarative Rollout
+      > Deploy the environment overlay, then inspect the selected workload state and rollout history. Normal deployments remain declarative and should be reconciled through the Kustomize and Helm configuration in the repository.
+
+      ```bash
+      make k8s-deploy K8S_ENV=<dev|stage|prod>
+      make k8s-describe K8S_RESOURCE_NAME=<deployment>
+      make k8s-monitor K8S_RESOURCE_NAME=<deployment>
+      ```
+
+    - Temporary Image Hotfix
+      > Apply an explicitly temporary live image override. The workflow creates a pre-change desired-state snapshot, shows rollout history, requires environment confirmation, waits for rollout completion, and automatically rolls back on failure by default.
+
+      ```bash
+      make k8s-image-hotfix \
+        K8S_ENV=<dev|stage|prod> \
+        K8S_RESOURCE_NAME=<deployment> \
+        K8S_CONTAINER=<container> \
+        K8S_IMAGE=<image>
+      ```
+
+      > [!IMPORTANT]
+      > A live image hotfix does not update the declarative overlay. Reconcile the Kustomize or Helm image configuration before the next `k8s-deploy`, otherwise the deployment may revert the hotfix. Set `K8S_AUTO_ROLLBACK=false` only when automatic rollback on rollout failure is intentionally disabled.
+
+    - Manual Rollback
+      > Review rollout history, confirm the environment, roll the workload back to the previous revision, and wait for the rollback rollout to complete.
+
+      ```bash
+      make k8s-rollback \
+        K8S_ENV=<dev|stage|prod> \
+        K8S_RESOURCE_NAME=<deployment>
+      ```
+
+      > Roll back to an explicit Kubernetes revision when required.
+
+      ```bash
+      make k8s-rollback \
+        K8S_ENV=<dev|stage|prod> \
+        K8S_RESOURCE_NAME=<deployment> \
+        K8S_ROLLBACK_REVISION=<revision>
+      ```
+
+    - Post-Rollout Verification
+      > Validate workload health and application reachability after a rollout or rollback, then compare live resources against the rendered desired state to detect remaining drift.
+
+      ```bash
+      make k8s-monitor K8S_RESOURCE_NAME=<deployment>
+      make k8s-smoke-test K8S_SMOKE_TEST_URL=<url>
+      make k8s-diff K8S_ENV=<dev|stage|prod>
+      ```
+
+5. Integration Diagnostics
 
     - [Dependency Track](manifests/base/dependency-track/README.md#12-troubleshoot)
       > Integration-specific troubleshooting for ingress routing, TLS, external host reachability, and local Kind host-network or DNS behavior.
@@ -198,5 +250,5 @@ Orchestration platform for automating deployment, scaling, and management of con
 
 - Sentenz [Kubernetes](TODO) article.
 - Sentenz [Template DX](https://github.com/sentenz/template-dx) repository.
-- Sentenz [Actions](https://github.com/sentenz/actions) repository.
+- Sentenz [Actions](https://github.com/sentenz/template-k8s) repository.
 - Sentenz [Manager Tools](https://sentenz.github.io/convention/articles/manager-tools/) article.
