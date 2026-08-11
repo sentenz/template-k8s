@@ -15,7 +15,7 @@ dependency-track/
 
 ## Development
 
-The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local TLS material is owned by `clusters/dev`.
+The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local topology and TLS material are owned by `clusters/dev`.
 
 Before rendering the dev environment, decrypt the certificate fixtures:
 
@@ -25,7 +25,7 @@ make secrets-sops-decrypt \
   clusters/dev/dependency-track.localhost+1-key.pem.enc
 ```
 
-The `clusters/dev` kustomization generates the `dependency-track-tls` Secret from the decrypted files and is the canonical development entry point.
+The `clusters/dev` kustomization generates the `dependency-track-tls` Secret from the decrypted files and is the canonical development entry point. The Kind topology for this environment is defined by `clusters/dev/kind-cluster.yaml`.
 
 ## Stage and production secrets
 
@@ -39,12 +39,12 @@ All three Secrets must exist in the `dependency-track` namespace before the appl
 
 ## Troubleshooting
 
-Inspect the workload:
+Inspect the local development workload:
 
 ```bash
-kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get ingress
-kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get pods
-kubectl --kubeconfig=config/kubeconfig.yaml -n dependency-track get secrets
+kubectl --kubeconfig=.local/kubeconfig/dev.yaml -n dependency-track get ingress
+kubectl --kubeconfig=.local/kubeconfig/dev.yaml -n dependency-track get pods
+kubectl --kubeconfig=.local/kubeconfig/dev.yaml -n dependency-track get secrets
 ```
 
 For local path-based routing:

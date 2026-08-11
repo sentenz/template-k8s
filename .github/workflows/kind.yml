@@ -13,7 +13,6 @@ on:
       - "charts/**"
       - "clusters/**"
       - "components/**"
-      - "config/**"
       - "platform/**"
       - "Makefile"
       - "scripts/bootstrap.sh"
@@ -27,7 +26,6 @@ on:
       - "charts/**"
       - "clusters/**"
       - "components/**"
-      - "config/**"
       - "platform/**"
       - "Makefile"
       - "scripts/bootstrap.sh"
@@ -55,5 +53,5 @@ jobs:
         uses: ./.github/actions/kind
         with:
           cluster-name: template-k8s
-          kind-config: config/kind-cluster.yaml
+          kind-config: clusters/dev/kind-cluster.yaml
           kustomize-path: clusters/dev

@@ -19,10 +19,14 @@ HELM_CHART_DIR ?= charts
 HELM_VALUES_FILE ?= values.yaml
 K8S_IMAGE_TAG ?= latest
 K8S_NAMESPACE ?= default
-K8S_KUBECONFIG ?= config/kubeconfig.yaml
+K8S_ENV ?= dev
 K8S_CLUSTER_DIR ?= clusters
+K8S_CLUSTER_PATH ?= $(K8S_CLUSTER_DIR)/$(K8S_ENV)
+K8S_KUBECONFIG_DIR ?= .local/kubeconfig
+K8S_KUBECONFIG ?= $(K8S_KUBECONFIG_DIR)/$(K8S_ENV).yaml
+K8S_RENDER_FILE ?= render/kustomize/$(K8S_ENV).yaml
 KIND_CLUSTER_NAME ?= template-k8s
-KIND_CONFIG ?= config/kind-cluster.yaml
+KIND_CONFIG ?= $(K8S_CLUSTER_PATH)/kind-cluster.yaml
 
 # Define Targets
 
@@ -81,18 +85,27 @@ skills-agent-update:
 # K8S_KIND_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
 K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.11@sha256:31c0dd210ecdea934b7394656539d155fddf0c6627af522d307df8d18e52f71e
 
-## Setup the local Kubernetes development cluster using Kind
-k8s-setup:
-	@mkdir -p "$(dir $(K8S_KUBECONFIG))"
-	@if [[ ! -e "$(K8S_KUBECONFIG)" ]]; then \
-		install -m 0644 /dev/null "$(K8S_KUBECONFIG)"; \
+# Validate the selected cluster composition before Kubernetes operations
+k8s-validate:
+	@if [[ ! -f "$(K8S_CLUSTER_PATH)/kustomization.yaml" ]]; then \
+		echo "error: Kubernetes cluster composition not found: $(K8S_CLUSTER_PATH)/kustomization.yaml" >&2; \
+		exit 1; \
 	fi
+.PHONY: k8s-validate
+
+## Setup the selected local Kubernetes cluster using Kind
+k8s-setup: k8s-validate
+	@if [[ ! -f "$(KIND_CONFIG)" ]]; then \
+		echo "error: Kind cluster configuration not found for '$(K8S_ENV)': $(KIND_CONFIG)" >&2; \
+		exit 1; \
+	fi
+	@mkdir -p "$(dir $(K8S_KUBECONFIG))"
 
 	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock --volume "$(CURDIR):/workspace" --workdir /workspace \
 		"$(K8S_KIND_IMAGE)" kind create cluster --name "$(KIND_CLUSTER_NAME)" --config "$(KIND_CONFIG)" --kubeconfig "$(K8S_KUBECONFIG)" --wait 5m
 .PHONY: k8s-setup
 
-## Tear down the local Kubernetes development cluster
+## Tear down the selected local Kubernetes Kind cluster
 k8s-teardown:
 	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock \
 		"$(K8S_KIND_IMAGE)" kind delete cluster --name "$(KIND_CLUSTER_NAME)"
@@ -106,59 +119,30 @@ K8S_TOOLS_ALIAS := docker run --rm --network host --volume "$(CURDIR):/workspace
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
 	@echo ""
-	@read -r -p "Confirm: Proceed with 'Kubernetes' environment '$(K8S_ENV)' from '$(K8S_CLUSTER_DIR)/$(K8S_ENV)'? [yes-$(K8S_ENV) / no] " confirm; \
+	@read -r -p "Confirm: Proceed with Kubernetes environment '$(K8S_ENV)' from '$(K8S_CLUSTER_PATH)'? [yes-$(K8S_ENV) / no] " confirm; \
 		if [[ "$$confirm" != "yes-$(K8S_ENV)" ]]; then \
 			echo "Aborted."; \
 			exit 1; \
 		fi
 .PHONY: k8s-confirm
 
-# Usage: make template-k8s-deploy-<env>
-#
-# Template to deploy a complete Kubernetes cluster composition using Kustomize and Helm
-template-k8s-deploy-%:
-	@$(MAKE) -s k8s-confirm K8S_ENV=$*
+## Render the selected Kubernetes cluster composition
+k8s-render: k8s-validate
+	@mkdir -p "$(dir $(K8S_RENDER_FILE))"
+	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$(K8S_RENDER_FILE)"
+.PHONY: k8s-render
 
-	@$(K8S_TOOLS_ALIAS) kustomize build $(K8S_CLUSTER_DIR)/$* --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl apply --kubeconfig $(K8S_KUBECONFIG) -f -
-.PHONY: template-k8s-deploy-%
-
-## Deploy the Kubernetes cluster composition selected by K8S_ENV
-k8s-deploy:
-	@if [[ -z "$(K8S_ENV)" ]]; then echo "error: K8S_ENV is required (dev, stage, or prod)" >&2; exit 1; fi
-	@$(MAKE) template-k8s-deploy-$(K8S_ENV)
+## Deploy the selected Kubernetes cluster composition
+k8s-deploy: k8s-validate k8s-confirm
+	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone \
+		| kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f -
 .PHONY: k8s-deploy
 
-# Usage: make template-k8s-destroy-<env>
-#
-# Template to destroy a complete Kubernetes cluster composition using Kustomize and Helm
-template-k8s-destroy-%:
-	@$(MAKE) -s k8s-confirm K8S_ENV=$*
-
-	@$(K8S_TOOLS_ALIAS) kustomize build $(K8S_CLUSTER_DIR)/$* --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl delete --kubeconfig $(K8S_KUBECONFIG) -f -
-.PHONY: template-k8s-destroy-%
-
-## Destroy the Kubernetes cluster composition selected by K8S_ENV
-k8s-destroy:
-	@if [[ -z "$(K8S_ENV)" ]]; then echo "error: K8S_ENV is required (dev, stage, or prod)" >&2; exit 1; fi
-	@$(MAKE) template-k8s-destroy-$(K8S_ENV)
+## Destroy the selected Kubernetes cluster composition
+k8s-destroy: k8s-validate k8s-confirm
+	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone \
+		| kubectl delete --kubeconfig "$(K8S_KUBECONFIG)" -f -
 .PHONY: k8s-destroy
-
-# Usage: make template-k8s-render-<env>
-#
-# Template to render a complete Kubernetes cluster composition using Kustomize and Helm
-template-k8s-render-%:
-	@mkdir -p render/kustomize/$*
-
-	@$(K8S_TOOLS_ALIAS) kustomize build $(K8S_CLUSTER_DIR)/$* --enable-helm --load-restrictor=LoadRestrictionsNone --output=./render/kustomize/$*
-.PHONY: template-k8s-render-%
-
-## Render the Kubernetes cluster composition selected by K8S_ENV
-k8s-render:
-	@if [[ -z "$(K8S_ENV)" ]]; then echo "error: K8S_ENV is required (dev, stage, or prod)" >&2; exit 1; fi
-	@$(MAKE) template-k8s-render-$(K8S_ENV)
-.PHONY: k8s-render
 
 # Observe all services across all namespaces
 k8s-observability-service:
