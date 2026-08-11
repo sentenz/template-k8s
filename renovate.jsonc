@@ -26,7 +26,7 @@
   },
   "kubernetes": {
     "managerFilePatterns": [
-      "/^manifests/.+\\.ya?ml$/"
+      "/^(apps|platform|clusters)/.+\\.ya?ml$/"
     ]
   },
   "labels": [

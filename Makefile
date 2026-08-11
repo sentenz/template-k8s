@@ -20,7 +20,7 @@ HELM_VALUES_FILE ?= values.yaml
 K8S_IMAGE_TAG ?= latest
 K8S_NAMESPACE ?= default
 K8S_KUBECONFIG ?= config/kubeconfig.yaml
-K8S_STACK_DIR ?= manifests/overlays
+K8S_CLUSTER_DIR ?= clusters
 KIND_CLUSTER_NAME ?= template-k8s
 KIND_CONFIG ?= config/kind-cluster.yaml
 
@@ -106,53 +106,58 @@ K8S_TOOLS_ALIAS := docker run --rm --network host --volume "$(CURDIR):/workspace
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
 	@echo ""
-	@read -r -p "Confirm: Proceed with 'Kubernetes' in '$(K8S_ENV)'$(if $(K8S_STACK_DIR), targeting '$(K8S_STACK_DIR)',)? [yes-$(K8S_ENV) / no] " confirm; \
+	@read -r -p "Confirm: Proceed with 'Kubernetes' environment '$(K8S_ENV)' from '$(K8S_CLUSTER_DIR)/$(K8S_ENV)'? [yes-$(K8S_ENV) / no] " confirm; \
 		if [[ "$$confirm" != "yes-$(K8S_ENV)" ]]; then \
 			echo "Aborted."; \
 			exit 1; \
 		fi
 .PHONY: k8s-confirm
 
-# Usage: make k8s-deploy-<env>
+# Usage: make template-k8s-deploy-<env>
 #
-# Template to deploy Kubernetes manifests integrated Helm charts and Kustomize environment-specific overlays
+# Template to deploy a complete Kubernetes cluster composition using Kustomize and Helm
 template-k8s-deploy-%:
-	@$(MAKE) -s k8s-confirm
+	@$(MAKE) -s k8s-confirm K8S_ENV=$*
 
-	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
+	@$(K8S_TOOLS_ALIAS) kustomize build $(K8S_CLUSTER_DIR)/$* --enable-helm --load-restrictor=LoadRestrictionsNone \
 		| kubectl apply --kubeconfig $(K8S_KUBECONFIG) -f -
 .PHONY: template-k8s-deploy-%
 
-## Deploy Kubernetes manifests
+## Deploy the Kubernetes cluster composition selected by K8S_ENV
 k8s-deploy:
-	@$(MAKE) template-k8s-deploy-$(K8S_ENV) K8S_STACK_DIR=dependency-track
+	@if [[ -z "$(K8S_ENV)" ]]; then echo "error: K8S_ENV is required (dev, stage, or prod)" >&2; exit 1; fi
+	@$(MAKE) template-k8s-deploy-$(K8S_ENV)
 .PHONY: k8s-deploy
 
-# Usage: make k8s-destroy-<env>
+# Usage: make template-k8s-destroy-<env>
 #
-# Template to destroy Kubernetes manifests integrated Helm charts and Kustomize environment-specific overlays
+# Template to destroy a complete Kubernetes cluster composition using Kustomize and Helm
 template-k8s-destroy-%:
-	@$(MAKE) -s k8s-confirm
+	@$(MAKE) -s k8s-confirm K8S_ENV=$*
 
-	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
+	@$(K8S_TOOLS_ALIAS) kustomize build $(K8S_CLUSTER_DIR)/$* --enable-helm --load-restrictor=LoadRestrictionsNone \
 		| kubectl delete --kubeconfig $(K8S_KUBECONFIG) -f -
 .PHONY: template-k8s-destroy-%
 
-## Destroy Kubernetes manifests
+## Destroy the Kubernetes cluster composition selected by K8S_ENV
 k8s-destroy:
-	@$(MAKE) template-k8s-destroy-$(K8S_ENV) K8S_STACK_DIR=dependency-track
+	@if [[ -z "$(K8S_ENV)" ]]; then echo "error: K8S_ENV is required (dev, stage, or prod)" >&2; exit 1; fi
+	@$(MAKE) template-k8s-destroy-$(K8S_ENV)
 .PHONY: k8s-destroy
 
-# Template to render Kubernetes manifests using Kustomize and Helm charts
+# Usage: make template-k8s-render-<env>
+#
+# Template to render a complete Kubernetes cluster composition using Kustomize and Helm
 template-k8s-render-%:
-	@mkdir -p render/kustomize/$*/$(K8S_STACK_DIR)
+	@mkdir -p render/kustomize/$*
 
-	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone --output=./render/kustomize/$*/$(K8S_STACK_DIR)
+	@$(K8S_TOOLS_ALIAS) kustomize build $(K8S_CLUSTER_DIR)/$* --enable-helm --load-restrictor=LoadRestrictionsNone --output=./render/kustomize/$*
 .PHONY: template-k8s-render-%
 
-## Render Kubernetes manifests
+## Render the Kubernetes cluster composition selected by K8S_ENV
 k8s-render:
-	$(MAKE) template-k8s-render-$(K8S_ENV) K8S_STACK_DIR=dependency-track
+	@if [[ -z "$(K8S_ENV)" ]]; then echo "error: K8S_ENV is required (dev, stage, or prod)" >&2; exit 1; fi
+	@$(MAKE) template-k8s-render-$(K8S_ENV)
 .PHONY: k8s-render
 
 # Observe all services across all namespaces
@@ -392,10 +397,10 @@ secrets-sops-decrypt:
 		case "$$file" in \
 			*.enc) \
 				$(SECRETS_SOPS_ALIAS) decrypt --filename-override "$${file%.enc}" --output "$${file%.enc}" "$$file"; \
-				;; \
+				;;
 			*) \
 				$(SECRETS_SOPS_ALIAS) decrypt --in-place "$$file"; \
-				;; \
+				;;
 		esac; \
 	done
 .PHONY: secrets-sops-decrypt

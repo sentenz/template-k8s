@@ -15,17 +15,17 @@ dependency-track/
 
 ## Development
 
-The development overlay is intended for the local Kind workflow. It uses disposable database credentials, a development-only KEK fixture, and the existing SOPS-encrypted TLS certificate files.
+The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local TLS material is owned by `clusters/dev`.
 
 Before rendering the dev environment, decrypt the certificate fixtures:
 
 ```bash
 make secrets-sops-decrypt \
-  apps/dependency-track/overlays/dev/dependency-track.localhost+1.pem.enc \
-  apps/dependency-track/overlays/dev/dependency-track.localhost+1-key.pem.enc
+  clusters/dev/dependency-track.localhost+1.pem.enc \
+  clusters/dev/dependency-track.localhost+1-key.pem.enc
 ```
 
-The canonical environment entry point is `clusters/dev`.
+The `clusters/dev` kustomization generates the `dependency-track-tls` Secret from the decrypted files and is the canonical development entry point.
 
 ## Stage and production secrets
 

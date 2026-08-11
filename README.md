@@ -61,8 +61,9 @@ Orchestration platform for automating deployment, scaling, and management of con
       ```bash
       # Local Kubernetes Cluster using KinD
       make k8s-setup
-      make k8s-deploy
-      make k8s-destroy
+      make k8s-render K8S_ENV=dev
+      make k8s-deploy K8S_ENV=dev
+      make k8s-destroy K8S_ENV=dev
       make k8s-teardown
       ```
 

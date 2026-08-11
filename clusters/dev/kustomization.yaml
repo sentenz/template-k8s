@@ -7,6 +7,17 @@ resources:
   - ../../platform/traefik/overlays/dev
   - ../../apps/dependency-track/overlays/dev
 
+secretGenerator:
+  - name: dependency-track-tls
+    namespace: dependency-track
+    type: kubernetes.io/tls
+    files:
+      - tls.crt=dependency-track.localhost+1.pem
+      - tls.key=dependency-track.localhost+1-key.pem
+
+generatorOptions:
+  disableNameSuffixHash: true
+
 labels:
   - pairs:
       app.kubernetes.io/part-of: template-k8s

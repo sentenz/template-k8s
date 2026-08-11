@@ -23,10 +23,7 @@ This repository separates application packaging, platform services, environment 
 │   ├── dev/
 │   ├── stage/
 │   └── prod/
-├── charts/
-└── manifests/
-    └── overlays/
-        └── ... compatibility entry points
+└── charts/
 ```
 
 ## Responsibility boundaries
@@ -34,7 +31,7 @@ This repository separates application packaging, platform services, environment 
 - **Helm** defines the reusable workload or platform package. Environment-specific Helm values live beside the corresponding overlay.
 - **Kustomize bases** contain stable Kubernetes resources that are common to all environments, such as namespaces.
 - **Kustomize overlays** bind Helm releases to `dev`, `stage`, or `prod` and apply post-render patches only when a Kubernetes-level difference is clearer than a Helm value.
-- **Clusters** are the canonical deployment and GitOps entry points. Each cluster composes the required application and platform overlays.
+- **Clusters** are the only deployment and GitOps entry points. Each cluster composes the required application and platform overlays plus cluster-local resources.
 - **Components** are reserved for reusable, environment-neutral Kustomize components.
 - **Charts** contains vendored or cached third-party Helm chart sources. Chart packages are not mixed with environment configuration.
 
@@ -50,7 +47,7 @@ kustomize build clusters/stage --enable-helm --load-restrictor=LoadRestrictionsN
 kustomize build clusters/prod --enable-helm --load-restrictor=LoadRestrictionsNone
 ```
 
-The existing `manifests/overlays/<environment>/dependency-track` paths remain as thin compatibility wrappers so the current Make targets continue to resolve. New automation and GitOps controllers should target `clusters/<environment>`.
+All deployment, render, CI, and GitOps automation should target `clusters/<environment>`. Application and platform overlays are composition inputs rather than independent deployment entry points.
 
 ## Environment configuration
 
@@ -66,9 +63,11 @@ This keeps environment deltas explicit and avoids conditional logic such as `if 
 
 `dev` contains local fixtures needed for a Kind-based workflow. `stage` and `prod` do not commit application or database credentials.
 
+Cluster-specific resources belong under the cluster entry point. For example, the local development TLS fixture is stored under `clusters/dev` because its certificate and hostname are properties of that cluster composition rather than the reusable application overlay.
+
 ## Secret contract
 
-Development uses disposable fixture credentials and the existing SOPS-encrypted TLS certificate files.
+Development uses disposable fixture credentials and the existing SOPS-encrypted TLS certificate files under `clusters/dev`.
 
 Stage and production expect externally managed Secrets:
 
