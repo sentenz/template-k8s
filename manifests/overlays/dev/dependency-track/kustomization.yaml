@@ -2,21 +2,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Deprecated compatibility entry point. Prefer ../../../../clusters/dev.
 resources:
-  - ../../../base/dependency-track
-  - ../../../base/postgresql
-  - ../../../base/traefik
-
-patches:
-  - path: patch-dependency-track-ingress.yaml
-  - path: patch-traefik-service-nodeport.yaml
-
-secretGenerator:
-  - name: dependency-track-tls
-    namespace: dependency-track
-    type: "kubernetes.io/tls"
-    files:
-      - tls.crt=dependency-track.localhost+1.pem
-      - tls.key=dependency-track.localhost+1-key.pem
-generatorOptions:
-  disableNameSuffixHash: true
+  - ../../../../clusters/dev

@@ -1,0 +1,32 @@
+---
+database:
+  jdbcUrl: jdbc:postgresql://postgresql.postgresql.svc.cluster.local:5432/dtrack
+  existingSecret:
+    name: dependency-track-database
+    usernameKey: username
+    passwordKey: password
+secretManagement:
+  database:
+    kek:
+      existingSecret:
+        name: dependency-track-kek
+        key: kek
+apiServer:
+  service:
+    type: ClusterIP
+  serviceMonitor:
+    enabled: false
+frontend:
+  service:
+    type: ClusterIP
+  apiBaseUrl: https://dependency-track.stage.example.com
+ingress:
+  enabled: true
+  hostname: dependency-track.stage.example.com
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+  tls:
+    - secretName: dependency-track-tls
+      hosts:
+        - dependency-track.stage.example.com

@@ -4,8 +4,7 @@ database:
   username: "dtrack"
   password: "dtrack"
 
-# Development-only fixture KEK. Replace with an externally managed Secret for
-# any persistent or non-local environment.
+# Development-only fixture KEK. Persistent environments use an externally managed Secret.
 secretManagement:
   database:
     kek:
@@ -16,7 +15,6 @@ apiServer:
     type: ClusterIP
   serviceMonitor:
     enabled: false
-  extraEnv: []
 
 frontend:
   service:
@@ -25,3 +23,11 @@ frontend:
 
 ingress:
   enabled: true
+  hostname: "dependency-track.localhost"
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+  tls:
+    - secretName: dependency-track-tls
+      hosts:
+        - dependency-track.localhost

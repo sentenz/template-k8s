@@ -2,13 +2,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: postgresql
-
 resources:
-  - namespace.yaml
+  - ../../base
 
 helmGlobals:
-  chartHome: ../../../charts
+  chartHome: ../../../../charts
 
 helmCharts:
   - name: postgresql
@@ -17,3 +15,13 @@ helmCharts:
     releaseName: postgresql
     namespace: postgresql
     valuesFile: values.yaml
+
+secretGenerator:
+  - name: postgresql-auth
+    namespace: postgresql
+    literals:
+      - postgres-password=longpassword
+      - password=dtrack
+
+generatorOptions:
+  disableNameSuffixHash: true

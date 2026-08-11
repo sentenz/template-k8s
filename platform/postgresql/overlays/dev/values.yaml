@@ -2,10 +2,12 @@
 global:
   postgresql:
     auth:
-      postgresPassword: longpassword
       username: dtrack
-      password: dtrack
       database: dtrack
+      existingSecret: postgresql-auth
+      secretKeys:
+        adminPasswordKey: postgres-password
+        userPasswordKey: password
 
 primary:
   resourcesPreset: small

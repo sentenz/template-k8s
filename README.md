@@ -31,7 +31,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 - [Docker](https://www.docker.com/)
   > Containerization platform for building, shipping, and running containerized applications.
 
-- [Make](https://www.gnu.org/software/make/)
+- [Make](https://www.gnu.org/software/make)
   > Task automation tool to manage build processes and workflows.
 
   ```bash
@@ -44,6 +44,9 @@ Orchestration platform for automating deployment, scaling, and management of con
 
     - [Architecture](docs/architecture.md)
       > High-level overview of the system's structure, components, and interactions.
+
+    - [Project Layout](docs/project-layout.md)
+      > Helm and Kustomize repository structure for development, stage, and production environments.
 
 2. Usage and Instructions
 
@@ -61,6 +64,14 @@ Orchestration platform for automating deployment, scaling, and management of con
       make k8s-deploy
       make k8s-destroy
       make k8s-teardown
+      ```
+
+    - Canonical environment rendering
+
+      ```bash
+      kustomize build clusters/dev --enable-helm --load-restrictor=LoadRestrictionsNone
+      kustomize build clusters/stage --enable-helm --load-restrictor=LoadRestrictionsNone
+      kustomize build clusters/prod --enable-helm --load-restrictor=LoadRestrictionsNone
       ```
 
 ## 2. Contribution
@@ -108,7 +119,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 
 ## 3. Troubleshoot
 
-- [Dependency Track](manifests/base/dependency-track/README.md#12-troubleshoot)
+- [Dependency Track](apps/dependency-track/README.md#troubleshooting)
   > Troubleshooting for Dependency Track integration.
 
 ## 4. References
