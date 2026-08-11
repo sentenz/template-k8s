@@ -1,6 +1,6 @@
 # Kubernetes Project Layout
 
-This repository separates application packaging, platform services, environment configuration, and cluster composition.
+This repository separates application packaging, platform services, environment configuration, cluster composition, and third-party dependencies.
 
 ```text
 .
@@ -29,7 +29,11 @@ This repository separates application packaging, platform services, environment 
 │   │   └── kustomization.yaml
 │   └── prod/
 │       └── kustomization.yaml
-└── charts/
+└── vendor/
+    └── helm/
+        ├── dependency-track-2.0.0/dependency-track/
+        ├── postgresql-18.8.5/postgresql/
+        └── traefik-41.1.0/traefik/
 ```
 
 Generated local runtime state is not part of the declarative repository tree. The Make workflow stores kubeconfigs under `.local/kubeconfig/<environment>.yaml`, and `.local/` is ignored by Git.
@@ -41,7 +45,7 @@ Generated local runtime state is not part of the declarative repository tree. Th
 - **Kustomize overlays** bind Helm releases to `dev`, `stage`, or `prod` and apply post-render patches only when a Kubernetes-level difference is clearer than a Helm value.
 - **Clusters** are the only deployment and GitOps entry points. Each cluster composes the required application and platform overlays plus cluster-local resources and, where applicable, cluster-creation configuration.
 - **Components** are reserved for reusable, environment-neutral Kustomize components.
-- **Charts** contains vendored or cached third-party Helm chart sources. Chart packages are not mixed with environment configuration.
+- **Vendor** contains immutable third-party sources. `vendor/helm/` holds the upstream Helm chart copies used by Kustomize and must not contain environment configuration.
 
 The design rule is: **Helm defines what a component is; Kustomize defines how and where that component is deployed.**
 
@@ -58,6 +62,35 @@ kustomize build clusters/prod --enable-helm --load-restrictor=LoadRestrictionsNo
 All deployment, render, CI, and GitOps automation should target `clusters/<environment>`. Application and platform overlays are composition inputs rather than independent deployment entry points.
 
 The Make interface uses the same boundary. `K8S_ENV` defaults to `dev`, `K8S_CLUSTER_PATH` resolves to `clusters/$(K8S_ENV)`, generated kubeconfig state resolves to `.local/kubeconfig/$(K8S_ENV).yaml`, and rendered output is written to `render/kustomize/$(K8S_ENV).yaml`.
+
+## Vendored Helm dependencies
+
+Third-party Helm charts live under `vendor/helm/` rather than under applications, platform services, or clusters. This makes the ownership boundary explicit: overlays configure a dependency, but they do not own a copy of its upstream source.
+
+The version wrapper directories are intentional. When a Kustomize `helmCharts` entry contains both `repo` and `version`, Kustomize looks for the local chart at:
+
+```text
+<chartHome>/<name>-<version>/<name>
+```
+
+For example, the Traefik overlays declare `chartHome: ../../../../vendor/helm`, `name: traefik`, and `version: 41.1.0`, so the vendored chart must be present at:
+
+```text
+vendor/helm/traefik-41.1.0/traefik/
+```
+
+Keep vendored chart source immutable. Environment changes belong in overlay `values.yaml` files or Kustomize patches. If a chart itself needs source changes, maintain an explicit fork rather than editing the vendored copy.
+
+Renovate continues to update the `helmCharts.version` declarations under `apps/` and `platform/`; `vendor/**` is excluded from Renovate mutation. A dependency-update change must therefore refresh the matching vendored chart as part of the same change. Use:
+
+```bash
+make helm-vendor \
+  HELM_CHART_NAME=traefik \
+  HELM_CHART_VERSION=41.1.0 \
+  HELM_CHART_REPO=https://traefik.github.io/charts
+```
+
+See `vendor/helm/README.md` for the vendor contract and refresh procedure.
 
 ## Development cluster
 

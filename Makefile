@@ -15,7 +15,11 @@ SHELL := bash
 .ONESHELL:
 
 HELM_RELEASE_NAME ?= mychart
-HELM_CHART_DIR ?= charts
+HELM_VENDOR_DIR ?= vendor/helm
+HELM_CHART_DIR ?=
+HELM_CHART_NAME ?=
+HELM_CHART_VERSION ?=
+HELM_CHART_REPO ?=
 HELM_VALUES_FILE ?= values.yaml
 K8S_IMAGE_TAG ?= latest
 K8S_NAMESPACE ?= default
@@ -180,34 +184,41 @@ k8s-observability:
 
 K8S_HELM_IMAGE ?= alpine/helm:4.2.3@sha256:b97ba4f9b27fe7af16ee3d37e6815783c9d4a51289b6240a9024ec471611ae9b
 K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
+HELM_DEPENDENCY_TRACK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/dependency-track-*/dependency-track))
+HELM_POSTGRESQL_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/postgresql-*/postgresql))
+HELM_TRAEFIK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/traefik-*/traefik))
 
-# # Vendor Helm chart for Dependency-Track
-# helm-vendor-dependency-track:
-# 	helm repo add dependency-track https://dependencytrack.github.io/helm-charts
-# 	helm pull dependency-track/dependency-track --version 0.36.0 --untar --untardir charts/
-# .PHONY: helm-vendor-dependency-track
-
-# # Vendor Helm chart for PostgreSQL
-# helm-vendor-postgresql:
-# 	helm repo add bitnami https://charts.bitnami.com/bitnami
-# 	helm pull bitnami/postgresql --version 16.7.27 --untar --untardir charts/
-# .PHONY: helm-vendor-postgresql
-
-# # Vendor Helm chart for Traefik
-# helm-vendor-traefik:
-# 	helm repo add traefik https://traefik.github.io/charts
-# 	helm pull traefik/traefik --version 37.0.0 --untar --untardir charts/
-# .PHONY: helm-vendor-traefik
-
-# ## Vendor all Helm charts
-# helm-vendor-charts:
-# 	@$(MAKE) helm-vendor-dependency-track
-# 	@$(MAKE) helm-vendor-postgresql
-# 	@$(MAKE) helm-vendor-traefik
-# .PHONY: helm-vendor-charts
+## Vendor a Helm chart into Kustomize-compatible local storage
+helm-vendor:
+	@if [[ -z "$(HELM_CHART_NAME)" || -z "$(HELM_CHART_VERSION)" || -z "$(HELM_CHART_REPO)" ]]; then \
+		echo "usage: make helm-vendor HELM_CHART_NAME=<name> HELM_CHART_VERSION=<version> HELM_CHART_REPO=<repo>" >&2; \
+		exit 1; \
+	fi
+	@if ! [[ "$(HELM_CHART_NAME)" =~ ^[A-Za-z0-9._-]+$$ ]]; then \
+		echo "error: invalid HELM_CHART_NAME '$(HELM_CHART_NAME)'" >&2; \
+		exit 1; \
+	fi
+	@mkdir -p "$(HELM_VENDOR_DIR)"
+	@rm -rf "$(HELM_VENDOR_DIR)/$(HELM_CHART_NAME)-"*
+	@target="$(HELM_VENDOR_DIR)/$(HELM_CHART_NAME)-$(HELM_CHART_VERSION)"; \
+		mkdir -p "$$target"; \
+		$(K8S_HELM_ALIAS) pull "$(HELM_CHART_NAME)" \
+			--repo "$(HELM_CHART_REPO)" \
+			--version "$(HELM_CHART_VERSION)" \
+			--untar \
+			--untardir "$$target"
+.PHONY: helm-vendor
 
 # Render Helm charts templates with specified parameters
 helm-render:
+	@if [[ -z "$(HELM_CHART_DIR)" || ! -d "$(HELM_CHART_DIR)" ]]; then \
+		echo "error: HELM_CHART_DIR must reference a vendored chart directory" >&2; \
+		exit 1; \
+	fi
+	@if [[ ! -f "$(HELM_VALUES_FILE)" ]]; then \
+		echo "error: Helm values file not found: $(HELM_VALUES_FILE)" >&2; \
+		exit 1; \
+	fi
 	$(K8S_HELM_ALIAS) template \
 		$(HELM_RELEASE_NAME) \
 		$(HELM_CHART_DIR) \
@@ -217,37 +228,37 @@ helm-render:
 		--output-dir=./render/charts
 .PHONY: helm-render
 
-# Render Helm chart for Dependency-Track
+# Render vendored Helm chart for Dependency-Track
 helm-render-dependency-track:
 	@$(MAKE) helm-render \
 		HELM_RELEASE_NAME=dependency-track \
-		HELM_CHART_DIR="charts/dependency-track" \
-		HELM_VALUES_FILE="charts/dependency-track/values.yaml" \
+		HELM_CHART_DIR="$(HELM_DEPENDENCY_TRACK_CHART_DIR)" \
+		HELM_VALUES_FILE="$(HELM_DEPENDENCY_TRACK_CHART_DIR)/values.yaml" \
 		K8S_NAMESPACE=default \
 		K8S_IMAGE_TAG="v1.0.0"
 .PHONY: helm-render-dependency-track
 
-# Render Helm chart for Traefik
+# Render vendored Helm chart for Traefik
 helm-render-traefik:
 	@$(MAKE) helm-render \
 		HELM_RELEASE_NAME=traefik \
-		HELM_CHART_DIR="charts/traefik" \
-		HELM_VALUES_FILE="charts/traefik/values.yaml" \
+		HELM_CHART_DIR="$(HELM_TRAEFIK_CHART_DIR)" \
+		HELM_VALUES_FILE="$(HELM_TRAEFIK_CHART_DIR)/values.yaml" \
 		K8S_NAMESPACE=default \
 		K8S_IMAGE_TAG="v3.0.0"
 .PHONY: helm-render-traefik
 
-# Render Helm chart for PostgreSQL
+# Render vendored Helm chart for PostgreSQL
 helm-render-postgresql:
 	@$(MAKE) helm-render \
 		HELM_RELEASE_NAME=postgresql \
-		HELM_CHART_DIR="charts/postgresql" \
-		HELM_VALUES_FILE="charts/postgresql/values.yaml" \
+		HELM_CHART_DIR="$(HELM_POSTGRESQL_CHART_DIR)" \
+		HELM_VALUES_FILE="$(HELM_POSTGRESQL_CHART_DIR)/values.yaml" \
 		K8S_NAMESPACE=default \
 		K8S_IMAGE_TAG="v16.0.0"
 .PHONY: helm-render-postgresql
 
-## Render all Helm charts
+## Render all vendored Helm charts
 helm-render-charts:
 	@$(MAKE) -s helm-render-dependency-track
 	@$(MAKE) -s helm-render-traefik

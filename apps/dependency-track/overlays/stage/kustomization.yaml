@@ -6,7 +6,7 @@ resources:
   - ../../base
 
 helmGlobals:
-  chartHome: ../../../../charts
+  chartHome: ../../../../vendor/helm
 
 helmCharts:
   - name: dependency-track
