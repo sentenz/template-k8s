@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dependency-track-api-server
+  namespace: dependency-track
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-server
+          env:
+            - name: DT_DATASOURCE_URL
+              $patch: replace
+              valueFrom:
+                secretKeyRef:
+                  name: dependency-track-db
+                  key: jdbcUrl

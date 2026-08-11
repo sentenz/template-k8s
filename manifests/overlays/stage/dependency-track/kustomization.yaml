@@ -2,9 +2,16 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-- ../../../base
+  - ../../../base/dependency-track
+  - ../../../base/traefik
 
-# Patches to adapt Traefik for a remote (EKS) cluster
+# PostgreSQL is external in stage (AWS RDS); the in-cluster PostgreSQL base is intentionally omitted.
+# Shared patches remove chart-managed development secrets and require externally managed runtime secrets.
 patches:
-	- path: patch-traefik-service-loadbalancer.yaml
-	- path: patch-traefik-deployment-hostnetwork-false.yaml
+  - path: ../../../patches/dependency-track-rds/delete-chart-db-secret.yaml
+  - path: ../../../patches/dependency-track-rds/delete-chart-kek-secret.yaml
+  - path: ../../../patches/dependency-track-rds/patch-api-server-external-database.yaml
+  - path: ../../../patches/dependency-track-rds/patch-frontend-relative-api.yaml
+  - path: patch-dependency-track-ingress.yaml
+  - path: patch-traefik-service-loadbalancer.yaml
+  - path: patch-traefik-deployment-hostnetwork-false.yaml

@@ -102,6 +102,9 @@ k8s-teardown:
 
 K8S_TOOLS_IMAGE ?= alpine/k8s:1.36.2@sha256:44ef4942e171939b9c665a4a84beb80e2dcdb9a24330d4651cfdfd2e9deecc47
 K8S_TOOLS_ALIAS := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
+K8S_TOOLS_STDIN_ALIAS := docker run --rm --interactive --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
+K8S_OVERLAY_DIR = manifests/overlays/$(1)/$(2)
+K8S_KUSTOMIZE_BUILD = $(K8S_TOOLS_ALIAS) kustomize build "$(call K8S_OVERLAY_DIR,$(1),$(2))" --enable-helm --load-restrictor=LoadRestrictionsNone
 
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
@@ -119,8 +122,8 @@ k8s-confirm:
 template-k8s-deploy-%:
 	@$(MAKE) -s k8s-confirm
 
-	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl apply --kubeconfig $(K8S_KUBECONFIG) -f -
+	@$(call K8S_KUSTOMIZE_BUILD,$*,$(K8S_STACK_DIR)) \
+		| $(K8S_TOOLS_STDIN_ALIAS) kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f -
 .PHONY: template-k8s-deploy-%
 
 ## Deploy Kubernetes manifests
@@ -134,8 +137,8 @@ k8s-deploy:
 template-k8s-destroy-%:
 	@$(MAKE) -s k8s-confirm
 
-	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl delete --kubeconfig $(K8S_KUBECONFIG) -f -
+	@$(call K8S_KUSTOMIZE_BUILD,$*,$(K8S_STACK_DIR)) \
+		| $(K8S_TOOLS_STDIN_ALIAS) kubectl delete --kubeconfig "$(K8S_KUBECONFIG)" -f -
 .PHONY: template-k8s-destroy-%
 
 ## Destroy Kubernetes manifests
@@ -147,45 +150,13 @@ k8s-destroy:
 template-k8s-render-%:
 	@mkdir -p render/kustomize/$*/$(K8S_STACK_DIR)
 
-	@$(K8S_TOOLS_ALIAS) kustomize build manifests/overlays/$*/$(K8S_STACK_DIR) --enable-helm --load-restrictor=LoadRestrictionsNone --output=./render/kustomize/$*/$(K8S_STACK_DIR)
+	@$(call K8S_KUSTOMIZE_BUILD,$*,$(K8S_STACK_DIR)) --output=./render/kustomize/$*/$(K8S_STACK_DIR)
 .PHONY: template-k8s-render-%
 
 ## Render Kubernetes manifests
 k8s-render:
 	$(MAKE) template-k8s-render-$(K8S_ENV) K8S_STACK_DIR=dependency-track
 .PHONY: k8s-render
-
-# Observe all services across all namespaces
-k8s-observability-service:
-	$(K8S_TOOLS_ALIAS) kubectl get services --kubeconfig $(K8S_KUBECONFIG)
-.PHONY: k8s-observability-service
-
-# Observe all namespaces
-k8s-observability-namespace:
-	$(K8S_TOOLS_ALIAS) kubectl get namespaces --kubeconfig $(K8S_KUBECONFIG)
-.PHONY: k8s-observability-namespace
-
-# Observe all pods across all namespaces
-k8s-observability-pod:
-	$(K8S_TOOLS_ALIAS) kubectl get pods -A --kubeconfig $(K8S_KUBECONFIG)
-.PHONY: k8s-observability-pod
-
-# Observe all ingress controllers across all namespaces
-k8s-observability-controller:
-	$(K8S_TOOLS_ALIAS) kubectl get ingressclass --kubeconfig $(K8S_KUBECONFIG)
-.PHONY: k8s-observability-controller
-
-## Aggregate Kubernetes observability for services, namespaces, ingress controllers, and pods
-k8s-observability:
-	@echo "──── K8s Services ────────────────────────────────────────────────────────────────────────"
-	@$(MAKE) -s k8s-observability-service
-	@echo "──── K8s Namespaces ──────────────────────────────────────────────────────────────────────"
-	@$(MAKE) -s k8s-observability-namespace
-	@echo "──── K8s Ingress Controllers ─────────────────────────────────────────────────────────────"
-	@$(MAKE) -s k8s-observability-controller
-	@echo "──── K8s Pods ────────────────────────────────────────────────────────────────────────────"
-	@$(MAKE) -s k8s-observability-pod
-.PHONY: k8s-observability
 
 # ── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
 

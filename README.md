@@ -108,8 +108,143 @@ Orchestration platform for automating deployment, scaling, and management of con
 
 ## 3. Troubleshoot
 
-- [Dependency Track](manifests/base/dependency-track/README.md#12-troubleshoot)
-  > Troubleshooting for Dependency Track integration.
+1. General Diagnostics
+
+    - Service Diagnostics
+      > Run the default read-only troubleshooting workflow for cluster connectivity, workload health, namespace scanning, rollout information, logs, networking, and RBAC checks.
+
+      ```bash
+      make k8s-troubleshoot K8S_RESOURCE_NAME=<deployment>
+      ```
+
+    - Cluster and Namespace Health
+      > Validate Kubernetes API and control-plane connectivity, or scan namespace resources for operational issues using containerized Popeye.
+
+      ```bash
+      make k8s-preflight
+      make k8s-health-scan
+      ```
+
+2. Workload Diagnostics
+
+    - Workload State and Logs
+      > Inspect workload state, rollout information, current and previous container logs, or follow live multi-Pod logs using containerized Stern.
+
+      ```bash
+      make k8s-monitor K8S_RESOURCE_NAME=<deployment>
+      make k8s-describe K8S_RESOURCE_NAME=<deployment>
+      make k8s-logs K8S_RESOURCE_NAME=<deployment>
+      make k8s-logs-previous K8S_RESOURCE_NAME=<deployment>
+      make k8s-logs-follow K8S_RESOURCE_NAME=<deployment>
+      ```
+
+    - Pod and Node Diagnostics
+      > Drill down into a selected Pod or Node after general diagnostics identify a specific failing resource.
+
+      ```bash
+      make k8s-pod-diagnose K8S_POD=<pod>
+      make k8s-node-diagnose K8S_NODE=<node>
+      ```
+
+    - Interactive Console
+      > Explore Kubernetes resources using containerized K9s in read-only mode by default.
+
+      ```bash
+      make k8s-console
+      ```
+
+3. Connectivity and Runtime Diagnostics
+
+    - Network and Authorization Diagnostics
+      > Inspect Services, EndpointSlices, Ingresses, NetworkPolicies, and effective Kubernetes RBAC permissions.
+
+      ```bash
+      make k8s-network-diagnose K8S_SERVICE_NAME=<service>
+      make k8s-auth-diagnose
+      make k8s-auth-diagnose K8S_SERVICE_ACCOUNT=<service-account>
+      ```
+
+    - Database and Storage Diagnostics
+      > Validate application-to-database DNS and TCP connectivity. Development uses Kubernetes PostgreSQL, while stage and production require an AWS RDS endpoint. Kubernetes-managed PostgreSQL storage diagnostics apply to development only.
+
+      ```bash
+      make k8s-database-diagnose K8S_ENV=dev
+      make k8s-database-diagnose K8S_ENV=stage K8S_DATABASE_HOST=<rds-endpoint>
+      make k8s-storage-diagnose K8S_ENV=dev
+      ```
+
+    - Application and Desired State Diagnostics
+      > Verify application reachability from inside the namespace or compare rendered Kustomize and Helm desired state against live Kubernetes resources.
+
+      ```bash
+      make k8s-smoke-test K8S_SMOKE_TEST_URL=<url>
+      make k8s-diff K8S_ENV=<dev|stage|prod>
+      ```
+
+    - Ephemeral Debug
+      > Attach a containerized Netshoot ephemeral debug container to a selected Pod for deeper network and runtime diagnostics.
+
+      ```bash
+      make k8s-debug K8S_POD=<pod>
+      make k8s-debug K8S_POD=<pod> K8S_DEBUG_TARGET=<container>
+      ```
+
+4. Rollout and Rollback Workflows
+
+    - Declarative Rollout
+      > Deploy the environment overlay, then inspect the selected workload state and rollout history. Normal deployments remain declarative and should be reconciled through the Kustomize and Helm configuration in the repository.
+
+      ```bash
+      make k8s-deploy K8S_ENV=<dev|stage|prod>
+      make k8s-describe K8S_RESOURCE_NAME=<deployment>
+      make k8s-monitor K8S_RESOURCE_NAME=<deployment>
+      ```
+
+    - Temporary Image Hotfix
+      > Apply an explicitly temporary live image override. The workflow creates a pre-change desired-state snapshot, shows rollout history, requires environment confirmation, waits for rollout completion, and automatically rolls back on failure by default.
+
+      ```bash
+      make k8s-image-hotfix \
+        K8S_ENV=<dev|stage|prod> \
+        K8S_RESOURCE_NAME=<deployment> \
+        K8S_CONTAINER=<container> \
+        K8S_IMAGE=<image>
+      ```
+
+      > [!IMPORTANT]
+      > A live image hotfix does not update the declarative overlay. Reconcile the Kustomize or Helm image configuration before the next `k8s-deploy`, otherwise the deployment may revert the hotfix. Set `K8S_AUTO_ROLLBACK=false` only when automatic rollback on rollout failure is intentionally disabled.
+
+    - Manual Rollback
+      > Review rollout history, confirm the environment, roll the workload back to the previous revision, and wait for the rollback rollout to complete.
+
+      ```bash
+      make k8s-rollback \
+        K8S_ENV=<dev|stage|prod> \
+        K8S_RESOURCE_NAME=<deployment>
+      ```
+
+      > Roll back to an explicit Kubernetes revision when required.
+
+      ```bash
+      make k8s-rollback \
+        K8S_ENV=<dev|stage|prod> \
+        K8S_RESOURCE_NAME=<deployment> \
+        K8S_ROLLBACK_REVISION=<revision>
+      ```
+
+    - Post-Rollout Verification
+      > Validate workload health and application reachability after a rollout or rollback, then compare live resources against the rendered desired state to detect remaining drift.
+
+      ```bash
+      make k8s-monitor K8S_RESOURCE_NAME=<deployment>
+      make k8s-smoke-test K8S_SMOKE_TEST_URL=<url>
+      make k8s-diff K8S_ENV=<dev|stage|prod>
+      ```
+
+5. Integration Diagnostics
+
+    - [Dependency Track](manifests/base/dependency-track/README.md#12-troubleshoot)
+      > Integration-specific troubleshooting for ingress routing, TLS, external host reachability, and local Kind host-network or DNS behavior.
 
 ## 4. References
 

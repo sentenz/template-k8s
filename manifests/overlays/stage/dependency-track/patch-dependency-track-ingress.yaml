@@ -6,7 +6,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: "dependency-track.example.com"
+    - host: "dependency-track.staging.example.com"
       http:
         paths:
           - path: /api
