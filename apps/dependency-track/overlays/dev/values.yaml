@@ -10,16 +10,16 @@ secretManagement:
     kek:
       value: "h1lrkPlxxIe9K92pUQkV4O+gn4NMP1E9pN4p94zC5IE="
 
-apiServer:
-  service:
-    type: ClusterIP
-  serviceMonitor:
-    enabled: false
+# apiServer:
+#   service:
+#     type: ClusterIP
+#   serviceMonitor:
+#     enabled: false
 
-frontend:
-  service:
-    type: ClusterIP
-  apiBaseUrl: "https://dependency-track.localhost"
+# frontend:
+#   service:
+#     type: ClusterIP
+#   apiBaseUrl: "https://dependency-track.localhost"
 
 ingress:
   enabled: true
