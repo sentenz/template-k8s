@@ -1,6 +1,6 @@
 # Kubernetes Project Layout
 
-This repository separates application packaging, platform services, environment configuration, cluster composition, and third-party dependencies.
+This repository separates application packaging, platform capabilities, environment configuration, cluster composition, and third-party dependencies.
 
 ```text
 .
@@ -12,12 +12,17 @@ This repository separates application packaging, platform services, environment 
 │           ├── stage/
 │           └── prod/
 ├── platform/
-│   ├── postgresql/
-│   │   ├── base/
-│   │   └── overlays/{dev,stage,prod}/
-│   └── traefik/
-│       ├── base/
-│       └── overlays/{dev,stage,prod}/
+│   ├── controllers/
+│   │   └── traefik/
+│   │       ├── base/
+│   │       └── overlays/{dev,stage,prod}/
+│   ├── services/
+│   │   └── postgresql/
+│   │       ├── base/
+│   │       └── overlays/{dev,stage,prod}/
+│   ├── configs/
+│   │   └── README.md
+│   └── README.md
 ├── components/
 ├── clusters/
 │   ├── dev/
@@ -43,11 +48,27 @@ Generated local runtime state is not part of the declarative repository tree. Th
 - **Helm** defines the reusable workload or platform package. Environment-specific Helm values live beside the corresponding overlay.
 - **Kustomize bases** contain stable Kubernetes resources that are common to all environments, such as namespaces.
 - **Kustomize overlays** bind Helm releases to `dev`, `stage`, or `prod` and apply post-render patches only when a Kubernetes-level difference is clearer than a Helm value.
+- **Applications** own product workloads and application-specific deployment configuration.
+- **Platform controllers** own Kubernetes controllers, operators, admission components, and cluster networking/control-plane integrations.
+- **Platform services** own platform-managed runtime services. PostgreSQL is modeled as a platform service in this template.
+- **Platform configs** own shared configuration consumed by platform controllers or services when that configuration has a lifecycle distinct from the capability installation.
 - **Clusters** are the only deployment and GitOps entry points. Each cluster composes the required application and platform overlays plus cluster-local resources and, where applicable, cluster-creation configuration.
 - **Components** are reserved for reusable, environment-neutral Kustomize components.
 - **Vendor** contains immutable third-party sources. `vendor/helm/` holds the upstream Helm chart copies used by Kustomize and must not contain environment configuration.
 
-The design rule is: **Helm defines what a component is; Kustomize defines how and where that component is deployed.**
+The design rule is: **Helm defines what a component is; Kustomize defines how and where that component is deployed; ownership domains define who manages its lifecycle.**
+
+## Platform taxonomy
+
+The `platform/` tree is organized by responsibility rather than environment:
+
+- `platform/controllers/<name>/` contains controllers and operators such as Traefik, cert-manager, external-secrets, policy controllers, or database operators.
+- `platform/services/<name>/` contains platform-managed runtime services such as shared databases, observability services, logging services, caches, or other shared capabilities.
+- `platform/configs/<name>/` contains shared resources consumed by controllers or services, such as `ClusterIssuer`, middleware, secret stores, policy resources, or other controller-specific custom resources.
+
+Each capability owns its own `base/` and `overlays/`. Environment selection remains under `clusters/`; do not create a top-level `platform/dev`, `platform/stage`, or `platform/prod` hierarchy.
+
+A resource belongs under `platform/` when its lifecycle is managed independently of an individual application. In a product-specific repository, an application-exclusive dependency can instead be colocated with the application that owns its lifecycle. This template intentionally keeps PostgreSQL under `platform/services/postgresql/` to demonstrate the platform-service boundary.
 
 ## Canonical entry points
 
@@ -65,7 +86,7 @@ The Make interface uses the same boundary. `K8S_ENV` defaults to `dev`, `K8S_CLU
 
 ## Vendored Helm dependencies
 
-Third-party Helm charts live under `vendor/helm/` rather than under applications, platform services, or clusters. This makes the ownership boundary explicit: overlays configure a dependency, but they do not own a copy of its upstream source.
+Third-party Helm charts live under `vendor/helm/` rather than under applications, platform capabilities, or clusters. This makes the ownership boundary explicit: overlays configure a dependency, but they do not own a copy of its upstream source.
 
 The version wrapper directories are intentional. When a Kustomize `helmCharts` entry contains both `repo` and `version`, Kustomize looks for the local chart at:
 
@@ -73,7 +94,7 @@ The version wrapper directories are intentional. When a Kustomize `helmCharts` e
 <chartHome>/<name>-<version>/<name>
 ```
 
-For example, the Traefik overlays declare `chartHome: ../../../../vendor/helm`, `name: traefik`, and `version: 41.1.0`, so the vendored chart must be present at:
+For example, the Traefik overlays declare `chartHome: ../../../../../vendor/helm`, `name: traefik`, and `version: 41.1.0`, so the vendored chart must be present at:
 
 ```text
 vendor/helm/traefik-41.1.0/traefik/
@@ -143,9 +164,17 @@ These Secrets can be supplied by an external-secret controller, SOPS/Flux, Seale
 3. Add the appropriate overlay to each `clusters/<environment>/kustomization.yaml`.
 4. Put cross-cutting behavior in `components/` rather than duplicating patches.
 
-## Adding a platform service
+## Adding a platform capability
 
-Use the same pattern under `platform/<name>`. Platform services include ingress controllers, databases, certificate management, external secrets, observability, and policy engines.
+Classify the capability by responsibility first:
+
+1. Put controllers and operators under `platform/controllers/<name>/`.
+2. Put platform-managed runtime services under `platform/services/<name>/`.
+3. Put shared controller/service configuration under `platform/configs/<name>/` when it has an independent lifecycle.
+4. Give deployable capabilities their own `base/` and `overlays/{dev,stage,prod}` as needed.
+5. Select the appropriate overlay from each `clusters/<environment>/kustomization.yaml`.
+
+Do not classify a resource as platform infrastructure merely because it is used in development. Ownership and lifecycle determine placement; overlays and cluster composition determine where the resource runs.
 
 ## Scaling beyond one cluster per environment
 

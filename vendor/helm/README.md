@@ -26,7 +26,7 @@ vendor/helm/
 Treat everything below `vendor/helm/` as upstream source:
 
 - do not hand-edit vendored chart templates or default values;
-- configure charts through `apps/*/overlays/*/values.yaml` or `platform/*/overlays/*/values.yaml`;
+- configure charts through `apps/<name>/overlays/<env>/values.yaml` or `platform/<category>/<name>/overlays/<env>/values.yaml`;
 - use Kustomize patches for Kubernetes-level changes that are clearer after Helm rendering;
 - maintain forks outside this vendor tree if an upstream chart itself must be changed.
 

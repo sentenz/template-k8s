@@ -6,7 +6,7 @@ resources:
   - ../../base
 
 helmGlobals:
-  chartHome: ../../../../vendor/helm
+  chartHome: ../../../../../vendor/helm
 
 helmCharts:
   - name: postgresql

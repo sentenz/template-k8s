@@ -6,7 +6,7 @@ resources:
   - ../../base
 
 helmGlobals:
-  chartHome: ../../../../vendor/helm
+  chartHome: ../../../../../vendor/helm
 
 helmCharts:
   - name: postgresql
@@ -15,3 +15,13 @@ helmCharts:
     releaseName: postgresql
     namespace: postgresql
     valuesFile: values.yaml
+
+secretGenerator:
+  - name: postgresql-auth
+    namespace: postgresql
+    literals:
+      - postgres-password=longpassword
+      - password=dtrack
+
+generatorOptions:
+  disableNameSuffixHash: true
