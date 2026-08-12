@@ -24,18 +24,20 @@ K8S_STACK_DIR ?= manifests/overlays
 KIND_CLUSTER_NAME ?= template-k8s
 KIND_CONFIG ?= config/kind-cluster.yaml
 
-# Define Targets
+# ─── General ─────────────────────────────────────────────────────────────────────────────────────
 
 default: help
 
 # NOTE Targets MUST have a leading comment line starting with `##` to be included in the list. See the targets below for examples.
+#
+## Display help message with available tasks and descriptions
 help:
 	@awk 'BEGIN {printf "Tasks\n\tA collection of tasks used in the current project.\n\n"}'
 	@awk 'BEGIN {printf "Usage\n\tmake $(shell tput -Txterm setaf 6)<task>$(shell tput -Txterm sgr0)\n\n"}' $(MAKEFILE_LIST)
 	@awk '/^##/{c=substr($$0,3);next}c&&/^[[:alpha:]][[:alnum:]_-]+:/{print "$(shell tput -Txterm setaf 6)\t" substr($$1,1,index($$1,":")) "$(shell tput -Txterm sgr0)",c}1{c=0}' $(MAKEFILE_LIST) | column -s: -t
 .PHONY: help
 
-# ── Setup & Teardown ─────────────────────────────────────────────────────────────────────────────
+# ─── Setup & Teardown ─────────────────────────────────────────────────────────────────────────────
 
 ## Initialize a software development workspace with requisites
 bootstrap:
@@ -52,7 +54,7 @@ teardown:
 	cd $(@D)/scripts && ./teardown.sh
 .PHONY: teardown
 
-# ── Git Hooks Manager ────────────────────────────────────────────────────────────────────────────
+# ─── Git Hooks Manager ────────────────────────────────────────────────────────────────────────────
 
 ## Initialize Lefthook Git hooks in the local repository
 githooks-lefthook-initialize:
@@ -64,7 +66,7 @@ githooks-lefthook-deinitialize:
 	lefthook uninstall
 .PHONY: githooks-lefthook-deinitialize
 
-# ── Skills Manager ───────────────────────────────────────────────────────────────────────────────
+# ─── Skills Manager ───────────────────────────────────────────────────────────────────────────────
 
 ## Provision new Agent Skills into the project environment
 skills-agent-add:
@@ -76,7 +78,7 @@ skills-agent-update:
 	DISABLE_TELEMETRY=1 skills update git@gitlab.samscm.net:development-environment/templates/skills.git
 .PHONY: skills-agent-update
 
-# ── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
+# ─── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
 
 # K8S_KIND_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
 K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.11@sha256:31c0dd210ecdea934b7394656539d155fddf0c6627af522d307df8d18e52f71e
@@ -187,7 +189,7 @@ k8s-observability:
 	@$(MAKE) -s k8s-observability-pod
 .PHONY: k8s-observability
 
-# ── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
+# ─── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
 
 K8S_HELM_IMAGE ?= alpine/helm:4.2.3@sha256:b97ba4f9b27fe7af16ee3d37e6815783c9d4a51289b6240a9024ec471611ae9b
 K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
@@ -265,9 +267,9 @@ helm-render-charts:
 	@$(MAKE) -s helm-render-postgresql
 .PHONY: helm-render-charts
 
-# ── Dependency Manager ───────────────────────────────────────────────────────────────────────────
+# ─── Dependency Manager ───────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.22.0@sha256:6a7cf82eb1cf845583248e5a4c92c2125028fba64249dfd253a14788d8048292
+DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.5.3@sha256:0de2072bc4c87e1744158adfb8ccd9f49c5bd2da5a0c14bc4b0c90a7cdaab54f
 DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_RENOVATE_IMAGE)"
 
 ## Update project dependencies locally using Renovate and generate a report
@@ -277,7 +279,7 @@ dependency-renovate-update:
 	$(DEPENDENCY_RENOVATE_ALIAS) renovate --platform=local --repository-cache=reset > logs/dependency/renovate.log 2>&1
 .PHONY: dependency-renovate-update
 
-# ── Secrets Manager ──────────────────────────────────────────────────────────────────────────────
+# ─── Secrets Manager ──────────────────────────────────────────────────────────────────────────────
 
 SECRETS_SOPS_IMAGE ?= ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 SECRETS_SOPS_ALIAS ?= docker run --rm -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/root/.gnupg" -w /workspace "$(SECRETS_SOPS_IMAGE)"
@@ -412,9 +414,9 @@ secrets-sops-view:
 	$(SECRETS_SOPS_ALIAS) decrypt "$(filter-out $@,$(MAKECMDGOALS))"
 .PHONY: secrets-sops-view
 
-# ── Policy Manager ───────────────────────────────────────────────────────────────────────────────
+# ─── Policy Manager ───────────────────────────────────────────────────────────────────────────────
 
-POLICY_CONFTEST_IMAGE ?= docker.io/openpolicyagent/conftest:v0.69.0@sha256:a38ba21668929a00dce2fe6ee43d1312228340bce5fd243f47dd0ce90516e558
+POLICY_CONFTEST_IMAGE ?= docker.io/openpolicyagent/conftest:v0.68.2@sha256:5fd81e332d7e4bc01daf3ef35371800a9a9720a30c0c37a78de0c5fbe4b6d622
 POLICY_CONFTEST_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_CONFTEST_IMAGE)"
 
 # Usage: make policy-conftest-test <filepath>
@@ -448,7 +450,7 @@ policy-regal-lint:
 	$(POLICY_REGAL_ALIAS) lint "$(filter-out $@,$(MAKECMDGOALS))" --format json > logs/policy/regal.json 2>&1
 .PHONY: policy-regal-lint
 
-# ── SAST Manager ─────────────────────────────────────────────────────────────────────────────────
+# ─── SAST Manager ─────────────────────────────────────────────────────────────────────────────────
 
 SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
 SAST_SEMGREP_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_SEMGREP_IMAGE)"
@@ -462,7 +464,7 @@ sast-semgrep-scan:
 	$(SAST_SEMGREP_ALIAS) semgrep scan --config auto --error --json --output logs/sast/semgrep.json $(SAST_SEMGREP_FILTER) 2> logs/sast/semgrep.log
 .PHONY: sast-semgrep-scan
 
-SAST_TRIVY_IMAGE ?= aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c
+SAST_TRIVY_IMAGE ?= aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
 SAST_TRIVY_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_TRIVY_IMAGE)"
 SAST_TRIVY_FILES ?= .
 
@@ -663,7 +665,7 @@ sast-trufflehog-git:
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRUFFLEHOG)" git file:///workspace --no-update --json > logs/sast/trufflehog-git.json 2> logs/sast/trufflehog-git.log
 .PHONY: sast-trufflehog-git
 
-# ── Supply Chain Security ────────────────────────────────────────────────────────────────────────
+# ─── Supply Chain Security ────────────────────────────────────────────────────────────────────────
 
 SAST_COSIGN_IMAGE ?= cgr.dev/chainguard/cosign:3.0.0@sha256:b6bc266358e9368be1b3d01fca889b78d5ad5a47832986e14640c34a237ef638
 SAST_COSIGN_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_COSIGN_IMAGE)"
@@ -711,7 +713,7 @@ sast-cosign-verify:
 	$(SAST_COSIGN_ALIAS) verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
 .PHONY: sast-cosign-verify
 
-# ── Container Manager ────────────────────────────────────────────────────────────────────────────
+# ─── Container Manager ────────────────────────────────────────────────────────────────────────────
 
 CONTAINER_DOCKER_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null))
 CONTAINER_DOCKER_TAG ?= $(or $(shell git tag --sort=-creatordate | head -n 1),latest)
