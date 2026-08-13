@@ -277,7 +277,13 @@ runs:
         ' "${RENDERED_MANIFEST}" > "${CRD_MANIFEST}"
 
         if [[ -s "${CRD_MANIFEST}" ]]; then
-          mapfile -t crds < <(kubectl apply -f "${CRD_MANIFEST}" -o name)
+          mapfile -t crds < <(
+            kubectl apply \
+              --server-side \
+              --force-conflicts \
+              -f "${CRD_MANIFEST}" \
+              -o name
+          )
           if (( ${#crds[@]} > 0 )); then
             kubectl wait \
               --for=condition=Established \
@@ -298,7 +304,10 @@ runs:
         RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
       run: |
         set -euo pipefail
-        kubectl apply -f "${RENDERED_MANIFEST}"
+        kubectl apply \
+          --server-side \
+          --force-conflicts \
+          -f "${RENDERED_MANIFEST}"
 
     - name: Wait for Workloads
       shell: bash
