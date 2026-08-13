@@ -16,6 +16,7 @@ metrics:
     addEntryPointsLabels: true
     addRoutersLabels: true
     addServicesLabels: true
+    disableAPICheck: true
     serviceMonitor:
       enabled: true
       namespace: observability
