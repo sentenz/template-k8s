@@ -16,6 +16,12 @@ secretGenerator:
     files:
       - tls.crt=dependency-track.localhost+1.pem
       - tls.key=dependency-track.localhost+1-key.pem
+  - name: grafana-tls
+    namespace: observability
+    type: kubernetes.io/tls
+    files:
+      - tls.crt=grafana.localhost+1.pem
+      - tls.key=grafana.localhost+1-key.pem
 
 generatorOptions:
   disableNameSuffixHash: true
