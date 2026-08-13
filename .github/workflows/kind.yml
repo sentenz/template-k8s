@@ -295,6 +295,16 @@ jobs:
           )"
           jq -e '.status == "success" and (.data.result | length > 0)' <<<"${prometheus_response}" >/dev/null
 
+          dashboard_query='{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prometheus"},"editorMode":"code","expr":"up","instant":true,"range":false,"format":"time_series","intervalMs":1000,"maxDataPoints":100}],"from":"now-5m","to":"now"}'
+          dashboard_response="$(
+            curl "${grafana_api_options[@]}" \
+              --request POST \
+              --header "Content-Type: application/json" \
+              --data "${dashboard_query}" \
+              "https://${GRAFANA_HOST}/api/ds/query"
+          )"
+          jq -e '.results.A.error == null and (.results.A.frames | length > 0)' <<<"${dashboard_response}" >/dev/null
+
       - name: Publish Deployment Summary
         if: success()
         shell: bash
