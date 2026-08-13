@@ -293,7 +293,8 @@ runs:
         fi
 
         kubectl apply \
-          --dry-run=client \
+          --server-side \
+          --dry-run=server \
           --validate=strict \
           -f "${RENDERED_MANIFEST}"
 
