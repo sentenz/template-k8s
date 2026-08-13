@@ -11,11 +11,11 @@ inputs:
   kind-config:
     description: Repository-relative path to the Kind cluster configuration.
     required: false
-    default: config/kind-cluster.yaml
+    default: clusters/dev/kind-cluster.yaml
   kustomize-path:
-    description: Repository-relative path to the Kustomize overlay to deploy.
+    description: Repository-relative path to the Kustomize cluster composition to deploy.
     required: false
-    default: manifests/overlays/dev/dependency-track
+    default: clusters/dev
   kind-version:
     description: Kind CLI version.
     required: false

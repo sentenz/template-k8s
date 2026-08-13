@@ -5,8 +5,9 @@
 **/charts/**/*.tgz
 
 render/
-# Generated local Kubernetes credentials
-/config/kubeconfig.yaml
+
+### Local Runtime State ###
+.local/
 
 ### Miscellaneous ###
 logs/

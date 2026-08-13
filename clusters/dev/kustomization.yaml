@@ -1,0 +1,26 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../platform/services/postgresql/overlays/dev
+  - ../../platform/controllers/traefik/overlays/dev
+  - ../../apps/dependency-track/overlays/dev
+
+secretGenerator:
+  - name: dependency-track-tls
+    namespace: dependency-track
+    type: kubernetes.io/tls
+    files:
+      - tls.crt=dependency-track.localhost+1.pem
+      - tls.key=dependency-track.localhost+1-key.pem
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: template-k8s
+      environment: dev
+    includeSelectors: false
+    includeTemplates: true

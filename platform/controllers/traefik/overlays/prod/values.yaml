@@ -1,0 +1,15 @@
+---
+service:
+  type: LoadBalancer
+
+ingressClass:
+  name: traefik
+  enabled: true
+  isDefaultClass: true
+
+ingressRoute:
+  dashboard:
+    enabled: false
+
+log:
+  level: INFO

@@ -1,0 +1,33 @@
+---
+database:
+  jdbcUrl: "jdbc:postgresql://postgresql.postgresql.svc.cluster.local:5432/dtrack"
+  username: "dtrack"
+  password: "dtrack"
+
+# Development-only fixture KEK. Persistent environments use an externally managed Secret.
+secretManagement:
+  database:
+    kek:
+      value: "h1lrkPlxxIe9K92pUQkV4O+gn4NMP1E9pN4p94zC5IE="
+
+# apiServer:
+#   service:
+#     type: ClusterIP
+#   serviceMonitor:
+#     enabled: false
+
+# frontend:
+#   service:
+#     type: ClusterIP
+#   apiBaseUrl: "https://dependency-track.localhost"
+
+ingress:
+  enabled: true
+  hostname: "dependency-track.localhost"
+  ingressClassName: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+  tls:
+    - secretName: dependency-track-tls
+      hosts:
+        - dependency-track.localhost

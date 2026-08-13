@@ -9,9 +9,11 @@ on:
     paths:
       - ".github/actions/kind/**"
       - ".github/workflows/kind.yml"
-      - "charts/**"
-      - "config/**"
-      - "manifests/**"
+      - "apps/**"
+      - "vendor/helm/**"
+      - "clusters/**"
+      - "components/**"
+      - "platform/**"
       - "Makefile"
       - "scripts/bootstrap.sh"
   pull_request:
@@ -20,9 +22,11 @@ on:
     paths:
       - ".github/actions/kind/**"
       - ".github/workflows/kind.yml"
-      - "charts/**"
-      - "config/**"
-      - "manifests/**"
+      - "apps/**"
+      - "vendor/helm/**"
+      - "clusters/**"
+      - "components/**"
+      - "platform/**"
       - "Makefile"
       - "scripts/bootstrap.sh"
   workflow_dispatch:
@@ -49,5 +53,5 @@ jobs:
         uses: ./.github/actions/kind
         with:
           cluster-name: template-k8s
-          kind-config: config/kind-cluster.yaml
-          kustomize-path: manifests/overlays/dev/dependency-track
+          kind-config: clusters/dev/kind-cluster.yaml
+          kustomize-path: clusters/dev

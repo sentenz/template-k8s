@@ -31,7 +31,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 - [Docker](https://www.docker.com/)
   > Containerization platform for building, shipping, and running containerized applications.
 
-- [Make](https://www.gnu.org/software/make/)
+- [Make](https://www.gnu.org/software/make)
   > Task automation tool to manage build processes and workflows.
 
   ```bash
@@ -45,6 +45,9 @@ Orchestration platform for automating deployment, scaling, and management of con
     - [Architecture](docs/architecture.md)
       > High-level overview of the system's structure, components, and interactions.
 
+    - [Project Layout](docs/project-layout.md)
+      > Helm and Kustomize repository structure for development, stage, and production environments.
+
 2. Usage and Instructions
 
     - CI/CD
@@ -53,14 +56,33 @@ Orchestration platform for automating deployment, scaling, and management of con
       uses: sentenz/actions/kind@latest
       ```
 
-    - Tasks
+    - Local development
+
+      `K8S_ENV` defaults to `dev`, so the local Kind workflow uses `clusters/dev/kind-cluster.yaml`, deploys `clusters/dev`, and stores its generated kubeconfig at `.local/kubeconfig/dev.yaml`.
 
       ```bash
-      # Local Kubernetes Cluster using KinD
       make k8s-setup
+      make k8s-render
       make k8s-deploy
       make k8s-destroy
       make k8s-teardown
+      ```
+
+    - Other environments
+
+      Select another cluster composition explicitly. Rendering does not require a kubeconfig; deploy and destroy use `.local/kubeconfig/<environment>.yaml` unless `K8S_KUBECONFIG` is overridden.
+
+      ```bash
+      make k8s-render K8S_ENV=stage
+      make k8s-render K8S_ENV=prod
+      ```
+
+    - Canonical environment rendering
+
+      ```bash
+      kustomize build clusters/dev --enable-helm --load-restrictor=LoadRestrictionsNone
+      kustomize build clusters/stage --enable-helm --load-restrictor=LoadRestrictionsNone
+      kustomize build clusters/prod --enable-helm --load-restrictor=LoadRestrictionsNone
       ```
 
 ## 2. Contribution
@@ -108,7 +130,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 
 ## 3. Troubleshoot
 
-- [Dependency Track](manifests/base/dependency-track/README.md#12-troubleshoot)
+- [Dependency Track](apps/dependency-track/README.md#troubleshooting)
   > Troubleshooting for Dependency Track integration.
 
 ## 4. References

@@ -1,0 +1,18 @@
+---
+global:
+  postgresql:
+    auth:
+      username: dtrack
+      database: dtrack
+      existingSecret: postgresql-auth
+      secretKeys:
+        adminPasswordKey: postgres-password
+        userPasswordKey: password
+
+primary:
+  resourcesPreset: small
+  service:
+    type: ClusterIP
+
+tls:
+  enabled: false
