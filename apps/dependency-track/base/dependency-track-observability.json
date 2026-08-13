@@ -1,0 +1,59 @@
+{
+  "title": "Dependency-Track Observability",
+  "uid": "dependency-track-observability",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "tags": ["dependency-track", "observability"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API server target",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 5},
+      "targets": [{"refId": "A", "expr": "min(up{namespace=\"dependency-track\",service=\"dependency-track-api-server-metrics\"})"}],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}}]}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "JVM heap utilization",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 6, "y": 0, "w": 18, "h": 8},
+      "targets": [{"refId": "A", "expr": "100 * sum by (pod) (jvm_memory_used_bytes{namespace=\"dependency-track\",area=\"heap\"}) / sum by (pod) (jvm_memory_max_bytes{namespace=\"dependency-track\",area=\"heap\"})", "legendFormat": "{{pod}}"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Database connection pools",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {"refId": "A", "expr": "hikaricp_connections{namespace=\"dependency-track\"}", "legendFormat": "{{pool}} total"},
+        {"refId": "B", "expr": "hikaricp_connections_active{namespace=\"dependency-track\"}", "legendFormat": "{{pool}} active"}
+      ],
+      "fieldConfig": {"defaults": {}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Executor queued tasks",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [{"refId": "A", "expr": "executor_queued_tasks{namespace=\"dependency-track\"}", "legendFormat": "{{name}}"}],
+      "fieldConfig": {"defaults": {}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Application logs",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 10},
+      "targets": [{"refId": "A", "expr": "{k8s_namespace_name=\"dependency-track\"}"}],
+      "options": {"showTime": true, "wrapLogMessage": true, "sortOrder": "Descending"}
+    }
+  ]
+}
