@@ -53,7 +53,20 @@ The stage and production profiles are intentionally conservative single-cluster 
 
 ## Grafana credentials
 
-Development creates the disposable `observability/grafana-admin` Secret with `admin-user` and `admin-password` keys.
+Development exposes Grafana at:
+
+```text
+https://grafana.localhost/
+```
+
+The dev overlay creates the disposable `observability/grafana-admin` Secret with these credentials:
+
+| Setting    | Value           |
+| ---------- | --------------- |
+| Username   | `admin`         |
+| Password   | `observability` |
+
+The `grafana.localhost` ingress uses the `observability/grafana-tls` TLS Secret generated from the local development certificate files under `clusters/dev`.
 
 Stage and production expect an externally managed Secret with the same contract:
 
