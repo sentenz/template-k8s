@@ -32,22 +32,22 @@ Grafana provisions Prometheus, Loki, and Tempo data sources. Tempo is linked to 
 
 ## Helm charts
 
-| Component | Chart | Version | Repository |
-| --- | --- | ---: | --- |
-| Metrics / dashboards / alerting | `kube-prometheus-stack` | `88.3.0` | `https://prometheus-community.github.io/helm-charts` |
-| Logs | `loki` | `18.8.0` | `https://grafana-community.github.io/helm-charts` |
-| Traces | `tempo` | `2.2.3` | `https://grafana-community.github.io/helm-charts` |
-| Telemetry collection | `opentelemetry-collector` | `0.169.0` | `https://open-telemetry.github.io/opentelemetry-helm-charts` |
+| Component                       | Chart                     |   Version | Repository                                                   |
+| ------------------------------- | ------------------------- | --------: | ------------------------------------------------------------ |
+| Metrics / dashboards / alerting | `kube-prometheus-stack`   |  `88.3.0` | `https://prometheus-community.github.io/helm-charts`         |
+| Logs                            | `loki`                    |  `18.8.0` | `https://grafana-community.github.io/helm-charts`            |
+| Traces                          | `tempo`                   |   `2.2.3` | `https://grafana-community.github.io/helm-charts`            |
+| Telemetry collection            | `opentelemetry-collector` | `0.169.0` | `https://open-telemetry.github.io/opentelemetry-helm-charts` |
 
 Shared chart values live under `values/`; environment capacity and retention deltas live in `overlays/{dev,stage,prod}`.
 
 ## Environment profile
 
 | Environment | Prometheus retention | Prometheus storage | Loki storage | Tempo storage | Grafana storage |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `dev` | 2 days | ephemeral | ephemeral | ephemeral | ephemeral |
-| `stage` | 7 days | 20 GiB | 20 GiB | 20 GiB | 5 GiB |
-| `prod` | 30 days | 100 GiB | 100 GiB | 50 GiB | 10 GiB |
+| ----------- | -------------------: | -----------------: | -----------: | ------------: | --------------: |
+| `dev`       |               2 days |          ephemeral |    ephemeral |     ephemeral |       ephemeral |
+| `stage`     |               7 days |             20 GiB |       20 GiB |        20 GiB |           5 GiB |
+| `prod`      |              30 days |            100 GiB |      100 GiB |        50 GiB |          10 GiB |
 
 The stage and production profiles are intentionally conservative single-cluster defaults. Loki and Tempo use single-binary/local-persistence modes here to keep the template self-contained. Production deployments requiring high availability, multi-cluster aggregation, or higher ingestion volumes should move logs and traces to object storage and an appropriate scalable/distributed topology.
 
@@ -57,8 +57,8 @@ Development creates the disposable `observability/grafana-admin` Secret with `ad
 
 Stage and production expect an externally managed Secret with the same contract:
 
-| Namespace | Secret | Required keys |
-| --- | --- | --- |
+| Namespace       | Secret          | Required keys                  |
+| --------------- | --------------- | ------------------------------ |
 | `observability` | `grafana-admin` | `admin-user`, `admin-password` |
 
 Do not commit stage or production Grafana credentials in Helm values.
