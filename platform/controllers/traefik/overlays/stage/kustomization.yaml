@@ -15,6 +15,10 @@ helmCharts:
     releaseName: traefik
     namespace: traefik
     valuesFile: values.yaml
+    valuesInline:
+      metrics:
+        prometheus:
+          disableAPICheck: true
 
 patches:
   - path: patch-service-loadbalancer.yaml
