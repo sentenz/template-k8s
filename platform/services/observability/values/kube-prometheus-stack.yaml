@@ -1,0 +1,45 @@
+---
+fullnameOverride: monitoring
+
+grafana:
+  enabled: true
+  fullnameOverride: grafana
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  sidecar:
+    datasources:
+      uid: prometheus
+      exemplarTraceIdDestinations:
+        datasourceUid: tempo
+        traceIdLabelName: trace_id
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      access: proxy
+      url: http://loki.observability.svc.cluster.local:3100
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      access: proxy
+      url: http://tempo.observability.svc.cluster.local:3200
+      jsonData:
+        nodeGraph:
+          enabled: true
+        serviceMap:
+          datasourceUid: prometheus
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: -5m
+          spanEndTimeShift: 5m
+          filterByTraceID: true
+          filterBySpanID: false
+
+prometheus:
+  prometheusSpec:
+    enableRemoteWriteReceiver: true
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false

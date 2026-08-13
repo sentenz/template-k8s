@@ -1,0 +1,19 @@
+---
+fullnameOverride: tempo
+replicas: 1
+
+tempo:
+  reportingEnabled: false
+  retention: 24h
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://monitoring-prometheus.observability.svc.cluster.local:9090/api/v1/write
+  overrides:
+    defaults:
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
+
+serviceMonitor:
+  enabled: true

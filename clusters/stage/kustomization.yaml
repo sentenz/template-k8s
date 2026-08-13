@@ -4,6 +4,7 @@ kind: Kustomization
 
 resources:
   - ../../platform/services/postgresql/overlays/stage
+  - ../../platform/services/observability/overlays/stage
   - ../../platform/controllers/traefik/overlays/stage
   - ../../apps/dependency-track/overlays/stage
 

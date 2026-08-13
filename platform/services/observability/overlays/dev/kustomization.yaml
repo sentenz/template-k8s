@@ -1,0 +1,57 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+helmGlobals:
+  chartHome: ../../../../../vendor/helm
+
+helmCharts:
+  - name: kube-prometheus-stack
+    version: 88.3.0
+    repo: https://prometheus-community.github.io/helm-charts
+    releaseName: observability
+    namespace: observability
+    includeCRDs: true
+    valuesFile: ../../values/kube-prometheus-stack.yaml
+    valuesInline:
+      prometheus:
+        prometheusSpec:
+          retention: 2d
+  - name: loki
+    version: 18.8.0
+    repo: https://grafana-community.github.io/helm-charts
+    releaseName: loki
+    namespace: observability
+    valuesFile: ../../values/loki.yaml
+    valuesInline:
+      singleBinary:
+        persistence:
+          enabled: false
+  - name: tempo
+    version: 2.2.3
+    repo: https://grafana-community.github.io/helm-charts
+    releaseName: tempo
+    namespace: observability
+    valuesFile: ../../values/tempo.yaml
+    valuesInline:
+      persistence:
+        enabled: false
+  - name: opentelemetry-collector
+    version: 0.169.0
+    repo: https://open-telemetry.github.io/opentelemetry-helm-charts
+    releaseName: otel-collector
+    namespace: observability
+    valuesFile: ../../values/opentelemetry-collector.yaml
+
+secretGenerator:
+  - name: grafana-admin
+    namespace: observability
+    literals:
+      - admin-user=admin
+      - admin-password=observability
+
+generatorOptions:
+  disableNameSuffixHash: true

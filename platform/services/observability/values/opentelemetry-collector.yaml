@@ -1,0 +1,68 @@
+---
+fullnameOverride: otel-collector
+mode: daemonset
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+presets:
+  logsCollection:
+    enabled: true
+    includeCollectorLogs: false
+  kubernetesAttributes:
+    enabled: true
+
+config:
+  exporters:
+    otlp/tempo:
+      endpoint: tempo.observability.svc.cluster.local:4317
+      tls:
+        insecure: true
+    otlphttp/loki:
+      endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+    prometheusremotewrite:
+      endpoint: http://monitoring-prometheus.observability.svc.cluster.local:9090/api/v1/write
+  service:
+    pipelines:
+      logs:
+        exporters:
+          - otlphttp/loki
+        processors:
+          - memory_limiter
+          - batch
+        receivers:
+          - otlp
+      metrics:
+        exporters:
+          - prometheusremotewrite
+        processors:
+          - memory_limiter
+          - batch
+        receivers:
+          - otlp
+          - prometheus
+      traces:
+        exporters:
+          - otlp/tempo
+        processors:
+          - memory_limiter
+          - batch
+        receivers:
+          - otlp
+
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi

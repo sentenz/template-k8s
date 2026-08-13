@@ -4,6 +4,7 @@ kind: Kustomization
 
 resources:
   - ../../platform/services/postgresql/overlays/prod
+  - ../../platform/services/observability/overlays/prod
   - ../../platform/controllers/traefik/overlays/prod
   - ../../apps/dependency-track/overlays/prod
 
