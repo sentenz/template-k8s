@@ -229,6 +229,7 @@ jobs:
           KUSTOMIZE_PATH: clusters/dev
           INGRESS_HOST: dependency-track.localhost
           GRAFANA_HOST: grafana.localhost
+          KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
         run: |
           set -euo pipefail
 
@@ -269,6 +270,31 @@ jobs:
 
           curl "${grafana_curl_options[@]}" --output /dev/null "https://${GRAFANA_HOST}/login"
 
+          grafana_user="$(kubectl get secret grafana-admin --namespace observability --output jsonpath='{.data.admin-user}' | base64 --decode)"
+          grafana_password="$(kubectl get secret grafana-admin --namespace observability --output jsonpath='{.data.admin-password}' | base64 --decode)"
+          grafana_api_options=(
+            "${grafana_curl_options[@]}"
+            --user "${grafana_user}:${grafana_password}"
+            --header "Accept: application/json"
+          )
+
+          curl "${grafana_api_options[@]}" "https://${GRAFANA_HOST}/api/health" \
+            | jq -e '.database == "ok"' >/dev/null
+
+          curl "${grafana_api_options[@]}" "https://${GRAFANA_HOST}/api/datasources/uid/prometheus" \
+            | jq -e '.uid == "prometheus" and .type == "prometheus"' >/dev/null
+
+          curl "${grafana_api_options[@]}" "https://${GRAFANA_HOST}/api/datasources/uid/prometheus/health" \
+            | jq -e '.status == "OK"' >/dev/null
+
+          prometheus_response="$(
+            curl "${grafana_api_options[@]}" \
+              --get \
+              --data-urlencode 'query=up' \
+              "https://${GRAFANA_HOST}/api/datasources/proxy/uid/prometheus/api/v1/query"
+          )"
+          jq -e '.status == "success" and (.data.result | length > 0)' <<<"${prometheus_response}" >/dev/null
+
       - name: Publish Deployment Summary
         if: success()
         shell: bash
@@ -301,6 +327,10 @@ jobs:
           kubectl get pods --all-namespaces -o wide | tee "${DIAGNOSTICS_DIRECTORY}/pods-wide.txt"
           kubectl get events --all-namespaces --sort-by=.metadata.creationTimestamp | tail -n 200 | tee "${DIAGNOSTICS_DIRECTORY}/events.txt"
           kubectl describe pods --all-namespaces > "${DIAGNOSTICS_DIRECTORY}/pods.txt" 2>&1
+          kubectl get endpoints monitoring-prometheus --namespace observability --output yaml > "${DIAGNOSTICS_DIRECTORY}/prometheus-endpoints.yaml" 2>&1
+          kubectl get configmap monitoring-grafana-datasource --namespace observability --output yaml > "${DIAGNOSTICS_DIRECTORY}/grafana-datasource.yaml" 2>&1
+          kubectl get servicemonitors --all-namespaces --output wide > "${DIAGNOSTICS_DIRECTORY}/servicemonitors.txt" 2>&1
+          kubectl get prometheusrules --all-namespaces --output wide > "${DIAGNOSTICS_DIRECTORY}/prometheusrules.txt" 2>&1
 
           while read -r namespace pod; do
             kubectl logs \
