@@ -2,17 +2,42 @@
 global:
   postgresql:
     auth:
-      username: dtrack
-      database: dtrack
       existingSecret: postgresql-auth
       secretKeys:
         adminPasswordKey: postgres-password
-        userPasswordKey: password
 
 primary:
   resourcesPreset: small
   service:
     type: ClusterIP
+
+  # Kind dev is disposable: bootstrap tenant databases only on first initialization.
+  extraEnvVarsSecret: postgresql-tenant-dependency-track
+  initdb:
+    scripts:
+      10-dependency-track.sh: |
+        #!/bin/sh
+        set -eu
+
+        psql --username postgres --dbname postgres --set=ON_ERROR_STOP=1 \
+          --set=tenant_password="${password}" <<'SQL'
+        CREATE ROLE dtrack
+          LOGIN
+          PASSWORD :'tenant_password'
+          NOSUPERUSER
+          NOCREATEDB
+          NOCREATEROLE
+          NOREPLICATION
+          CONNECTION LIMIT 20;
+        CREATE DATABASE dtrack OWNER dtrack;
+        REVOKE ALL ON DATABASE dtrack FROM PUBLIC;
+        SQL
+
+  networkPolicy:
+    enabled: true
+    allowExternal: false
+    ingressNSMatchLabels:
+      platform.sentenz.io/postgresql-client: "true"
 
 tls:
   enabled: false

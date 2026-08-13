@@ -8,6 +8,14 @@ resources:
   - ../../apps/dependency-track/overlays/dev
 
 secretGenerator:
+  - name: postgresql-tenant-dependency-track
+    namespace: postgresql
+    envs:
+      - dependency-track-database.fixture
+  - name: dependency-track-database
+    namespace: dependency-track
+    envs:
+      - dependency-track-database.fixture
   - name: dependency-track-tls
     namespace: dependency-track
     type: kubernetes.io/tls

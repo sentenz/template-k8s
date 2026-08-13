@@ -1,8 +1,10 @@
 ---
 database:
   jdbcUrl: "jdbc:postgresql://postgresql.postgresql.svc.cluster.local:5432/dtrack"
-  username: "dtrack"
-  password: "dtrack"
+  existingSecret:
+    name: dependency-track-database
+    usernameKey: username
+    passwordKey: password
 
 # Development-only fixture KEK. Persistent environments use an externally managed Secret.
 secretManagement:
