@@ -14,6 +14,7 @@ on:
       - "clusters/**"
       - "components/**"
       - "platform/**"
+      - "GNUmakefile"
       - "Makefile"
       - "scripts/bootstrap.sh"
   pull_request:
@@ -27,6 +28,7 @@ on:
       - "clusters/**"
       - "components/**"
       - "platform/**"
+      - "GNUmakefile"
       - "Makefile"
       - "scripts/bootstrap.sh"
   workflow_dispatch:
@@ -49,36 +51,34 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Generate Ephemeral TLS Certificate
+      - name: Generate Ephemeral TLS Certificates
         shell: bash
         env:
-          INGRESS_HOST: dependency-track.localhost
+          INGRESS_HOSTS: dependency-track.localhost grafana.localhost
           KUSTOMIZE_PATH: clusters/dev
           CERTIFICATE_BACKUP: ${{ runner.temp }}/kind-certificate-backup
         run: |
           set -euo pipefail
 
-          certificate_path="${KUSTOMIZE_PATH}/${INGRESS_HOST}+1.pem"
-          private_key_path="${KUSTOMIZE_PATH}/${INGRESS_HOST}+1-key.pem"
-
           mkdir -p "${CERTIFICATE_BACKUP}"
-          for path in "${certificate_path}" "${private_key_path}"; do
-            name="$(basename "${path}")"
-            if [[ -e "${path}" ]]; then
-              cp -p -- "${path}" "${CERTIFICATE_BACKUP}/${name}"
-              touch "${CERTIFICATE_BACKUP}/${name}.present"
-            fi
-          done
 
-          openssl req \
-            -x509 \
-            -nodes \
-            -newkey rsa:2048 \
-            -days 1 \
-            -keyout "${private_key_path}" \
-            -out "${certificate_path}" \
-            -subj "/CN=${INGRESS_HOST}" \
-            -addext "subjectAltName=DNS:${INGRESS_HOST}"
+          for ingress_host in ${INGRESS_HOSTS}; do
+            certificate_path="${KUSTOMIZE_PATH}/${ingress_host}+1.pem"
+            private_key_path="${KUSTOMIZE_PATH}/${ingress_host}+1-key.pem"
+
+            for path in "${certificate_path}" "${private_key_path}"; do
+              name="$(basename "${path}")"
+              if [[ -e "${path}" ]]; then
+                cp -p -- "${path}" "${CERTIFICATE_BACKUP}/${name}"
+                touch "${CERTIFICATE_BACKUP}/${name}.present"
+              fi
+            done
+
+            make k8s-certificate-generate \
+              K8S_HOSTNAME="${ingress_host}" \
+              K8S_CERTIFICATE_DIR="${KUSTOMIZE_PATH}" \
+              K8S_CERTIFICATE_DAYS=1
+          done
 
       - name: Create Kind Cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
@@ -251,21 +251,23 @@ jobs:
           curl "${curl_options[@]}" "https://${INGRESS_HOST}/health"
           curl "${curl_options[@]}" --output /dev/null "https://${INGRESS_HOST}/"
 
-          curl \
-            --connect-timeout 5 \
-            --fail-with-body \
-            --location \
-            --max-time 30 \
-            --noproxy "*" \
-            --retry 30 \
-            --retry-all-errors \
-            --retry-delay 10 \
-            --retry-max-time 300 \
-            --show-error \
-            --silent \
-            --resolve "${GRAFANA_HOST}:80:127.0.0.1" \
-            --output /dev/null \
-            "http://${GRAFANA_HOST}/login"
+          grafana_curl_options=(
+            --cacert "${KUSTOMIZE_PATH}/${GRAFANA_HOST}+1.pem"
+            --connect-timeout 5
+            --fail-with-body
+            --location
+            --max-time 30
+            --noproxy "*"
+            --retry 30
+            --retry-all-errors
+            --retry-delay 10
+            --retry-max-time 300
+            --show-error
+            --silent
+            --resolve "${GRAFANA_HOST}:443:127.0.0.1"
+          )
+
+          curl "${grafana_curl_options[@]}" --output /dev/null "https://${GRAFANA_HOST}/login"
 
       - name: Publish Deployment Summary
         if: success()
@@ -327,20 +329,22 @@ jobs:
         shell: bash
         env:
           KUSTOMIZE_PATH: clusters/dev
-          INGRESS_HOST: dependency-track.localhost
+          INGRESS_HOSTS: dependency-track.localhost grafana.localhost
           KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
           CERTIFICATE_BACKUP: ${{ runner.temp }}/kind-certificate-backup
           DIAGNOSTICS_DIRECTORY: ${{ runner.temp }}/kind-diagnostics
         run: |
           set +e
 
-          for name in "${INGRESS_HOST}+1.pem" "${INGRESS_HOST}+1-key.pem"; do
-            path="${KUSTOMIZE_PATH}/${name}"
-            if [[ -f "${CERTIFICATE_BACKUP}/${name}.present" ]]; then
-              mv -f -- "${CERTIFICATE_BACKUP}/${name}" "${path}"
-            else
-              rm -f -- "${path}"
-            fi
+          for ingress_host in ${INGRESS_HOSTS}; do
+            for name in "${ingress_host}+1.pem" "${ingress_host}+1-key.pem"; do
+              path="${KUSTOMIZE_PATH}/${name}"
+              if [[ -f "${CERTIFICATE_BACKUP}/${name}.present" ]]; then
+                mv -f -- "${CERTIFICATE_BACKUP}/${name}" "${path}"
+              else
+                rm -f -- "${path}"
+              fi
+            done
           done
 
           rm -f -- "${KUBECONFIG}"
