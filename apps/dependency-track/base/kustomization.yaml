@@ -11,6 +11,7 @@ configMapGenerator:
     namespace: observability
     files:
       - dependency-track-observability.json
+      - dependency-track-sre-strategies.json
     options:
       labels:
         app.kubernetes.io/name: dependency-track
