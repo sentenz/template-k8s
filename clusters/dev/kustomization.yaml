@@ -7,6 +7,7 @@ resources:
   - ../../platform/services/observability/overlays/dev
   - ../../platform/controllers/traefik/overlays/dev
   - ../../apps/dependency-track/overlays/dev
+  - grafana-ingress.yaml
 
 secretGenerator:
   - name: dependency-track-tls

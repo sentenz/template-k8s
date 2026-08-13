@@ -228,6 +228,7 @@ jobs:
         env:
           KUSTOMIZE_PATH: clusters/dev
           INGRESS_HOST: dependency-track.localhost
+          GRAFANA_HOST: grafana.localhost
         run: |
           set -euo pipefail
 
@@ -249,6 +250,22 @@ jobs:
 
           curl "${curl_options[@]}" "https://${INGRESS_HOST}/health"
           curl "${curl_options[@]}" --output /dev/null "https://${INGRESS_HOST}/"
+
+          curl \
+            --connect-timeout 5 \
+            --fail-with-body \
+            --location \
+            --max-time 30 \
+            --noproxy "*" \
+            --retry 30 \
+            --retry-all-errors \
+            --retry-delay 10 \
+            --retry-max-time 300 \
+            --show-error \
+            --silent \
+            --resolve "${GRAFANA_HOST}:80:127.0.0.1" \
+            --output /dev/null \
+            "http://${GRAFANA_HOST}/login"
 
       - name: Publish Deployment Summary
         if: success()
