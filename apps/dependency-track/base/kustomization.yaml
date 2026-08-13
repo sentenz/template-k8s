@@ -4,3 +4,18 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - prometheus-rules.yaml
+
+configMapGenerator:
+  - name: dependency-track-grafana-dashboard
+    namespace: dependency-track
+    files:
+      - dependency-track-observability.json
+    options:
+      labels:
+        app.kubernetes.io/name: dependency-track
+        app.kubernetes.io/part-of: dependency-track
+        grafana_dashboard: "1"
+
+generatorOptions:
+  disableNameSuffixHash: true
