@@ -241,6 +241,7 @@ runs:
         KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
         KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
         RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
+        CRD_MANIFEST: ${{ runner.temp }}/template-k8s-crds.yaml
       run: |
         set -euo pipefail
 
@@ -250,6 +251,41 @@ runs:
           > "${RENDERED_MANIFEST}"
 
         test -s "${RENDERED_MANIFEST}"
+
+        awk '
+          function flush_document() {
+            if (is_crd && length(document) > 0) {
+              printf "%s", document
+            }
+            document = ""
+            is_crd = 0
+          }
+          /^---[[:space:]]*$/ {
+            flush_document()
+            document = $0 ORS
+            next
+          }
+          {
+            document = document $0 ORS
+            if ($0 ~ /^kind:[[:space:]]*CustomResourceDefinition[[:space:]]*$/) {
+              is_crd = 1
+            }
+          }
+          END {
+            flush_document()
+          }
+        ' "${RENDERED_MANIFEST}" > "${CRD_MANIFEST}"
+
+        if [[ -s "${CRD_MANIFEST}" ]]; then
+          mapfile -t crds < <(kubectl apply -f "${CRD_MANIFEST}" -o name)
+          if (( ${#crds[@]} > 0 )); then
+            kubectl wait \
+              --for=condition=Established \
+              --timeout=2m \
+              "${crds[@]}"
+          fi
+        fi
+
         kubectl apply \
           --dry-run=client \
           --validate=strict \
@@ -318,15 +354,17 @@ runs:
         wait_for_rollouts postgresql 15m
         wait_for_rollouts traefik 10m
         wait_for_rollouts dependency-track 20m
+        wait_for_rollouts observability 20m
 
         wait_for_jobs postgresql 10m
         wait_for_jobs traefik 10m
         wait_for_jobs dependency-track 10m
+        wait_for_jobs observability 10m
 
-        for namespace in postgresql traefik dependency-track; do
+        for namespace in postgresql traefik dependency-track observability; do
           kubectl wait --for=condition=Ready pod --all \
             --namespace "${namespace}" \
-            --timeout=5m
+            --timeout=10m
         done
 
         kubectl wait \
@@ -361,7 +399,6 @@ runs:
         )
 
         curl "${curl_options[@]}" "https://${INGRESS_HOST}/health"
-
         curl "${curl_options[@]}" --output /dev/null "https://${INGRESS_HOST}/"
 
     - name: Publish Deployment Summary
@@ -456,8 +493,10 @@ runs:
       shell: bash
       env:
         KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
+        INGRESS_HOST: ${{ inputs.ingress-host }}
         KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
         RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
+        CRD_MANIFEST: ${{ runner.temp }}/template-k8s-crds.yaml
         CERTIFICATE_BACKUP: ${{ runner.temp }}/kind-certificate-backup
         DIAGNOSTICS_DIRECTORY: ${{ runner.temp }}/kind-diagnostics
       run: |
@@ -472,5 +511,5 @@ runs:
           fi
         done
 
-        rm -f -- "${KUBECONFIG}" "${RENDERED_MANIFEST}"
+        rm -f -- "${KUBECONFIG}" "${RENDERED_MANIFEST}" "${CRD_MANIFEST}"
         rm -rf -- "${CERTIFICATE_BACKUP}" "${DIAGNOSTICS_DIRECTORY}"
