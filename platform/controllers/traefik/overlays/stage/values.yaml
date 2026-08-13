@@ -11,5 +11,14 @@ ingressRoute:
   dashboard:
     enabled: false
 
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+    serviceMonitor:
+      enabled: true
+      namespace: observability
+
 log:
   level: INFO
