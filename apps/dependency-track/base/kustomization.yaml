@@ -8,7 +8,7 @@ resources:
 
 configMapGenerator:
   - name: dependency-track-grafana-dashboard
-    namespace: dependency-track
+    namespace: observability
     files:
       - dependency-track-observability.json
     options:
