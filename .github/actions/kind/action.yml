@@ -292,12 +292,6 @@ runs:
           fi
         fi
 
-        kubectl apply \
-          --server-side \
-          --dry-run=server \
-          --validate=strict \
-          -f "${RENDERED_MANIFEST}"
-
     - name: Deploy Manifests
       shell: bash
       env:
@@ -308,6 +302,7 @@ runs:
         kubectl apply \
           --server-side \
           --force-conflicts \
+          --validate=strict \
           -f "${RENDERED_MANIFEST}"
 
     - name: Wait for Workloads
