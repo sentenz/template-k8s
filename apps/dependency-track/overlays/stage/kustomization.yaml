@@ -15,3 +15,10 @@ helmCharts:
     releaseName: dependency-track
     namespace: dependency-track
     valuesFile: values.yaml
+    valuesInline:
+      apiServer:
+        serviceMonitor:
+          enabled: true
+          namespace: dependency-track
+          scrapeInterval: 30s
+          scrapeTimeout: 10s
