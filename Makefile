@@ -70,7 +70,7 @@ githooks-lefthook-initialize:
 	lefthook install --force
 .PHONY: githooks-lefthook-initialize
 
-## Deinitialize Lefthook Git hooks from the local repository
+## Deinitialize Lefthook Git hooks in the local repository
 githooks-lefthook-deinitialize:
 	lefthook uninstall
 .PHONY: githooks-lefthook-deinitialize
@@ -145,8 +145,59 @@ k8s-render: k8s-validate
 
 ## Deploy the selected Kubernetes cluster composition
 k8s-deploy: k8s-validate k8s-confirm
-	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f -
+	@rendered_manifest="$$(mktemp)"
+	crd_manifest="$$(mktemp)"
+	trap 'rm -f "$$rendered_manifest" "$$crd_manifest"' EXIT
+
+	$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$$rendered_manifest"
+
+	awk '
+	  function flush_document() {
+	    if (is_crd && length(document) > 0) {
+	      printf "%s", document
+	    }
+	    document = ""
+	    is_crd = 0
+	  }
+	  /^---[[:space:]]*$$/ {
+	    flush_document()
+	    document = $$0 ORS
+	    next
+	  }
+	  {
+	    document = document $$0 ORS
+	    if ($$0 ~ /^kind:[[:space:]]*CustomResourceDefinition[[:space:]]*$$/) {
+	      is_crd = 1
+	    }
+	  }
+	  END {
+	    flush_document()
+	  }
+	' "$$rendered_manifest" > "$$crd_manifest"
+
+	if [[ -s "$$crd_manifest" ]]; then
+	  mapfile -t crds < <(
+	    kubectl apply \
+	      --server-side \
+	      --force-conflicts \
+	      --kubeconfig "$(K8S_KUBECONFIG)" \
+	      -f "$$crd_manifest" \
+	      -o name
+	  )
+	  if (( $${#crds[@]} > 0 )); then
+	    kubectl wait \
+	      --kubeconfig "$(K8S_KUBECONFIG)" \
+	      --for=condition=Established \
+	      --timeout=2m \
+	      "$${crds[@]}"
+	  fi
+	fi
+
+	kubectl apply \
+	  --server-side \
+	  --force-conflicts \
+	  --kubeconfig "$(K8S_KUBECONFIG)" \
+	  -f "$$rendered_manifest"
 .PHONY: k8s-deploy
 
 ## Destroy the selected Kubernetes cluster composition
