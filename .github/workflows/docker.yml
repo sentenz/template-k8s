@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Docker Build
-        uses: sentenz/actions/docker@99935197a6935a691cb151a3e469f1a969bf7714 # 1.4.2
+        uses: sentenz/actions/docker@d3b0a0d59ac008f6918c5d8304acab2c9d1abbf2 # 1.4.3
         with:
           version: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           context: .
@@ -64,7 +64,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Docker Publish
-        uses: sentenz/actions/docker@99935197a6935a691cb151a3e469f1a969bf7714 # 1.4.2
+        uses: sentenz/actions/docker@d3b0a0d59ac008f6918c5d8304acab2c9d1abbf2 # 1.4.3
         with:
           version: ${{ inputs.version }}
           context: .
