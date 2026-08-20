@@ -39,14 +39,14 @@ default: help
 
 # NOTE Targets MUST have a leading comment line starting with `##` to be included in the list. See the targets below for examples.
 #
-## Display help message with available tasks and descriptions
+## Display help message with a list of available tasks and their descriptions
 help:
 	@awk 'BEGIN {printf "Tasks\n\tA collection of tasks used in the current project.\n\n"}'
 	@awk 'BEGIN {printf "Usage\n\tmake $(shell tput -Txterm setaf 6)<task>$(shell tput -Txterm sgr0)\n\n"}' $(MAKEFILE_LIST)
 	@awk '/^##/{c=substr($$0,3);next}c&&/^[[:alpha:]][[:alnum:]_-]+:/{print "$(shell tput -Txterm setaf 6)\t" substr($$1,1,index($$1,":")) "$(shell tput -Txterm sgr0)",c}1{c=0}' $(MAKEFILE_LIST) | column -s: -t
 .PHONY: help
 
-# ─── Setup & Teardown ─────────────────────────────────────────────────────────────────────────────
+# ─── Setup & Teardown ────────────────────────────────────────────────────────────────────────────
 
 ## Initialize a software development workspace with requisites
 bootstrap:
@@ -63,7 +63,7 @@ teardown:
 	cd $(@D)/scripts && ./teardown.sh
 .PHONY: teardown
 
-# ─── Git Hooks Manager ────────────────────────────────────────────────────────────────────────────
+# ─── Git Hooks Manager ───────────────────────────────────────────────────────────────────────────
 
 ## Initialize Lefthook Git hooks in the local repository
 githooks-lefthook-initialize:
@@ -75,7 +75,7 @@ githooks-lefthook-deinitialize:
 	lefthook uninstall
 .PHONY: githooks-lefthook-deinitialize
 
-# ─── Skills Manager ───────────────────────────────────────────────────────────────────────────────
+# ─── Skills Manager ──────────────────────────────────────────────────────────────────────────────
 
 ## Provision new Agent Skills into the project environment
 skills-agent-add:
@@ -87,7 +87,7 @@ skills-agent-update:
 	DISABLE_TELEMETRY=1 skills update git@gitlab.samscm.net:development-environment/templates/skills.git
 .PHONY: skills-agent-update
 
-# ─── Kubernetes Manager ───────────────────────────────────────────────────────────────────────────
+# ─── Kubernetes Manager ──────────────────────────────────────────────────────────────────────────
 
 # K8S_KIND_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
 K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.11@sha256:31c0dd210ecdea934b7394656539d155fddf0c6627af522d307df8d18e52f71e
@@ -187,9 +187,9 @@ k8s-observability:
 	@$(MAKE) -s k8s-observability-pod
 .PHONY: k8s-observability
 
-# ─── Helm Charts ──────────────────────────────────────────────────────────────────────────────────
+# ─── Helm Charts ─────────────────────────────────────────────────────────────────────────────────
 
-K8S_HELM_IMAGE ?= alpine/helm:4.2.4@sha256:76c375eed56144c68d6197c55bc5a4552fb42002190b796729901cbab3ae6e51
+K8S_HELM_IMAGE ?= alpine/helm:4.2.3@sha256:b97ba4f9b27fe7af16ee3d37e6815783c9d4a51289b6240a9024ec471611ae9b
 K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
 HELM_DEPENDENCY_TRACK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/dependency-track-*/dependency-track))
 HELM_POSTGRESQL_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/postgresql-*/postgresql))
@@ -272,9 +272,9 @@ helm-render-charts:
 	@$(MAKE) -s helm-render-postgresql
 .PHONY: helm-render-charts
 
-# ─── Dependency Manager ───────────────────────────────────────────────────────────────────────────
+# ─── Dependency Manager ──────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.30.3@sha256:d3d60a87bab73203327dd664f94f11e83091441ee4964c920662d83023446395
+DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.22.0@sha256:6a7cf82eb1cf845583248e5a4c92c2125028fba64249dfd253a14788d8048292
 DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_RENOVATE_IMAGE)"
 
 ## Update project dependencies locally using Renovate and generate a report
@@ -284,7 +284,7 @@ dependency-renovate-update:
 	$(DEPENDENCY_RENOVATE_ALIAS) renovate --platform=local --repository-cache=reset > logs/dependency/renovate.log 2>&1
 .PHONY: dependency-renovate-update
 
-# ─── Secrets Manager ──────────────────────────────────────────────────────────────────────────────
+# ─── Secrets Manager ─────────────────────────────────────────────────────────────────────────────
 
 SECRETS_SOPS_IMAGE ?= ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 SECRETS_SOPS_ALIAS ?= docker run --rm -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/root/.gnupg" -w /workspace "$(SECRETS_SOPS_IMAGE)"
@@ -419,7 +419,7 @@ secrets-sops-view:
 	$(SECRETS_SOPS_ALIAS) decrypt "$(filter-out $@,$(MAKECMDGOALS))"
 .PHONY: secrets-sops-view
 
-# ─── Policy Manager ───────────────────────────────────────────────────────────────────────────────
+# ─── Policy Manager ──────────────────────────────────────────────────────────────────────────────
 
 POLICY_CONFTEST_IMAGE ?= docker.io/openpolicyagent/conftest:v0.69.0@sha256:a38ba21668929a00dce2fe6ee43d1312228340bce5fd243f47dd0ce90516e558
 POLICY_CONFTEST_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_CONFTEST_IMAGE)"
@@ -455,9 +455,9 @@ policy-regal-lint:
 	$(POLICY_REGAL_ALIAS) lint "$(filter-out $@,$(MAKECMDGOALS))" --format json > logs/policy/regal.json 2>&1
 .PHONY: policy-regal-lint
 
-# ─── SAST Manager ─────────────────────────────────────────────────────────────────────────────────
+# ─── SAST Manager ────────────────────────────────────────────────────────────────────────────────
 
-SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.173.0@sha256:67319956da3dcb58baf5b322899c15458e3963e7018a86aeeb5cd224e69cb77a
+SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
 SAST_SEMGREP_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_SEMGREP_IMAGE)"
 SAST_SEMGREP_FILES ?= .
 SAST_SEMGREP_FILTER = $(if $(strip $(SAST_SEMGREP_FILES)),$(SAST_SEMGREP_FILES),.)
@@ -469,7 +469,7 @@ sast-semgrep-scan:
 	$(SAST_SEMGREP_ALIAS) semgrep scan --config auto --error --json --output logs/sast/semgrep.json $(SAST_SEMGREP_FILTER) 2> logs/sast/semgrep.log
 .PHONY: sast-semgrep-scan
 
-SAST_TRIVY_IMAGE ?= aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+SAST_TRIVY_IMAGE ?= aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c
 SAST_TRIVY_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_TRIVY_IMAGE)"
 SAST_TRIVY_FILES ?= .
 
@@ -638,6 +638,21 @@ sast-trivy-kubernetes:
 	docker run --rm -v "${HOME}/.kube/config:/root/.kube/config" -v "${PWD}:/workspace" -w /workspace "$(SAST_TRIVY_IMAGE)" kubernetes --output logs/sast/trivy-kubernetes.json $(if $(filter-out $@,$(MAKECMDGOALS)),$(filter-out $@,$(MAKECMDGOALS)),cluster) 2>&1
 .PHONY: sast-trivy-kubernetes
 
+SAST_TRIVY_KBOM_FILE ?= logs/sbom/kbom.cdx.json
+
+## Generate a CycloneDX KBOM (Kubernetes Bill of Materials) from the selected Kubernetes cluster
+sast-trivy-kbom:
+	@test -s "$(K8S_KUBECONFIG)" || { \
+		echo "error: kubeconfig not found: $(K8S_KUBECONFIG)" >&2; \
+		exit 1; \
+	}
+
+	@mkdir -p "$(dir $(SAST_TRIVY_KBOM_FILE))"
+
+	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock --volume "$(CURDIR):/workspace" --workdir /workspace \
+		"$(SAST_TRIVY_IMAGE)" k8s --kubeconfig "$(K8S_KUBECONFIG)" --format cyclonedx --output "/workspace/$(SAST_TRIVY_KBOM_FILE)"
+.PHONY: sast-trivy-kbom
+
 SAST_IMAGE_GITLEAKS ?= ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 
 ## Scan git repository history for leaked secrets using Gitleaks and generate a report
@@ -654,7 +669,7 @@ sast-gitleaks-staged:
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_GITLEAKS)" protect --redact --staged --source /workspace --report-format json --report-path logs/sast/gitleaks-protect.json 2>&1
 .PHONY: sast-gitleaks-staged
 
-SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.97.0@sha256:ff4c95e9df7d645daf2140e3ca1039031c63106268d5fbb25feb43ceca1bcc33
+SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.96.0@sha256:aa821cf4ace8861c7d096d83818cdf7bb9719028a52d37a52eaad44086a52577
 
 ## Scan local filesystem for leaked secrets using TruffleHog and generate a report
 sast-trufflehog-fs:
@@ -670,7 +685,7 @@ sast-trufflehog-git:
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRUFFLEHOG)" git file:///workspace --no-update --json > logs/sast/trufflehog-git.json 2> logs/sast/trufflehog-git.log
 .PHONY: sast-trufflehog-git
 
-# ─── Supply Chain Security ────────────────────────────────────────────────────────────────────────
+# ─── Supply Chain Security ───────────────────────────────────────────────────────────────────────
 
 SAST_COSIGN_IMAGE ?= cgr.dev/chainguard/cosign:3.0.0@sha256:b6bc266358e9368be1b3d01fca889b78d5ad5a47832986e14640c34a237ef638
 SAST_COSIGN_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_COSIGN_IMAGE)"
@@ -718,7 +733,7 @@ sast-cosign-verify:
 	$(SAST_COSIGN_ALIAS) verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
 .PHONY: sast-cosign-verify
 
-# ─── Container Manager ────────────────────────────────────────────────────────────────────────────
+# ─── Container Manager ───────────────────────────────────────────────────────────────────────────
 
 CONTAINER_DOCKER_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null))
 CONTAINER_DOCKER_TAG ?= $(or $(shell git tag --sort=-creatordate | head -n 1),latest)
@@ -748,61 +763,3 @@ container-docker-teardown:
 	# Remove all Docker volumes (unused named `LINKS = 0`, anonymous)
 	@docker volume prune -f -a --filter "label!=keep=true"
 .PHONY: container-docker-teardown
-
-# ─── Certificate Manager ─────────────────────────────────────────────────────────────────────────
-
-CERT_HOSTNAME ?=
-CERT_DIR ?= $(K8S_CLUSTER_PATH)
-CERT_DAYS ?= 365
-
-# Usage: make k8s-certificate-generate CERT_HOSTNAME=<hostname-or-url> [CERT_DIR=<directory>] [CERT_DAYS=<days>]
-#
-## Generate a self-signed TLS certificate for a local hostname or URL
-k8s-certificate-generate:
-	@raw_hostname="$(strip $(CERT_HOSTNAME))"
-	if [[ -z "$$raw_hostname" ]]; then
-		echo "usage: make k8s-certificate-generate CERT_HOSTNAME=<hostname-or-url> [CERT_DIR=<directory>] [CERT_DAYS=<days>]" >&2
-		exit 1
-	fi
-
-	hostname="$$raw_hostname"
-	hostname="$${hostname#*://}"
-	hostname="$${hostname%%/*}"
-	hostname="$${hostname%%\?*}"
-	hostname="$${hostname%%\#*}"
-	hostname="$${hostname%%:*}"
-
-	if (( $${#hostname} > 253 )) || [[ ! "$$hostname" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$$ ]] || [[ "$$hostname" == *..* ]]; then
-		echo "error: invalid hostname derived from '$(CERT_HOSTNAME)': $$hostname" >&2
-		exit 1
-	fi
-	if [[ ! "$(CERT_DAYS)" =~ ^[1-9][0-9]*$$ ]]; then
-		echo "error: CERT_DAYS must be a positive integer" >&2
-		exit 1
-	fi
-	if ! command -v openssl >/dev/null 2>&1; then
-		echo "error: openssl is required to generate a self-signed certificate" >&2
-		exit 1
-	fi
-
-	output_dir="$(CERT_DIR)"
-	certificate_path="$$output_dir/$$hostname+1.pem"
-	private_key_path="$$output_dir/$$hostname+1-key.pem"
-	mkdir -p "$$output_dir"
-
-	umask 077
-	openssl req \
-		-x509 \
-		-nodes \
-		-newkey rsa:2048 \
-		-sha256 \
-		-days "$(CERT_DAYS)" \
-		-keyout "$$private_key_path" \
-		-out "$$certificate_path" \
-		-subj "/CN=$$hostname" \
-		-addext "subjectAltName=DNS:$$hostname"
-	chmod 0644 "$$certificate_path"
-
-	printf 'Generated self-signed certificate for %s\n  certificate: %s\n  private key: %s\n' \
-		"$$hostname" "$$certificate_path" "$$private_key_path"
-.PHONY: k8s-certificate-generate
