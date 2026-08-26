@@ -274,7 +274,7 @@ helm-render-charts:
 
 # ─── Dependency Manager ───────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.30.3@sha256:d3d60a87bab73203327dd664f94f11e83091441ee4964c920662d83023446395
+DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.39.2@sha256:e6b93e709ca64495ab9307350b260064276ee02d15c6886387fd2d42c926623b
 DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_RENOVATE_IMAGE)"
 
 ## Update project dependencies locally using Renovate and generate a report
@@ -457,7 +457,7 @@ policy-regal-lint:
 
 # ─── SAST Manager ─────────────────────────────────────────────────────────────────────────────────
 
-SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.173.0@sha256:67319956da3dcb58baf5b322899c15458e3963e7018a86aeeb5cd224e69cb77a
+SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.174.0@sha256:f1f7b71861c7b28b6e0f661225a2c4f58a484f5d0f182465c6d6b3b22f972ade
 SAST_SEMGREP_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_SEMGREP_IMAGE)"
 SAST_SEMGREP_FILES ?= .
 SAST_SEMGREP_FILTER = $(if $(strip $(SAST_SEMGREP_FILES)),$(SAST_SEMGREP_FILES),.)
