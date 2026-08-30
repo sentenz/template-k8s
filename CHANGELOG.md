@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.12](https://github.com/sentenz/template-k8s/compare/2.1.11...2.1.12) (2026-08-30)
+
+### Bug Fixes
+
+* **deps:** update kindest/node docker tag to v1.37.0 ([#107](https://github.com/sentenz/template-k8s/issues/107)) ([19eba9b](https://github.com/sentenz/template-k8s/commit/19eba9bb4c7c49da1b76bb2a1247de8f4b3f0686))
+
 ## [2.1.11](https://github.com/sentenz/template-k8s/compare/2.1.10...2.1.11) (2026-08-02)
 
 ### Bug Fixes
