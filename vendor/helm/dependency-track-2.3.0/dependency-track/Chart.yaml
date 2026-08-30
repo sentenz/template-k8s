@@ -1,0 +1,24 @@
+annotations:
+  artifacthub.io/links: |
+    - name: Upgrade guide
+      url: https://dependencytrack.github.io/docs/next/guides/upgrading/
+    - name: Chart upgrade notes
+      url: https://github.com/DependencyTrack/helm-charts/blob/main/charts/dependency-track/UPGRADING.md
+    - name: Dependency-Track release notes
+      url: https://github.com/DependencyTrack/dependency-track/releases
+apiVersion: v2
+appVersion: 5.1.0
+description: Dependency-Track is an intelligent Component Analysis platform that allows
+  organizations to identify and reduce risk in the software supply chain.
+home: https://github.com/DependencyTrack/dependency-track
+icon: https://avatars.githubusercontent.com/u/40258585
+kubeVersion: '>=1.27.0-0'
+maintainers:
+- email: nscuro@protonmail.com
+  name: nscuro
+  url: https://github.com/nscuro
+name: dependency-track
+sources:
+- https://github.com/DependencyTrack/helm-charts/tree/main/charts/dependency-track
+type: application
+version: 2.3.0
