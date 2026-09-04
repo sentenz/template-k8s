@@ -7,7 +7,7 @@ on:
     paths:
       - container/k8s/**
       - scripts/bootstrap.sh
-      - .github/workflows/container.yml
+      - .github/workflows/docker.yml
   workflow_call:
     inputs:
       publish:
