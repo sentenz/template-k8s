@@ -29,8 +29,8 @@ RUN INSTALL_DIR=/opt/k8s/bin \
 
 FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS runtime
 
-ARG K8S_GID=10001
-ARG K8S_UID=10001
+ARG USER_GID=10001
+ARG USER_UID=10001
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
     org.opencontainers.image.description="Pinned Kubernetes command-line toolchain for local workflows" \
@@ -48,10 +48,10 @@ RUN apk upgrade --no-cache \
     docker-cli \
     git \
     openssh-client \
-    && addgroup -S -g "${K8S_GID}" k8s \
-    && adduser -S -D -h "${HOME}" -G k8s -u "${K8S_UID}" k8s \
+    && addgroup -S -g "${USER_GID}" k8s \
+    && adduser -S -D -h "${HOME}" -G k8s -u "${USER_UID}" k8s \
     && mkdir -p "${HOME}" /workspace \
-    && chown -R "${K8S_UID}:${K8S_GID}" "${HOME}" /workspace \
+    && chown -R "${USER_UID}:${USER_GID}" "${HOME}" /workspace \
     && chmod 0750 "${HOME}" \
     && chmod 0755 /workspace
 
@@ -61,6 +61,6 @@ COPY --from=tools-helm --link --chown=0:0 --chmod=0755 /usr/bin/helm /usr/local/
 
 WORKDIR /workspace
 
-USER ${K8S_UID}:${K8S_GID}
+USER ${USER_UID}:${USER_GID}
 
 CMD ["/bin/bash"]
