@@ -10,7 +10,7 @@ helmGlobals:
 
 helmCharts:
   - name: dependency-track
-    version: 2.0.0
+    version: 2.3.0
     repo: https://dependencytrack.github.io/helm-charts
     releaseName: dependency-track
     namespace: dependency-track
