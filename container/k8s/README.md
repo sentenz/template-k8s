@@ -98,11 +98,17 @@ shell.
 ## 4. Publication
 
 `.github/workflows/docker.yml` validates image changes on pull requests and is
-called by the release workflow to publish images. A semantic Git tag such as
-`v1.2.3` publishes the immutable `ghcr.io/sentenz/k8s:v1.2.3` manifest after
-both architecture candidates pass smoke tests and critical-vulnerability
-scans. Stable tags also promote `latest`; prerelease tags do not.
+called by the release workflow to publish images. Validation independently
+builds `linux/amd64` and `linux/arm64` candidates, smoke-tests `kubectl`,
+Kustomize, kind, and Helm under the target platform, and runs Trivy scans that
+fail on fixable `CRITICAL` vulnerabilities.
 
-Publication is serialized per image version and refuses to overwrite an
-existing immutable tag. Published images include OCI metadata, BuildKit
-provenance, and an SBOM.
+A semantic Git tag such as `1.2.3` publishes the versioned
+`ghcr.io/sentenz/k8s:1.2.3` multi-platform manifest only after both platform
+candidates pass validation. The workflow treats version tags as immutable and
+refuses publication when the requested version tag already resolves in GHCR.
+Stable releases also update `latest`; prerelease versions such as
+`1.3.0-beta.1` do not.
+
+Published images carry explicit OCI version and revision metadata together
+with BuildKit `mode=max` provenance and an OCI SBOM attestation.
