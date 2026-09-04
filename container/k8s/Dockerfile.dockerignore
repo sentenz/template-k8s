@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Exclude everything by default
+**
+
+# Explicitly re-include directory/file
+!scripts/bootstrap.sh
