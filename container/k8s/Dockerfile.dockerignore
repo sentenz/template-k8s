@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Exlude by default
+# Exclude everything by default
 **
 
 # Explicitly re-include
