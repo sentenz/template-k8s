@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Keep the build context limited to the installer consumed by the Dockerfile.
+# Exlude by default
 **
-!scripts/
+
+# Explicitly re-include
 !scripts/bootstrap.sh
