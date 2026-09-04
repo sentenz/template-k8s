@@ -36,9 +36,10 @@ The multi-stage build copies `kubectl` and Kustomize from the digest-pinned
 `alpine/k8s` image and Helm from the digest-pinned `alpine/helm` image.
 Because no dedicated kind image is available, `scripts/bootstrap.sh` downloads
 and SHA-256 verifies only the kind binary in an isolated tool stage. The
-runtime stage receives only the four required binaries. No compilation occurs
-during the build. The Alpine base is pinned by digest and receives current
-security upgrades during the build.
+runtime stage copies only the four Kubernetes tool binaries from the tool
+stages; additional runtime packages are installed separately. No compilation
+occurs during the build. The Alpine base is pinned by digest and receives
+current security upgrades during the build.
 
 The kind version can be overridden explicitly:
 
