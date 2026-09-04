@@ -27,14 +27,18 @@ RUN INSTALL_DIR=/opt/k8s/bin \
     TARGETARCH="${TARGETARCH}" \
     /usr/local/bin/bootstrap.sh --tool kind
 
-FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS runtime
 
+ARG K8S_GID=10001
+ARG K8S_UID=10001
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
     org.opencontainers.image.description="Pinned Kubernetes command-line toolchain for local workflows" \
     org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
     org.opencontainers.image.licenses="Apache-2.0" \
     io.k8s.tools.selection="kubectl,kustomize,kind,helm"
+
+ENV HOME=/home/k8s
 
 RUN apk upgrade --no-cache \
     && apk add --no-cache \
@@ -44,18 +48,19 @@ RUN apk upgrade --no-cache \
     docker-cli \
     git \
     openssh-client \
-    && addgroup -S k8s \
-    && adduser -S -D -h /home/k8s -G k8s k8s \
-    && mkdir -p /workspace \
-    && chown k8s:k8s /workspace
+    && addgroup -S -g "${K8S_GID}" k8s \
+    && adduser -S -D -h "${HOME}" -G k8s -u "${K8S_UID}" k8s \
+    && mkdir -p "${HOME}" /workspace \
+    && chown -R "${K8S_UID}:${K8S_GID}" "${HOME}" /workspace \
+    && chmod 0750 "${HOME}" \
+    && chmod 0755 /workspace
 
-COPY --from=tools-k8s /usr/bin/kubectl /usr/local/bin/kubectl
-COPY --from=tools-k8s /usr/bin/kustomize /usr/local/bin/kustomize
-COPY --from=tools-kind /opt/k8s/bin/kind /usr/local/bin/kind
-COPY --from=tools-helm /usr/bin/helm /usr/local/bin/helm
+COPY --from=tools-k8s --link --chown=0:0 --chmod=0755 /usr/bin/kubectl /usr/bin/kustomize /usr/local/bin/
+COPY --from=tools-kind --link --chown=0:0 --chmod=0755 /opt/k8s/bin/kind /usr/local/bin/kind
+COPY --from=tools-helm --link --chown=0:0 --chmod=0755 /usr/bin/helm /usr/local/bin/helm
 
 WORKDIR /workspace
 
-USER k8s
+USER ${K8S_UID}:${K8S_GID}
 
 CMD ["/bin/bash"]
