@@ -29,16 +29,11 @@ RUN INSTALL_DIR=/opt/k8s/bin \
 
 FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS runtime
 
-ARG USER_GID=10001
-ARG USER_UID=10001
-
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
     org.opencontainers.image.description="Pinned Kubernetes command-line toolchain for local workflows" \
     org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
     org.opencontainers.image.licenses="Apache-2.0" \
     io.k8s.tools.selection="kubectl,kustomize,kind,helm"
-
-ENV HOME=/home/k8s
 
 RUN apk upgrade --no-cache \
     && apk add --no-cache \
@@ -47,8 +42,14 @@ RUN apk upgrade --no-cache \
     curl \
     docker-cli \
     git \
-    openssh-client \
-    && addgroup -S -g "${USER_GID}" k8s \
+    openssh-client
+
+ARG USER_GID=10001
+ARG USER_UID=10001
+
+ENV HOME=/home/k8s
+
+RUN addgroup -S -g "${USER_GID}" k8s \
     && adduser -S -D -h "${HOME}" -G k8s -u "${USER_UID}" k8s \
     && mkdir -p "${HOME}" /workspace \
     && chown -R "${USER_UID}:${USER_GID}" "${HOME}" /workspace \
