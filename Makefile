@@ -288,7 +288,7 @@ dependency-renovate-update:
 
 SECRETS_SOPS_IMAGE ?= ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
 SECRETS_SOPS_ALIAS ?= docker run --rm -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/root/.gnupg" -w /workspace "$(SECRETS_SOPS_IMAGE)"
-SECRETS_SOPS_UID ?= sops-k8s
+SECRETS_SOPS_UID ?= sops-$(notdir $(CURDIR))
 
 # Usage: make secrets-gpg-generate SECRETS_SOPS_UID=<uid>
 #
