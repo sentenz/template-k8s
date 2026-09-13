@@ -189,7 +189,7 @@ k8s-observability:
 
 # ─── Helm Charts ─────────────────────────────────────────────────────────────────────────────────
 
-K8S_HELM_IMAGE ?= alpine/helm:4.2.4@sha256:76c375eed56144c68d6197c55bc5a4552fb42002190b796729901cbab3ae6e51
+K8S_HELM_IMAGE ?= alpine/helm:4.3.0@sha256:a6cf54599ccb99d90cf0712b30f03fdb3cab062e6b94e0418cc4db7e8a1464b2
 K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
 HELM_DEPENDENCY_TRACK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/dependency-track-*/dependency-track))
 HELM_POSTGRESQL_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/postgresql-*/postgresql))
@@ -274,7 +274,7 @@ helm-render-charts:
 
 # ─── Dependency Manager ──────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.65.5@sha256:4e10f76a79f1c597f427f83c788a9f5b14a6295784c4cb68307b89b0a954abce
+DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.82.5@sha256:e93745c01c635c3431de5cddfe3e75f9825aa3bab5995076b9c15e83452c9d7b
 DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_RENOVATE_IMAGE)"
 
 ## Update project dependencies locally using Renovate and generate a report
@@ -457,7 +457,7 @@ policy-regal-lint:
 
 # ─── SAST Manager ────────────────────────────────────────────────────────────────────────────────
 
-SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.176.1@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823
+SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.177.0@sha256:acaac22ffc7b7cc5926de0751b223bce0b2491c33d18422fa72f632c78d81198
 SAST_SEMGREP_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_SEMGREP_IMAGE)"
 SAST_SEMGREP_FILES ?= .
 SAST_SEMGREP_FILTER = $(if $(strip $(SAST_SEMGREP_FILES)),$(SAST_SEMGREP_FILES),.)
