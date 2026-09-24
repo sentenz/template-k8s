@@ -29,7 +29,7 @@ RUN INSTALL_DIR=/opt/k8s/bin \
 
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS runtime
 
-LABEL org.opencontainers.image.title="Kubernetes toolchain" \
+LABEL org.opencontainers.image.title="Kubernetes Toolchain" \
     org.opencontainers.image.description="Pinned Kubernetes command-line toolchain for local and CI workflows" \
     org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
     org.opencontainers.image.documentation="https://github.com/sentenz/template-k8s/tree/main/containers/k8s" \
