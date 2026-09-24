@@ -6,10 +6,6 @@
 
 render/
 
-### Python validation tools ###
-__pycache__/
-*.pyc
-
 ### Local Runtime State ###
 .local/
 

@@ -1,7 +1,7 @@
 ---
 service:
   spec:
-    type: NodePort
+    type: LoadBalancer
 
 ingressClass:
   name: traefik
