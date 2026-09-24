@@ -111,13 +111,37 @@ make helm-vendor \
   HELM_CHART_REPO=https://traefik.github.io/charts
 ```
 
-See `vendor/helm/README.md` for the vendor contract and refresh procedure.
+The vendoring target rejects existing version directories, validates downloads before publishing them, and leaves retained versions intact on failure. Run `make helm-vendor-check` to verify chart references and metadata across all overlays. Remove an obsolete version only after confirming that no overlay references it.
 
 ## Cluster topology and deployment lifecycle
 
 This template assumes one distinct cluster per environment. Namespace and cluster-scoped resource names are intentionally reused across clusters. Do not apply multiple environment roots to the same cluster: their resource identities overlap. Shared-cluster deployments require separate namespaces, adjusted cross-namespace references, and a single owner for cluster-scoped resources.
 
 Helm renders chart templates through Kustomize; `kubectl apply` manages the resulting objects. No Helm release history or GitOps controller is installed by this workflow.
+
+### Validation and ownership
+
+Validate the selected environment before applying it:
+
+```bash
+make k8s-render K8S_ENV=stage
+make k8s-render-check K8S_ENV=stage
+make k8s-deploy K8S_ENV=stage
+```
+
+The validation target checks vendored references, Kubernetes schemas, resource identities, environment labels, and Traefik networking. Successful application does not establish readiness; wait for the relevant workloads and verify application health. The order of Kustomize `resources:` entries does not establish deployment or readiness ordering.
+
+Capability bases own their namespaces. Keep one deployment owner for each resource; introducing a reconciliation controller requires a deliberate ownership transition. Helm hook annotations in rendered resources do not cause `kubectl apply` to execute Helm's hook ordering, cleanup, or rerun lifecycle. Review hook resources during chart upgrades and manage any required sequencing explicitly.
+
+Rendered manifests may contain Secrets. Keep them out of Git and public CI artifacts, restrict access, and remove them when validation is complete.
+
+### Removal and rollback
+
+Plain `kubectl apply` does not delete resources omitted from a later render. Remove obsolete resources using an explicit, reviewed inventory or a reconciliation controller configured to own pruning. The aggregate `make k8s-destroy` target deletes the selected composition, including platform resources and namespaces with all their namespaced contents; it is not an application-only uninstall command.
+
+Rollback restores a known-good Git configuration and retained chart/image versions, renders and validates that configuration, and reapplies it. `helm rollback` is unavailable because this workflow does not install a Helm release. Compare resource inventories, explicitly remove resources introduced by the reverted change, and plan replacements for changed immutable fields before applying the rollback. Verify workload readiness and application health afterward.
+
+Manifest rollback does not restore database contents, external Secrets, or other external state. Database migration compatibility and backup recovery require separate procedures.
 
 ## Development cluster
 

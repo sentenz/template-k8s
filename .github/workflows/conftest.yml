@@ -19,4 +19,5 @@ jobs:
       - name: Run Conftest
         uses: sentenz/actions/conftest@48302ad4cbb2e77116d2666bbad2821e74dd5ada # 1.4.8
         with:
+          path: "./container/k8s/Dockerfile"
           policy-path: "./tests/policy"
