@@ -83,5 +83,3 @@ flowchart TD
 Kustomize recursively builds bases and applies the configured generators, components, patches, and transformations. This is a manifest build process, not a readiness or deployment-order mechanism. Do not infer operational dependencies from the order of entries in `resources:`.
 
 Prefer Helm values for settings exposed by a chart and use Kustomize patches only for remaining manifest-level changes. Avoid setting the same field through both mechanisms. Transformer interactions depend on the resource and transformer configuration; validate final rendered manifests instead of relying on a universal field-precedence hierarchy.
-
-See [Deployment lifecycle](deployment-lifecycle.md) for the repository's apply and rollback contract.

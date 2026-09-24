@@ -117,7 +117,7 @@ See `vendor/helm/README.md` for the vendor contract and refresh procedure.
 
 This template assumes one distinct cluster per environment. Namespace and cluster-scoped resource names are intentionally reused across clusters. Do not apply multiple environment roots to the same cluster: their resource identities overlap. Shared-cluster deployments require separate namespaces, adjusted cross-namespace references, and a single owner for cluster-scoped resources.
 
-Helm renders chart templates through Kustomize; `kubectl apply` manages the resulting objects. No Helm release history or GitOps controller is installed by this workflow. See [Deployment lifecycle](deployment-lifecycle.md) for readiness, removal, and rollback behavior.
+Helm renders chart templates through Kustomize; `kubectl apply` manages the resulting objects. No Helm release history or GitOps controller is installed by this workflow.
 
 ## Development cluster
 

@@ -45,9 +45,6 @@ Orchestration platform for automating deployment, scaling, and management of con
     - [Architecture](docs/architecture.md)
       > High-level overview of the system's structure, components, and interactions.
 
-    - [Deployment Lifecycle](docs/deployment-lifecycle.md)
-      > Manifest ownership, environment promotion, removal, and rollback.
-
     - [Project Layout](docs/project-layout.md)
       > Helm and Kustomize repository structure for development, stage, and production environments.
 
