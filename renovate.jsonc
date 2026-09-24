@@ -73,27 +73,6 @@
   ],
   "packageRules": [
     {
-      "description": "Group Kind version updates from renovate-annotated ARGs in Dockerfiles and Containerfiles.",
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchFileNames": [
-        "**/Dockerfile",
-        "**/Containerfile",
-        "**/*.Dockerfile",
-        "**/*.Containerfile"
-      ],
-      "matchDepNames": [
-        "kubernetes-sigs/kind"
-      ],
-      "groupName": "kind version",
-      "groupSlug": "kind-version",
-      "semanticCommits": "enabled",
-      "semanticCommitType": "chore",
-      "semanticCommitScope": "deps",
-      "automerge": false
-    },
-    {
       "description": "Group major updates.",
       "matchManagers": [
         "!kubernetes",
@@ -308,6 +287,27 @@
       "semanticCommitType": "ci",
       "semanticCommitScope": "deps",
       "automerge": true
+    },
+    {
+      "description": "Group Kind version updates from renovate-annotated ARGs in Dockerfiles and Containerfiles.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "**/Dockerfile",
+        "**/Containerfile",
+        "**/*.Dockerfile",
+        "**/*.Containerfile"
+      ],
+      "matchDepNames": [
+        "kubernetes-sigs/kind"
+      ],
+      "groupName": "kind version",
+      "groupSlug": "kind-version",
+      "semanticCommits": "enabled",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps",
+      "automerge": false
     }
   ]
 }
