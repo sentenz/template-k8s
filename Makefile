@@ -14,15 +14,11 @@ SHELL := bash
 .SHELLFLAGS := -euo pipefail -c
 .ONESHELL:
 
-HELM_RELEASE_NAME ?= mychart
+PYTHON ?= python3
 HELM_VENDOR_DIR ?= vendor/helm
-HELM_CHART_DIR ?=
 HELM_CHART_NAME ?=
 HELM_CHART_VERSION ?=
 HELM_CHART_REPO ?=
-HELM_VALUES_FILE ?= values.yaml
-K8S_IMAGE_TAG ?= latest
-K8S_NAMESPACE ?= default
 K8S_ENV ?= dev
 K8S_ENV := $(strip $(K8S_ENV))
 K8S_CLUSTER_DIR ?= clusters
@@ -191,86 +187,16 @@ k8s-observability:
 
 K8S_HELM_IMAGE ?= alpine/helm:4.2.4@sha256:76c375eed56144c68d6197c55bc5a4552fb42002190b796729901cbab3ae6e51
 K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
-HELM_DEPENDENCY_TRACK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/dependency-track-*/dependency-track))
-HELM_POSTGRESQL_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/postgresql-*/postgresql))
-HELM_TRAEFIK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/traefik-*/traefik))
 
-## Vendor a Helm chart into Kustomize-compatible local storage
+## Vendor a new immutable chart version (requires tests/manifests/requirements.txt)
 helm-vendor:
-	@if [[ -z "$(HELM_CHART_NAME)" || -z "$(HELM_CHART_VERSION)" || -z "$(HELM_CHART_REPO)" ]]; then \
-		echo "usage: make helm-vendor HELM_CHART_NAME=<name> HELM_CHART_VERSION=<version> HELM_CHART_REPO=<repo>" >&2; \
-		exit 1; \
-	fi
-	@if ! [[ "$(HELM_CHART_NAME)" =~ ^[A-Za-z0-9._-]+$$ ]]; then \
-		echo "error: invalid HELM_CHART_NAME '$(HELM_CHART_NAME)'" >&2; \
-		exit 1; \
-	fi
-	@mkdir -p "$(HELM_VENDOR_DIR)"
-	@rm -rf "$(HELM_VENDOR_DIR)/$(HELM_CHART_NAME)-"*
-	@target="$(HELM_VENDOR_DIR)/$(HELM_CHART_NAME)-$(HELM_CHART_VERSION)"; \
-		mkdir -p "$$target"; \
-		$(K8S_HELM_ALIAS) pull "$(HELM_CHART_NAME)" \
-			--repo "$(HELM_CHART_REPO)" \
-			--version "$(HELM_CHART_VERSION)" \
-			--untar \
-			--untardir "$$target"
+	@$(PYTHON) scripts/vendor-helm.py "$(HELM_CHART_NAME)" "$(HELM_CHART_VERSION)" "$(HELM_CHART_REPO)" "$(HELM_VENDOR_DIR)" $(K8S_HELM_ALIAS)
 .PHONY: helm-vendor
 
-# Render Helm charts templates with specified parameters
-helm-render:
-	@if [[ -z "$(HELM_CHART_DIR)" || ! -d "$(HELM_CHART_DIR)" ]]; then \
-		echo "error: HELM_CHART_DIR must reference a vendored chart directory" >&2; \
-		exit 1; \
-	fi
-	@if [[ ! -f "$(HELM_VALUES_FILE)" ]]; then \
-		echo "error: Helm values file not found: $(HELM_VALUES_FILE)" >&2; \
-		exit 1; \
-	fi
-	$(K8S_HELM_ALIAS) template \
-		$(HELM_RELEASE_NAME) \
-		$(HELM_CHART_DIR) \
-		--namespace=$(K8S_NAMESPACE) \
-		--values=$(HELM_VALUES_FILE) \
-		--set image.tag=$(K8S_IMAGE_TAG) \
-		--output-dir=./render/charts
-.PHONY: helm-render
-
-# Render vendored Helm chart for Dependency-Track
-helm-render-dependency-track:
-	@$(MAKE) helm-render \
-		HELM_RELEASE_NAME=dependency-track \
-		HELM_CHART_DIR="$(HELM_DEPENDENCY_TRACK_CHART_DIR)" \
-		HELM_VALUES_FILE="$(HELM_DEPENDENCY_TRACK_CHART_DIR)/values.yaml" \
-		K8S_NAMESPACE=default \
-		K8S_IMAGE_TAG="v1.0.0"
-.PHONY: helm-render-dependency-track
-
-# Render vendored Helm chart for Traefik
-helm-render-traefik:
-	@$(MAKE) helm-render \
-		HELM_RELEASE_NAME=traefik \
-		HELM_CHART_DIR="$(HELM_TRAEFIK_CHART_DIR)" \
-		HELM_VALUES_FILE="$(HELM_TRAEFIK_CHART_DIR)/values.yaml" \
-		K8S_NAMESPACE=default \
-		K8S_IMAGE_TAG="v3.0.0"
-.PHONY: helm-render-traefik
-
-# Render vendored Helm chart for PostgreSQL
-helm-render-postgresql:
-	@$(MAKE) helm-render \
-		HELM_RELEASE_NAME=postgresql \
-		HELM_CHART_DIR="$(HELM_POSTGRESQL_CHART_DIR)" \
-		HELM_VALUES_FILE="$(HELM_POSTGRESQL_CHART_DIR)/values.yaml" \
-		K8S_NAMESPACE=default \
-		K8S_IMAGE_TAG="v16.0.0"
-.PHONY: helm-render-postgresql
-
-## Render all vendored Helm charts
-helm-render-charts:
-	@$(MAKE) -s helm-render-dependency-track
-	@$(MAKE) -s helm-render-traefik
-	@$(MAKE) -s helm-render-postgresql
-.PHONY: helm-render-charts
+## Validate that every environment references an available vendored chart
+helm-vendor-check:
+	@$(PYTHON) tests/manifests/validate.py
+.PHONY: helm-vendor-check
 
 # ─── Dependency Manager ──────────────────────────────────────────────────────────────────────────
 

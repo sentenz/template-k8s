@@ -1,6 +1,7 @@
 ---
 service:
-  type: LoadBalancer
+  spec:
+    type: NodePort
 
 ingressClass:
   name: traefik
@@ -13,3 +14,11 @@ ingressRoute:
 
 log:
   level: INFO
+
+hostNetwork: false
+
+ports:
+  web:
+    nodePort: 30080
+  websecure:
+    nodePort: 30443

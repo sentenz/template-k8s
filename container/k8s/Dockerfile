@@ -32,7 +32,7 @@ FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4c
 LABEL org.opencontainers.image.title="Kubernetes Toolchain" \
     org.opencontainers.image.description="Pinned Kubernetes command-line toolchain for local and CI workflows" \
     org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
-    org.opencontainers.image.documentation="https://github.com/sentenz/template-k8s/tree/main/containers/k8s" \
+    org.opencontainers.image.documentation="https://github.com/sentenz/template-k8s/tree/main/container/k8s" \
     org.opencontainers.image.licenses="Apache-2.0" \
     org.opencontainers.image.vendor="sentenz" \
     io.k8s.tools.selection="kubectl,kustomize,kind,helm"

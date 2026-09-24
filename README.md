@@ -45,6 +45,9 @@ Orchestration platform for automating deployment, scaling, and management of con
     - [Architecture](docs/architecture.md)
       > High-level overview of the system's structure, components, and interactions.
 
+    - [Deployment Lifecycle](docs/deployment-lifecycle.md)
+      > Manifest ownership, environment promotion, removal, and rollback.
+
     - [Project Layout](docs/project-layout.md)
       > Helm and Kustomize repository structure for development, stage, and production environments.
 
@@ -57,6 +60,8 @@ Orchestration platform for automating deployment, scaling, and management of con
       ```
 
     - Local development
+
+      Install validation dependencies with `python3 -m pip install -r tests/manifests/requirements.txt`.
 
       `K8S_ENV` defaults to `dev`, so the local Kind workflow uses `clusters/dev/kind-cluster.yaml`, deploys `clusters/dev`, and stores its generated kubeconfig at `.local/kubeconfig/dev.yaml`.
 

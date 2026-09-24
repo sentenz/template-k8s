@@ -43,4 +43,14 @@ make helm-vendor \
   HELM_CHART_REPO=https://traefik.github.io/charts
 ```
 
-The target replaces existing vendored versions of that chart and writes the Kustomize-compatible `<name>-<version>/<name>` layout under `vendor/helm/`.
+Install the Python validation dependency first:
+
+```bash
+python3 -m pip install -r tests/manifests/requirements.txt
+```
+
+The target downloads into a temporary directory, verifies the chart name and version, and publishes the Kustomize-compatible `<name>-<version>/<name>` directory only after success. Existing versions are retained; attempting to overwrite an existing version fails. This permits development to advance while stage and production retain older versions.
+
+Run `make helm-vendor-check` to verify every overlay reference before rendering. Remove a version only after confirming that no application or platform overlay references it. Cleanup is a separate reviewed change, never a side effect of downloading another version.
+
+Use `make k8s-render K8S_ENV=<environment>` to render deployment configuration. The former `helm-render-*` diagnostic targets have been removed because they selected upstream defaults rather than environment values.

@@ -1,0 +1,55 @@
+name: Kubernetes Manifests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate ${{ matrix.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, stage, prod]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install validation dependencies
+        run: python3 -m pip install -r tests/manifests/requirements.txt
+      - name: Test chart vendoring and verify references
+        run: |
+          python3 -m unittest discover -s tests/manifests -p 'test_*.py'
+          make helm-vendor-check
+      - name: Generate development TLS fixture
+        if: matrix.environment == 'dev'
+        run: |
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+            -keyout clusters/dev/dependency-track.localhost+1-key.pem \
+            -out clusters/dev/dependency-track.localhost+1.pem \
+            -subj /CN=dependency-track.localhost \
+            -addext subjectAltName=DNS:dependency-track.localhost
+      - name: Render environment using the local Make toolchain
+        run: make k8s-render K8S_ENV=${{ matrix.environment }}
+      - name: Validate Kubernetes schemas and deployment invariants
+        run: |
+          docker run --rm --volume "$PWD:/work:ro" \
+            ghcr.io/yannh/kubeconform:v0.7.0 \
+            -strict -summary -kubernetes-version 1.37.0 \
+            /work/render/kustomize/${{ matrix.environment }}.yaml
+          python3 tests/manifests/validate.py \
+            --environment ${{ matrix.environment }} \
+            --rendered render/kustomize/${{ matrix.environment }}.yaml
+      - name: Remove rendered secrets and ephemeral TLS fixtures
+        if: always()
+        run: |
+          rm -f render/kustomize/${{ matrix.environment }}.yaml
+          rm -f clusters/dev/dependency-track.localhost+1.pem \
+            clusters/dev/dependency-track.localhost+1-key.pem

@@ -28,10 +28,6 @@ inputs:
     description: kubectl version.
     required: false
     default: v1.36.1
-  helm-version:
-    description: Helm version used by the Kustomize Helm inflator.
-    required: false
-    default: v4.2.2
   cluster-wait:
     description: Maximum duration for Kind control-plane readiness.
     required: false
@@ -119,18 +115,6 @@ runs:
 
         validate_repository_path "${KIND_CONFIG}" file
         validate_repository_path "${KUSTOMIZE_PATH}" directory
-
-    - name: Setup Helm
-      uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-      with:
-        version: ${{ inputs.helm-version }}
-
-    - name: Verify Build Toolchain
-      shell: bash
-      run: |
-        set -euo pipefail
-        helm version --short
-        openssl version
 
     - name: Generate Ephemeral TLS Certificate
       shell: bash
@@ -244,10 +228,9 @@ runs:
       run: |
         set -euo pipefail
 
-        kubectl kustomize "${KUSTOMIZE_PATH}" \
-          --enable-helm \
-          --load-restrictor=LoadRestrictionsNone \
-          > "${RENDERED_MANIFEST}"
+        make k8s-render \
+          K8S_CLUSTER_PATH="${KUSTOMIZE_PATH}" \
+          K8S_RENDER_FILE="${RENDERED_MANIFEST}"
 
         test -s "${RENDERED_MANIFEST}"
         kubectl apply \
@@ -379,7 +362,6 @@ runs:
           echo '```text'
           kind version
           kubectl version
-          helm version --short
           echo '```'
           echo
           echo "### Resources"
@@ -455,6 +437,7 @@ runs:
       if: always()
       shell: bash
       env:
+        INGRESS_HOST: ${{ inputs.ingress-host }}
         KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
         KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
         RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
