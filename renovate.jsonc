@@ -42,19 +42,6 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Update versions declared by Renovate annotations in Dockerfiles and Containerfiles.",
-      "managerFilePatterns": [
-        "**/[Dd]ockerfile*",
-        "**/[Cc]ontainerfile*",
-        "**/*.[Dd]ockerfile*",
-        "**/*.[Cc]ontainerfile*"
-      ],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[a-zA-Z0-9-._]+?) depName=(?<depName>[^\\s]+?)\\s+ARG [A-Za-z0-9_]+\\s*=\\s*[\"']?(?<currentValue>[^\\s\"']+)[\"']?"
-      ]
-    },
-    {
-      "customType": "regex",
       "description": "Update versioned Docker image references in Kubernetes support files.",
       "managerFilePatterns": [
         "**/action.{yml,yaml}",
@@ -70,9 +57,42 @@
       "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{else}}{{#if currentDigest}}@{{{currentDigest}}}{{/if}}{{/if}}",
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update versions declared by Renovate annotations in Dockerfiles and Containerfiles.",
+      "managerFilePatterns": [
+        "/Dockerfile$/",
+        "/Containerfile$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z0-9-]+) depName=(?<depName>[a-z0-9._/-]+)\\s*\\nARG (?<argName>[A-Z][A-Z0-9_]*)=(?<currentValue>\\S+)"
+      ],
+      "autoReplaceStringTemplate": "# renovate: datasource={{datasource}} depName={{depName}}\nARG {{argName}}={{newValue}}"
     }
   ],
   "packageRules": [
+    {
+      "description": "Group Kind version updates from renovate-annotated ARGs in Dockerfiles and Containerfiles.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "**/Dockerfile",
+        "**/Containerfile",
+        "**/*.Dockerfile",
+        "**/*.Containerfile"
+      ],
+      "matchDepNames": [
+        "kubernetes-sigs/kind"
+      ],
+      "groupName": "kind version",
+      "groupSlug": "kind-version",
+      "semanticCommits": "enabled",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps",
+      "automerge": false
+    },
     {
       "description": "Group major updates.",
       "matchManagers": [
