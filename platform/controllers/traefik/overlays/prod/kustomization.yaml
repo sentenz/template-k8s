@@ -15,7 +15,3 @@ helmCharts:
     releaseName: traefik
     namespace: traefik
     valuesFile: values.yaml
-
-patches:
-  - path: patch-service-loadbalancer.yaml
-  - path: patch-deployment-hostnetwork-false.yaml

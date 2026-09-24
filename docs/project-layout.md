@@ -47,12 +47,12 @@ Generated local runtime state is not part of the declarative repository tree. Th
 
 - **Helm** defines the reusable workload or platform package. Environment-specific Helm values live beside the corresponding overlay.
 - **Kustomize bases** contain stable Kubernetes resources that are common to all environments, such as namespaces.
-- **Kustomize overlays** bind Helm releases to `dev`, `stage`, or `prod` and apply post-render patches only when a Kubernetes-level difference is clearer than a Helm value.
+- **Kustomize overlays** configure Helm chart rendering for `dev`, `stage`, or `prod` and apply post-render patches only when a Kubernetes-level difference is clearer than a Helm value.
 - **Applications** own product workloads and application-specific deployment configuration.
 - **Platform controllers** own Kubernetes controllers, operators, admission components, and cluster networking/control-plane integrations.
 - **Platform services** own platform-managed runtime services. PostgreSQL is modeled as a platform service in this template.
 - **Platform configs** own shared configuration consumed by platform controllers or services when that configuration has a lifecycle distinct from the capability installation.
-- **Clusters** are the only deployment and GitOps entry points. Each cluster composes the required application and platform overlays plus cluster-local resources and, where applicable, cluster-creation configuration.
+- **Clusters** are the deployment entry points and possible future GitOps integration roots. Each cluster composes the required application and platform overlays plus cluster-local resources and, where applicable, cluster-creation configuration.
 - **Components** are reserved for reusable, environment-neutral Kustomize components.
 - **Vendor** contains immutable third-party sources. `vendor/helm/` holds the upstream Helm chart copies used by Kustomize and must not contain environment configuration.
 
@@ -80,7 +80,7 @@ kustomize build clusters/stage --enable-helm --load-restrictor=LoadRestrictionsN
 kustomize build clusters/prod --enable-helm --load-restrictor=LoadRestrictionsNone
 ```
 
-All deployment, render, CI, and GitOps automation should target `clusters/<environment>`. Application and platform overlays are composition inputs rather than independent deployment entry points.
+All deployment, render, and CI automation should target `clusters/<environment>`. Application and platform overlays are composition inputs rather than independent deployment entry points.
 
 The Make interface uses the same boundary. `K8S_ENV` defaults to `dev`, `K8S_CLUSTER_PATH` resolves to `clusters/$(K8S_ENV)`, generated kubeconfig state resolves to `.local/kubeconfig/$(K8S_ENV).yaml`, and rendered output is written to `render/kustomize/$(K8S_ENV).yaml`.
 
@@ -102,7 +102,7 @@ vendor/helm/traefik-41.1.0/traefik/
 
 Keep vendored chart source immutable. Environment changes belong in overlay `values.yaml` files or Kustomize patches. If a chart itself needs source changes, maintain an explicit fork rather than editing the vendored copy.
 
-Renovate continues to update the `helmCharts.version` declarations under `apps/` and `platform/`; `vendor/**` is excluded from Renovate mutation. A dependency-update change must therefore refresh the matching vendored chart as part of the same change. Use:
+Renovate continues to update the `helmCharts.version` declarations under `apps/` and `platform/`; `vendor/**` is excluded from Renovate mutation. A dependency-update change must therefore add the matching vendored chart as part of the same change. Retain older versions while any overlay references them; development, stage, and production can advance independently. Use:
 
 ```bash
 make helm-vendor \
@@ -111,7 +111,37 @@ make helm-vendor \
   HELM_CHART_REPO=https://traefik.github.io/charts
 ```
 
-See `vendor/helm/README.md` for the vendor contract and refresh procedure.
+The vendoring target rejects existing version directories, validates downloads before publishing them, and leaves retained versions intact on failure. Run `make helm-vendor-check` to verify chart references and metadata across all overlays. Remove an obsolete version only after confirming that no overlay references it.
+
+## Cluster topology and deployment lifecycle
+
+This template assumes one distinct cluster per environment. Namespace and cluster-scoped resource names are intentionally reused across clusters. Do not apply multiple environment roots to the same cluster: their resource identities overlap. Shared-cluster deployments require separate namespaces, adjusted cross-namespace references, and a single owner for cluster-scoped resources.
+
+Helm renders chart templates through Kustomize; `kubectl apply` manages the resulting objects. No Helm release history or GitOps controller is installed by this workflow.
+
+### Validation and ownership
+
+Validate the selected environment before applying it:
+
+```bash
+make k8s-render K8S_ENV=stage
+make k8s-render-check K8S_ENV=stage
+make k8s-deploy K8S_ENV=stage
+```
+
+The validation target checks vendored references, Kubernetes schemas, resource identities, environment labels, and Traefik networking. Successful application does not establish readiness; wait for the relevant workloads and verify application health. The order of Kustomize `resources:` entries does not establish deployment or readiness ordering.
+
+Capability bases own their namespaces. Keep one deployment owner for each resource; introducing a reconciliation controller requires a deliberate ownership transition. Helm hook annotations in rendered resources do not cause `kubectl apply` to execute Helm's hook ordering, cleanup, or rerun lifecycle. Review hook resources during chart upgrades and manage any required sequencing explicitly.
+
+Rendered manifests may contain Secrets. Keep them out of Git and public CI artifacts, restrict access, and remove them when validation is complete.
+
+### Removal and rollback
+
+Plain `kubectl apply` does not delete resources omitted from a later render. Remove obsolete resources using an explicit, reviewed inventory or a reconciliation controller configured to own pruning. The aggregate `make k8s-destroy` target deletes the selected composition, including platform resources and namespaces with all their namespaced contents; it is not an application-only uninstall command.
+
+Rollback restores a known-good Git configuration and retained chart/image versions, renders and validates that configuration, and reapplies it. `helm rollback` is unavailable because this workflow does not install a Helm release. Compare resource inventories, explicitly remove resources introduced by the reverted change, and plan replacements for changed immutable fields before applying the rollback. Verify workload readiness and application health afterward.
+
+Manifest rollback does not restore database contents, external Secrets, or other external state. Database migration compatibility and backup recovery require separate procedures.
 
 ## Development cluster
 
@@ -160,7 +190,7 @@ These Secrets can be supplied by an external-secret controller, SOPS/Flux, Seale
 ## Adding an application
 
 1. Create `apps/<name>/base` for stable Kubernetes resources.
-2. Add `apps/<name>/overlays/{dev,stage,prod}` with the Helm release and environment values.
+2. Add `apps/<name>/overlays/{dev,stage,prod}` with the chart reference and environment values.
 3. Add the appropriate overlay to each `clusters/<environment>/kustomization.yaml`.
 4. Put cross-cutting behavior in `components/` rather than duplicating patches.
 

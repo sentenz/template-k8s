@@ -80,22 +80,6 @@ flowchart TD
 
 ## 3. Order of Precedence
 
-Kustomize assembles and applies configuration in a defined hierarchy to ensure predictable overrides, lowest to highest:
+Kustomize recursively builds bases and applies the configured generators, components, patches, and transformations. This is a manifest build process, not a readiness or deployment-order mechanism. Do not infer operational dependencies from the order of entries in `resources:`.
 
-- Base Resources
-  > Loaded first from `resources:` in base kustomizations.
-
-- Generators
-  > ConfigMap- and Secret-generators (`configMapGenerator:`, `secretGenerator:`) produce new objects after base resources.
-
-- Base Patches
-  > Any `patches:` declared within base kustomizations are applied.
-
-- Component Patches & Transformers
-  > Imported via `components:`, these patches and transformers run next.
-
-- Overlay Patches & Transformers
-  > Specified in overlays (`patches:`, `transformers:`), they override earlier modifications.
-
-- Overlay Direct Fields
-  > Top-level settings in the overlay such as `namespace:`, `namePrefix:`, `commonLabels:`, `images:` are applied last, possessing the highest precedence.
+Prefer Helm values for settings exposed by a chart and use Kustomize patches only for remaining manifest-level changes. Avoid setting the same field through both mechanisms. Transformer interactions depend on the resource and transformer configuration; validate final rendered manifests instead of relying on a universal field-precedence hierarchy.

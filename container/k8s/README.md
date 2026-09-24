@@ -11,7 +11,7 @@ containing verified, pinned releases of:
 - `kubectl` v1.36.2
 - Kustomize v5.8.1
 - kind v0.32.0
-- Helm v4.2.4
+- Helm v4.3.0
 
 The image is a client-side tool environment. It does not replace
 `kindest/node`, which remains the Kubernetes node image used by clusters

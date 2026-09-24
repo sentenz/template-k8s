@@ -57,6 +57,18 @@
       "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{else}}{{#if currentDigest}}@{{{currentDigest}}}{{/if}}{{/if}}",
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update versions declared by Renovate annotations in Dockerfiles and Containerfiles.",
+      "managerFilePatterns": [
+        "/Dockerfile$/",
+        "/Containerfile$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z0-9-]+) depName=(?<depName>[a-z0-9._/-]+)\\s*\\nARG [A-Z][A-Z0-9_]*=(?<currentValue>\\S+)"
+      ],
+      "autoReplaceStringTemplate": "# renovate: datasource={{datasource}} depName={{depName}}\nARG KIND_VERSION={{newValue}}"
     }
   ],
   "packageRules": [
@@ -275,6 +287,27 @@
       "semanticCommitType": "ci",
       "semanticCommitScope": "deps",
       "automerge": true
+    },
+    {
+      "description": "Group Kind version updates from renovate-annotated ARGs in Dockerfiles and Containerfiles.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "**/Dockerfile",
+        "**/Containerfile",
+        "**/*.Dockerfile",
+        "**/*.Containerfile"
+      ],
+      "matchDepNames": [
+        "kubernetes-sigs/kind"
+      ],
+      "groupName": "kind version",
+      "groupSlug": "kind-version",
+      "semanticCommits": "enabled",
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps",
+      "automerge": false
     }
   ]
 }

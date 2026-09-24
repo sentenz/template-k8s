@@ -1,0 +1,41 @@
+name: Kubernetes Manifests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate ${{ matrix.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, stage, prod]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify vendored chart references
+        run: make helm-vendor-check
+      - name: Generate development TLS fixture
+        if: matrix.environment == 'dev'
+        run: |
+          make cert-certificate-generate \
+            CERT_HOSTNAME=dependency-track.localhost CERT_DAYS=1
+      - name: Render environment using the local Make toolchain
+        run: make k8s-render K8S_ENV=${{ matrix.environment }}
+      - name: Validate Kubernetes schemas and deployment invariants
+        run: make k8s-render-check K8S_ENV=${{ matrix.environment }}
+      - name: Remove rendered secrets and ephemeral TLS fixtures
+        if: always()
+        run: |
+          rm -f render/kustomize/${{ matrix.environment }}.yaml
+          rm -f clusters/dev/dependency-track.localhost+1.pem \
+            clusters/dev/dependency-track.localhost+1-key.pem

@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.27@sha256:bde3983e9c939224420ddaf6b784cc30e09b035a4dea01f581230c50809f372e
 # SPDX-License-Identifier: Apache-2.0
 
-
 FROM alpine/k8s:1.37.0@sha256:b421c2e9419edb98db39b6ab641669f4db7bb2acf354f22450c6b7e7176d1ff4 AS tools-k8s
 
-FROM alpine/helm:4.2.4@sha256:76c375eed56144c68d6197c55bc5a4552fb42002190b796729901cbab3ae6e51 AS tools-helm
+FROM alpine/helm:4.3.0@sha256:a6cf54599ccb99d90cf0712b30f03fdb3cab062e6b94e0418cc4db7e8a1464b2 AS tools-helm
 
-FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS tools-kind
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS tools-kind
 
+# renovate: datasource=github-releases depName=kubernetes-sigs/kind
 ARG KIND_VERSION=v0.32.0
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -27,12 +27,14 @@ RUN INSTALL_DIR=/opt/k8s/bin \
     TARGETARCH="${TARGETARCH}" \
     /usr/local/bin/bootstrap.sh --tool kind
 
-FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS runtime
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS runtime
 
-LABEL org.opencontainers.image.title="Kubernetes toolchain" \
-    org.opencontainers.image.description="Pinned Kubernetes command-line toolchain for local workflows" \
+LABEL org.opencontainers.image.title="Kubernetes Toolchain" \
+    org.opencontainers.image.description="Pinned Kubernetes command-line toolchain for local and CI workflows" \
     org.opencontainers.image.source="https://github.com/sentenz/template-k8s" \
+    org.opencontainers.image.documentation="https://github.com/sentenz/template-k8s/tree/main/container/k8s" \
     org.opencontainers.image.licenses="Apache-2.0" \
+    org.opencontainers.image.vendor="sentenz" \
     io.k8s.tools.selection="kubectl,kustomize,kind,helm"
 
 RUN apk upgrade --no-cache \

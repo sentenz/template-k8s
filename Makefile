@@ -14,15 +14,10 @@ SHELL := bash
 .SHELLFLAGS := -euo pipefail -c
 .ONESHELL:
 
-HELM_RELEASE_NAME ?= mychart
 HELM_VENDOR_DIR ?= vendor/helm
-HELM_CHART_DIR ?=
 HELM_CHART_NAME ?=
 HELM_CHART_VERSION ?=
 HELM_CHART_REPO ?=
-HELM_VALUES_FILE ?= values.yaml
-K8S_IMAGE_TAG ?= latest
-K8S_NAMESPACE ?= default
 K8S_ENV ?= dev
 K8S_ENV := $(strip $(K8S_ENV))
 K8S_CLUSTER_DIR ?= clusters
@@ -126,6 +121,7 @@ k8s-teardown:
 
 K8S_TOOLS_IMAGE ?= alpine/k8s:1.37.0@sha256:b421c2e9419edb98db39b6ab641669f4db7bb2acf354f22450c6b7e7176d1ff4
 K8S_TOOLS_ALIAS := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
+K8S_CHECK_ALIAS := docker run --rm -i --volume "$(CURDIR):/workspace:ro" --workdir /workspace "$(K8S_TOOLS_IMAGE)" bash -euo pipefail
 
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
@@ -142,6 +138,41 @@ k8s-render: k8s-validate
 	@mkdir -p "$(dir $(K8S_RENDER_FILE))"
 	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$(K8S_RENDER_FILE)"
 .PHONY: k8s-render
+
+K8S_KUBECONFORM_IMAGE ?= ghcr.io/yannh/kubeconform:v0.7.0
+K8S_KUBECONFORM_ALIAS := docker run --rm --volume "$(CURDIR):/workspace:ro" --workdir /workspace "$(K8S_KUBECONFORM_IMAGE)"
+K8S_SCHEMA_VERSION ?= 1.37.0
+
+## Validate the rendered Kubernetes resource schemas
+k8s-schema-check:
+	@$(K8S_KUBECONFORM_ALIAS) -strict -summary -kubernetes-version "$(K8S_SCHEMA_VERSION)" "$(K8S_RENDER_FILE)"
+.PHONY: k8s-schema-check
+
+## Validate rendered schemas, chart references, and environment invariants
+k8s-render-check: helm-vendor-check k8s-schema-check
+	@$(K8S_CHECK_ALIAS) <<'BASH'
+	case "$(K8S_ENV)" in dev|stage|prod) ;; *) echo "error: invalid K8S_ENV" >&2; exit 1 ;; esac
+	yq -o=json '.' "$(K8S_RENDER_FILE)" | jq -se --arg environment "$(K8S_ENV)" '
+		map(select(. != null)) |
+		if length == 0 then error("Rendered manifest is empty") else . end |
+		if (map([.apiVersion, .kind, .metadata.namespace, .metadata.name]) | length == (unique | length))
+		then . else error("Duplicate resource identities") end |
+		if all(.[]; .metadata.labels.environment == $$environment)
+		then . else error("Incorrect environment label") end |
+		if ([.[] | select(.kind == "Namespace") | .metadata.name] | contains(["dependency-track", "postgresql", "traefik"]))
+		then . else error("Expected namespaces are missing") end |
+		([.[] | select(.kind == "Service" and .metadata.namespace == "traefik" and .metadata.name == "traefik")]) as $$services |
+		if ($$services | length) == 1 and $$services[0].spec.type == "LoadBalancer"
+		then . else error("Traefik Service must be LoadBalancer") end |
+		if $$environment != "dev" or
+			([$$services[0].spec.ports[] | {key: .name, value: .nodePort}] | from_entries | .web == 30080 and .websecure == 30443)
+		then . else error("Traefik NodePorts do not match Kind port mappings") end |
+		([.[] | select(.kind == "Deployment" and .metadata.namespace == "traefik" and .metadata.name == "traefik")]) as $$deployments |
+		if ($$deployments | length) == 1 and ($$deployments[0].spec.template.spec.hostNetwork // false) == false
+		then "Validated \(length) resources for \($$environment)"
+		else error("Traefik Deployment must not use host networking") end'
+	BASH
+.PHONY: k8s-render-check
 
 ## Deploy the selected Kubernetes cluster composition
 k8s-deploy: k8s-validate k8s-confirm
@@ -191,86 +222,71 @@ k8s-observability:
 
 K8S_HELM_IMAGE ?= alpine/helm:4.2.4@sha256:76c375eed56144c68d6197c55bc5a4552fb42002190b796729901cbab3ae6e51
 K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
-HELM_DEPENDENCY_TRACK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/dependency-track-*/dependency-track))
-HELM_POSTGRESQL_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/postgresql-*/postgresql))
-HELM_TRAEFIK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/traefik-*/traefik))
 
-## Vendor a Helm chart into Kustomize-compatible local storage
+## Vendor a new immutable chart version without removing existing versions
 helm-vendor:
-	@if [[ -z "$(HELM_CHART_NAME)" || -z "$(HELM_CHART_VERSION)" || -z "$(HELM_CHART_REPO)" ]]; then \
-		echo "usage: make helm-vendor HELM_CHART_NAME=<name> HELM_CHART_VERSION=<version> HELM_CHART_REPO=<repo>" >&2; \
-		exit 1; \
+	@if [[ -z "$(HELM_CHART_NAME)" || -z "$(HELM_CHART_VERSION)" || -z "$(HELM_CHART_REPO)" ]]; then
+		echo "usage: make helm-vendor HELM_CHART_NAME=<name> HELM_CHART_VERSION=<version> HELM_CHART_REPO=<repo>" >&2
+		exit 1
 	fi
-	@if ! [[ "$(HELM_CHART_NAME)" =~ ^[A-Za-z0-9._-]+$$ ]]; then \
-		echo "error: invalid HELM_CHART_NAME '$(HELM_CHART_NAME)'" >&2; \
-		exit 1; \
+	for value in "$(HELM_CHART_NAME)" "$(HELM_CHART_VERSION)"; do
+		if ! [[ "$$value" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$$ ]]; then
+			echo "error: invalid chart name or version: $$value" >&2
+			exit 1
+		fi
+	done
+	target="$(HELM_VENDOR_DIR)/$(HELM_CHART_NAME)-$(HELM_CHART_VERSION)"
+	if [[ -e "$$target" || -L "$$target" ]]; then
+		echo "error: immutable chart already exists: $$target; retain it unchanged" >&2
+		exit 1
 	fi
-	@mkdir -p "$(HELM_VENDOR_DIR)"
-	@rm -rf "$(HELM_VENDOR_DIR)/$(HELM_CHART_NAME)-"*
-	@target="$(HELM_VENDOR_DIR)/$(HELM_CHART_NAME)-$(HELM_CHART_VERSION)"; \
-		mkdir -p "$$target"; \
-		$(K8S_HELM_ALIAS) pull "$(HELM_CHART_NAME)" \
-			--repo "$(HELM_CHART_REPO)" \
-			--version "$(HELM_CHART_VERSION)" \
-			--untar \
-			--untardir "$$target"
+	mkdir -p "$(HELM_VENDOR_DIR)"
+	temporary="$$(mktemp -d "$(HELM_VENDOR_DIR)/.download-XXXXXX")"
+	trap 'rm -rf -- "$$temporary"' EXIT
+	$(K8S_HELM_ALIAS) pull "$(HELM_CHART_NAME)" --repo "$(HELM_CHART_REPO)" \
+		--version "$(HELM_CHART_VERSION)" --untar --untardir "$$temporary"
+	metadata="$$( $(K8S_TOOLS_ALIAS) yq -r '[.name, .version] | @tsv' "$$temporary/$(HELM_CHART_NAME)/Chart.yaml" )"
+	if [[ "$$metadata" != "$(HELM_CHART_NAME)"$$'\t'"$(HELM_CHART_VERSION)" ]]; then
+		echo "error: downloaded chart metadata does not match $(HELM_CHART_NAME)@$(HELM_CHART_VERSION)" >&2
+		exit 1
+	fi
+	# Publish on the same filesystem; never replace a concurrently published version.
+	mv -T -n -- "$$temporary" "$$target"
+	if [[ -d "$$temporary" ]]; then
+		echo "error: immutable chart already exists: $$target; retain it unchanged" >&2
+		exit 1
+	fi
+	printf 'Vendored %s@%s at %s\n' "$(HELM_CHART_NAME)" "$(HELM_CHART_VERSION)" "$$target"
 .PHONY: helm-vendor
 
-# Render Helm charts templates with specified parameters
-helm-render:
-	@if [[ -z "$(HELM_CHART_DIR)" || ! -d "$(HELM_CHART_DIR)" ]]; then \
-		echo "error: HELM_CHART_DIR must reference a vendored chart directory" >&2; \
-		exit 1; \
+## Validate that every environment references an available vendored chart
+helm-vendor-check:
+	@$(K8S_CHECK_ALIAS) <<'BASH'
+	count=0
+	while IFS= read -r -d '' path; do
+		references="$$(yq -r '.helmGlobals.chartHome as $$home | .helmCharts[] | [$$home, .name, .version] | @tsv' "$$path")"
+		while IFS=$$'\t' read -r home name version; do
+			[[ -n "$$name" ]] || continue
+			metadata_path="$${path%/*}/$$home/$$name-$$version/$$name/Chart.yaml"
+			if [[ ! -f "$$metadata_path" ]]; then
+				echo "error: $$path: missing vendored $$name@$$version" >&2
+				exit 1
+			fi
+			metadata="$$(yq -r '[.name, .version] | @tsv' "$$metadata_path")"
+			if [[ "$$metadata" != "$$name"$$'\t'"$$version" ]]; then
+				echo "error: chart metadata mismatch: $$metadata_path" >&2
+				exit 1
+			fi
+			count=$$((count + 1))
+		done <<< "$$references"
+	done < <(find apps platform -name kustomization.yaml -print0)
+	if (( count == 0 )); then
+		echo "error: no chart references found" >&2
+		exit 1
 	fi
-	@if [[ ! -f "$(HELM_VALUES_FILE)" ]]; then \
-		echo "error: Helm values file not found: $(HELM_VALUES_FILE)" >&2; \
-		exit 1; \
-	fi
-	$(K8S_HELM_ALIAS) template \
-		$(HELM_RELEASE_NAME) \
-		$(HELM_CHART_DIR) \
-		--namespace=$(K8S_NAMESPACE) \
-		--values=$(HELM_VALUES_FILE) \
-		--set image.tag=$(K8S_IMAGE_TAG) \
-		--output-dir=./render/charts
-.PHONY: helm-render
-
-# Render vendored Helm chart for Dependency-Track
-helm-render-dependency-track:
-	@$(MAKE) helm-render \
-		HELM_RELEASE_NAME=dependency-track \
-		HELM_CHART_DIR="$(HELM_DEPENDENCY_TRACK_CHART_DIR)" \
-		HELM_VALUES_FILE="$(HELM_DEPENDENCY_TRACK_CHART_DIR)/values.yaml" \
-		K8S_NAMESPACE=default \
-		K8S_IMAGE_TAG="v1.0.0"
-.PHONY: helm-render-dependency-track
-
-# Render vendored Helm chart for Traefik
-helm-render-traefik:
-	@$(MAKE) helm-render \
-		HELM_RELEASE_NAME=traefik \
-		HELM_CHART_DIR="$(HELM_TRAEFIK_CHART_DIR)" \
-		HELM_VALUES_FILE="$(HELM_TRAEFIK_CHART_DIR)/values.yaml" \
-		K8S_NAMESPACE=default \
-		K8S_IMAGE_TAG="v3.0.0"
-.PHONY: helm-render-traefik
-
-# Render vendored Helm chart for PostgreSQL
-helm-render-postgresql:
-	@$(MAKE) helm-render \
-		HELM_RELEASE_NAME=postgresql \
-		HELM_CHART_DIR="$(HELM_POSTGRESQL_CHART_DIR)" \
-		HELM_VALUES_FILE="$(HELM_POSTGRESQL_CHART_DIR)/values.yaml" \
-		K8S_NAMESPACE=default \
-		K8S_IMAGE_TAG="v16.0.0"
-.PHONY: helm-render-postgresql
-
-## Render all vendored Helm charts
-helm-render-charts:
-	@$(MAKE) -s helm-render-dependency-track
-	@$(MAKE) -s helm-render-traefik
-	@$(MAKE) -s helm-render-postgresql
-.PHONY: helm-render-charts
+	printf 'Validated %s vendored chart references\n' "$$count"
+	BASH
+.PHONY: helm-vendor-check
 
 # ─── Dependency Manager ──────────────────────────────────────────────────────────────────────────
 
