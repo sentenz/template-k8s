@@ -42,6 +42,19 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "Update versions declared by Renovate annotations in Dockerfiles and Containerfiles.",
+      "managerFilePatterns": [
+        "**/[Dd]ockerfile*",
+        "**/[Cc]ontainerfile*",
+        "**/*.[Dd]ockerfile*",
+        "**/*.[Cc]ontainerfile*"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-zA-Z0-9-._]+?) depName=(?<depName>[^\\s]+?)\\s+ARG [A-Za-z0-9_]+\\s*=\\s*[\"']?(?<currentValue>[^\\s\"']+)[\"']?"
+      ]
+    },
+    {
+      "customType": "regex",
       "description": "Update versioned Docker image references in Kubernetes support files.",
       "managerFilePatterns": [
         "**/action.{yml,yaml}",
