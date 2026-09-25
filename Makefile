@@ -25,6 +25,7 @@ K8S_IMAGE_TAG ?= latest
 K8S_NAMESPACE ?= default
 K8S_ENV ?= dev
 K8S_ENV := $(strip $(K8S_ENV))
+K8S_ENVIRONMENTS := dev stage prod
 K8S_CLUSTER_DIR ?= clusters
 K8S_CLUSTER_PATH ?= $(K8S_CLUSTER_DIR)/$(K8S_ENV)
 K8S_KUBECONFIG_DIR ?= .local/kubeconfig
@@ -94,6 +95,10 @@ K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.12@sha256:85ad896d74faabe43ac344659516
 
 # Validate the selected cluster composition before Kubernetes operations
 k8s-validate:
+	@if [[ "$(words $(K8S_ENV))" -ne 1 || -z "$(filter $(K8S_ENV),$(K8S_ENVIRONMENTS))" ]]; then \
+		echo "error: K8S_ENV must be exactly one of: $(K8S_ENVIRONMENTS)" >&2; \
+		exit 1; \
+	fi
 	@if [[ ! -f "$(K8S_CLUSTER_PATH)/kustomization.yaml" ]]; then \
 		echo "error: Kubernetes cluster composition not found: $(K8S_CLUSTER_PATH)/kustomization.yaml" >&2; \
 		exit 1; \
@@ -140,7 +145,11 @@ k8s-confirm:
 ## Render the selected Kubernetes cluster composition
 k8s-render: k8s-validate
 	@mkdir -p "$(dir $(K8S_RENDER_FILE))"
-	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$(K8S_RENDER_FILE)"
+	@set -euo pipefail; \
+	output="$$(mktemp "$(K8S_RENDER_FILE).XXXXXX")"; \
+	trap 'rm -f "$$output"' EXIT HUP INT TERM; \
+	$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$$output"; \
+	mv "$$output" "$(K8S_RENDER_FILE)"
 .PHONY: k8s-render
 
 ## Deploy the selected Kubernetes cluster composition
