@@ -63,16 +63,16 @@ Environment should normally remain metadata when the same immutable release arti
 
 Hierarchy and tags overlap as organisational mechanisms but have different semantics.
 
-| Concern | Preferred mechanism | Rationale |
-|---|---|---|
-| Product contains services | Project hierarchy | Stable one-parent structural relationship |
-| Service contains releases | Project hierarchy | Native version and lifecycle model |
-| ACL inheritance | Project hierarchy | Parent access propagates to descendants |
-| Product/service risk aggregation | Collection project | Native metric aggregation |
-| Environment | Tag by default | Cross-cutting classification |
-| Compliance scope | Tag | Supports policy and alert scoping |
-| Exposure or criticality | Tag | Many-to-many classification |
-| CMDB ID, repository, owner ID | Project property | Typed key-value metadata |
+| Concern                          | Preferred mechanism | Rationale                                 |
+| -------------------------------- | ------------------- | ----------------------------------------- |
+| Product contains services        | Project hierarchy   | Stable one-parent structural relationship |
+| Service contains releases        | Project hierarchy   | Native version and lifecycle model        |
+| ACL inheritance                  | Project hierarchy   | Parent access propagates to descendants   |
+| Product/service risk aggregation | Collection project  | Native metric aggregation                 |
+| Environment                      | Tag by default      | Cross-cutting classification              |
+| Compliance scope                 | Tag                 | Supports policy and alert scoping         |
+| Exposure or criticality          | Tag                 | Many-to-many classification               |
+| CMDB ID, repository, owner ID    | Project property    | Typed key-value metadata                  |
 
 - Tags
   > **Documented.** Tags are global name-only labels with many-to-many attachment. They support project filtering, policy assignment, alert scoping, and tag-filtered collection aggregation. Tags have no per-tag access control.
@@ -85,12 +85,12 @@ Hierarchy and tags overlap as organisational mechanisms but have different seman
 
 ## 3. Release and Environment Alternatives
 
-| Model | History | Environment fidelity | Project count | Operational characteristics |
-|---|---|---|---:|---|
-| Release projects under service | Strong | Metadata-level | `S × R` | Recommended default |
-| Rolling project per environment | Weak release history | Strong current-state view | `S × E` | Low cardinality; requires external historical SBOM archive |
-| Release × environment projects | Strong | Strong | `S × R × E` | Maximum fidelity; highest maintenance cost |
-| Single rolling service project | Weak | Weak | `S` | Simplest; unsuitable for release traceability |
+| Model                           | History              | Environment fidelity      | Project count | Operational characteristics                                |
+| ------------------------------- | -------------------- | ------------------------- | ------------: | ---------------------------------------------------------- |
+| Release projects under service  | Strong               | Metadata-level            |       `S × R` | Recommended default                                        |
+| Rolling project per environment | Weak release history | Strong current-state view |       `S × E` | Low cardinality; requires external historical SBOM archive |
+| Release × environment projects  | Strong               | Strong                    |   `S × R × E` | Maximum fidelity; highest maintenance cost                 |
+| Single rolling service project  | Weak                 | Weak                      |           `S` | Simplest; unsuitable for release traceability              |
 
 - One project per release
   > **Recommended default.** Use a stable project name and place the release identifier in `version`, for example `name=product-a.service-1`, `version=1.3.0`.
@@ -147,19 +147,19 @@ Tags and project properties may describe ownership but do not constitute authori
 
 ## 5. Naming and Metadata Conventions
 
-| Field | Convention | Example |
-|---|---|---|
-| Product collection | Human-readable stable name | `Product A` |
-| Service collection | Product-qualified human-readable name | `Product A / Service 1` |
-| SBOM project name | Globally unambiguous stable identifier | `product-a.service-1` |
-| Project version | Artifact/release identifier | `1.3.0` |
-| Environment-specific name | Add environment only when separate project state is required | `product-a.service-1@prod` |
-| Classifier | CycloneDX-aligned type | `APPLICATION`, `LIBRARY`, `CONTAINER` |
-| Environment tag | Controlled global vocabulary | `env-prod` |
-| Compliance tag | Controlled global vocabulary | `pci` |
-| Criticality tag | Controlled global vocabulary | `criticality-tier-1` |
-| Ownership property | Structured metadata | `ownership.team=service-1-team` |
-| Repository property | Structured metadata | `source.repository=git.example.org/product-a/service-1` |
+| Field                     | Convention                                                   | Example                                                 |
+| ------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| Product collection        | Human-readable stable name                                   | `Product A`                                             |
+| Service collection        | Product-qualified human-readable name                        | `Product A / Service 1`                                 |
+| SBOM project name         | Globally unambiguous stable identifier                       | `product-a.service-1`                                   |
+| Project version           | Artifact/release identifier                                  | `1.3.0`                                                 |
+| Environment-specific name | Add environment only when separate project state is required | `product-a.service-1@prod`                              |
+| Classifier                | CycloneDX-aligned type                                       | `APPLICATION`, `LIBRARY`, `CONTAINER`                   |
+| Environment tag           | Controlled global vocabulary                                 | `env-prod`                                              |
+| Compliance tag            | Controlled global vocabulary                                 | `pci`                                                   |
+| Criticality tag           | Controlled global vocabulary                                 | `criticality-tier-1`                                    |
+| Ownership property        | Structured metadata                                          | `ownership.team=service-1-team`                         |
+| Repository property       | Structured metadata                                          | `source.repository=git.example.org/product-a/service-1` |
 
 `version` should describe the software artifact rather than its deployment environment unless the environment is intentionally part of project identity.
 
