@@ -13,6 +13,11 @@ dependency-track/
     └── prod/
 ```
 
+## Documentation
+
+- [SBOM Organisation](docs/sbom-organisation.md)
+  > Project hierarchy, release and environment modelling, metadata conventions, and access-control model for Dependency-Track.
+
 ## Development
 
 The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local topology and TLS material are owned by `clusters/dev`.

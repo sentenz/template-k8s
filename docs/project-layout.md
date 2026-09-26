@@ -28,6 +28,9 @@ This repository separates application packaging, platform capabilities, environm
 │   ├── dev/
 │   │   ├── kind-cluster.yaml
 │   │   ├── kustomization.yaml
+│   │   ├── controllers/kustomization.yaml
+│   │   ├── configs/kustomization.yaml
+│   │   ├── apps/kustomization.yaml
 │   │   ├── dependency-track.localhost+1.pem.enc
 │   │   └── dependency-track.localhost+1-key.pem.enc
 │   ├── stage/
@@ -40,6 +43,11 @@ This repository separates application packaging, platform capabilities, environm
         ├── postgresql-18.8.5/postgresql/
         └── traefik-41.1.0/traefik/
 ```
+
+Each cluster root composes `controllers/`, `configs/`, and `apps/` child
+roots. This makes lifecycle boundaries explicit for a reconciler while
+retaining one aggregate path for complete rendering and review; see
+[`reconciliation.md`](reconciliation.md).
 
 Generated local runtime state is not part of the declarative repository tree. The Make workflow stores kubeconfigs under `.local/kubeconfig/<environment>.yaml`, and `.local/` is ignored by Git.
 
@@ -127,6 +135,11 @@ clusters/dev/
 ├── kustomization.yaml       # what is deployed into the dev cluster
 └── *.enc                    # encrypted dev-only cluster fixtures
 ```
+
+The shared platform convention is a `LoadBalancer` ingress Service. The Kind
+profile is the documented local exception: it uses fixed `NodePort` values and
+host port mappings because Kind does not provision an external load balancer.
+Stage and production retain `LoadBalancer`.
 
 ## Environment configuration
 
