@@ -4,6 +4,8 @@ Dependency-Track is the application workload in this template. The upstream Helm
 
 The [SBOM organisation reference architecture](../../docs/dependency-track-sbom-organisation.md) describes project hierarchies, retained releases, environment metadata, collection reporting, and team access.
 
+[Configuration examples](../../examples/dependency-track/README.md) cover Policy as Code, SBOM organisation, and Portfolio Access Control, including the distinction between native files and declarations requiring an API reconciler.
+
 ```text
 dependency-track/
 ├── base/

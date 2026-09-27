@@ -2,7 +2,7 @@
 
 A Dependency-Track software bill of materials (SBOM) organisation model defines how released software, ownership, deployment context, and reporting map to projects in [Dependency-Track][projects]. A project is the unit that holds inventory and analysis state; its parent relationship, metadata, and access assignments determine how that state is organised and exposed.
 
-This reference architecture evaluates **Organisation → Group → Product → Service or Independently Released Component**. A component at this organisational level is a separately released library, container image, or other artifact. Dependencies inside its SBOM remain inventory entries rather than becoming separate organisational projects.
+This reference architecture evaluates **Organisation → Group → Product → Service or Independently Released Component**. A component at this organisational level is a separately released library, container image, or other artifact. Dependencies inside its SBOM remain inventory entries rather than becoming separate organisational projects. [Configuration examples](../examples/dependency-track/README.md) express the worked model as native policy files and local declarations for SBOM organisation and portfolio access control.
 
 - [1. Evidence and Version Scope](#1-evidence-and-version-scope)
 - [2. Project Model](#2-project-model)

@@ -1,0 +1,40 @@
+# Local declarative example. Team membership must be bound to real identities separately.
+# Reconcile teams and ACL mappings before enabling PAC on an existing portfolio.
+format: sentenz.dependency-track/access-v1
+configuration:
+  - groupName: access-management
+    propertyName: acl.enabled
+    propertyValue: "true"
+
+teams:
+  - id: product-governance
+    name: product-a-governance
+    permissions:
+      - VIEW_PORTFOLIO
+      - VIEW_VULNERABILITY
+      - VIEW_POLICY_VIOLATION
+
+  - id: service-maintainers
+    name: service-1-maintainers
+    permissions:
+      - VIEW_PORTFOLIO
+      - VIEW_VULNERABILITY
+      - VIEW_POLICY_VIOLATION
+      - BOM_UPLOAD
+      - PORTFOLIO_MANAGEMENT_UPDATE
+      - VULNERABILITY_ANALYSIS_UPDATE
+      - POLICY_VIOLATION_ANALYSIS
+
+  - id: service-upload
+    name: service-1-upload
+    permissions:
+      - BOM_UPLOAD
+
+# Direct grants only. Dependency-Track supplies descendant inheritance.
+grants:
+  - teamRef: product-governance
+    projectRef: product-a
+  - teamRef: service-maintainers
+    projectRef: service-1
+  - teamRef: service-upload
+    projectRef: service-1
