@@ -5,7 +5,7 @@ cluster. A delivery system should render and reconcile its child roots in this
 order, waiting for readiness between stages:
 
 1. `controllers/` — operators, CRDs, admission webhooks, and ingress.
-2. `configs/` — platform services, namespaces, and cluster configuration.
+2. `configs/` — infrastructure services, namespaces, and cluster configuration.
 3. `apps/` — application namespaces, workload-specific Secrets, and application workloads.
 
 The aggregate `clusters/<environment>/kustomization.yaml` is the review and
