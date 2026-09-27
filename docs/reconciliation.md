@@ -12,6 +12,13 @@ The aggregate `clusters/<environment>/kustomization.yaml` is the review and
 rendering entry point. It must not also be reconciled as a second owner of the
 same objects when the child roots are reconciled independently.
 
+When migrating an existing aggregate reconciliation to child roots, suspend the
+old reconciliation and disable its pruning and deletion of managed resources
+before changing paths or removing its inventory. Use the delivery system's
+orphan/adoption procedure to transfer ownership without deleting live objects.
+Verify that every resource has exactly one child owner before enabling pruning
+under the lifecycle policy below.
+
 Each child root includes the cluster-local `labels/` component so independent
 builds and the aggregate render carry identical resource and pod-template labels
 without changing selectors. The development TLS Secret belongs to `apps/`,
@@ -41,8 +48,30 @@ reverse database migrations or restore persistent data.
 
 ## Validation
 
-With Python 3, PyYAML, Helm, Kustomize, and the development TLS fixtures
-available, run `python3 -m unittest discover -s tests -p 'test_*.py' -v`.
-The checks cover Make environment selection and atomic rendering, then compare
-each aggregate render with its independently rendered children and verify
-namespace availability and unique resource ownership across stages.
+Prepare the [development TLS fixtures](../apps/dependency-track/README.md#2-development)
+and make Docker available. From the repository root, render all environments
+and their child roots with the Make target's pinned tool image:
+
+```bash
+set -euo pipefail
+
+for environment in dev stage prod; do
+  make k8s-render K8S_ENV="$environment"
+  for root in controllers configs apps; do
+    make k8s-render \
+      K8S_ENV="$environment" \
+      K8S_CLUSTER_PATH="clusters/$environment/$root" \
+      K8S_RENDER_FILE="render/kustomize/$environment/$root.yaml"
+  done
+done
+```
+
+These commands check renderability. During review, compare the aggregate with
+the union of its children by API group, kind, namespace, and name, ignoring
+document order. Resource content, labels, and selectors must match; each object
+must have one owner, and each required namespace must belong to the same or an
+earlier stage.
+
+The Kind workflow validates the development aggregate with a live deployment
+and ingress checks. It does not exercise independent child reconciliation,
+stage/production Secret provisioning, or inventory-based pruning.

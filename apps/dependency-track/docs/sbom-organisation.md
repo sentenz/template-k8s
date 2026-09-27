@@ -80,6 +80,9 @@ Hierarchy and tags overlap as organisational mechanisms but have different seman
 - Project Properties
   > **Documented.** Properties are typed key-value metadata scoped to one project. Built-in policy, alert, and collection logic does not use them for scoping.
 
+- Collection scope
+  > **Documented.** Collection rules select direct children. A product collection cannot filter release grandchildren by their environment tags; configure the intended release selection on each service collection, then aggregate those service collections at the product level.
+
 - Tags as hierarchy
   > **Not recommended.** A tag-only hierarchy provides no parent-child navigation, ACL inheritance, structural aggregation, or enforced containment. Tags should describe orthogonal dimensions rather than replace the canonical project tree.
 
@@ -181,6 +184,7 @@ Dependency-Track representation:
 ```plaintext
 Product A
   Type: Collection Project
+  Collection logic: AGGREGATE_DIRECT_CHILDREN
   ACL: access-product-a-governance
 
 └── Product A / Service 1
@@ -213,6 +217,7 @@ When `1.3.0` reaches production, move the `env-prod` tag from `1.2.0` to `1.3.0`
 
 > [!NOTE]
 > `Latest` and `Active` express different concepts. A release can cease to be the latest while remaining active because it is still deployed or supported.
+> In this example, the service's latest-version aggregation includes `1.3.0` and excludes the production release `1.2.0`. For a production-focused view, use `AGGREGATE_DIRECT_CHILDREN_WITH_TAG` with collection tag `env-prod` on the service collection instead. The product collection then aggregates that service's selected metrics.
 
 ## 7. Trade-offs
 
