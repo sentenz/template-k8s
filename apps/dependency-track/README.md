@@ -2,6 +2,8 @@
 
 Dependency-Track is the application workload in this template. The upstream Helm chart defines the workload; Kustomize overlays bind it to an environment.
 
+The [SBOM organisation reference architecture](../../docs/dependency-track-sbom-organisation.md) describes project hierarchies, retained releases, environment metadata, collection reporting, and team access.
+
 ```text
 dependency-track/
 ├── base/
