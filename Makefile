@@ -25,8 +25,8 @@ K8S_IMAGE_TAG ?= latest
 K8S_NAMESPACE ?= default
 K8S_ENV ?= dev
 K8S_ENV := $(strip $(K8S_ENV))
-K8S_ENVIRONMENTS := dev stage prod
 K8S_CLUSTER_DIR ?= clusters
+K8S_ENVIRONMENTS ?= $(notdir $(patsubst %/,%,$(dir $(wildcard $(K8S_CLUSTER_DIR)/*/kustomization.yaml))))
 K8S_CLUSTER_PATH ?= $(K8S_CLUSTER_DIR)/$(K8S_ENV)
 K8S_KUBECONFIG_DIR ?= .local/kubeconfig
 K8S_KUBECONFIG ?= $(K8S_KUBECONFIG_DIR)/$(K8S_ENV).yaml
@@ -95,7 +95,7 @@ K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.12@sha256:85ad896d74faabe43ac344659516
 
 # Validate the selected cluster composition before Kubernetes operations
 k8s-validate:
-	@if [[ "$(words $(K8S_ENV))" -ne 1 || -z "$(filter $(K8S_ENV),$(K8S_ENVIRONMENTS))" ]]; then \
+	@if [[ "$(words $(K8S_ENV))" -ne 1 || -z "$(filter $(K8S_ENVIRONMENTS),$(K8S_ENV))" ]]; then \
 		echo "error: K8S_ENV must be exactly one of: $(K8S_ENVIRONMENTS)" >&2; \
 		exit 1; \
 	fi

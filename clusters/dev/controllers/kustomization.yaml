@@ -3,3 +3,6 @@ kind: Kustomization
 
 resources:
   - ../../../platform/controllers/traefik/overlays/dev
+
+components:
+  - ../labels

@@ -30,6 +30,7 @@ This repository separates application packaging, platform capabilities, environm
 │   │   ├── kustomization.yaml
 │   │   ├── controllers/kustomization.yaml
 │   │   ├── configs/kustomization.yaml
+│   │   ├── labels/kustomization.yaml
 │   │   ├── apps/kustomization.yaml
 │   │   ├── dependency-track.localhost+1.pem.enc
 │   │   └── dependency-track.localhost+1-key.pem.enc
@@ -88,7 +89,7 @@ kustomize build clusters/stage --enable-helm --load-restrictor=LoadRestrictionsN
 kustomize build clusters/prod --enable-helm --load-restrictor=LoadRestrictionsNone
 ```
 
-All deployment, render, CI, and GitOps automation should target `clusters/<environment>`. Application and platform overlays are composition inputs rather than independent deployment entry points.
+Aggregate render and review automation should target `clusters/<environment>`. Delivery systems that enforce lifecycle ordering should reconcile its `controllers/`, `configs/`, and `apps/` child roots as described in the reconciliation contract. Application and platform overlays are composition inputs rather than independent deployment entry points.
 
 The Make interface uses the same boundary. `K8S_ENV` defaults to `dev`, `K8S_CLUSTER_PATH` resolves to `clusters/$(K8S_ENV)`, generated kubeconfig state resolves to `.local/kubeconfig/$(K8S_ENV).yaml`, and rendered output is written to `render/kustomize/$(K8S_ENV).yaml`.
 
@@ -174,7 +175,7 @@ These Secrets can be supplied by an external-secret controller, SOPS/Flux, Seale
 
 1. Create `apps/<name>/base` for stable Kubernetes resources.
 2. Add `apps/<name>/overlays/{dev,stage,prod}` with the Helm release and environment values.
-3. Add the appropriate overlay to each `clusters/<environment>/kustomization.yaml`.
+3. Add the appropriate overlay to each `clusters/<environment>/apps/kustomization.yaml`.
 4. Put cross-cutting behavior in `components/` rather than duplicating patches.
 
 ## Adding a platform capability
@@ -185,7 +186,7 @@ Classify the capability by responsibility first:
 2. Put platform-managed runtime services under `platform/services/<name>/`.
 3. Put shared controller/service configuration under `platform/configs/<name>/` when it has an independent lifecycle.
 4. Give deployable capabilities their own `base/` and `overlays/{dev,stage,prod}` as needed.
-5. Select the appropriate overlay from each `clusters/<environment>/kustomization.yaml`.
+5. Select the appropriate overlay from each cluster's `controllers/kustomization.yaml` or `configs/kustomization.yaml`, according to its lifecycle.
 
 Do not classify a resource as platform infrastructure merely because it is used in development. Ownership and lifecycle determine placement; overlays and cluster composition determine where the resource runs.
 
@@ -202,3 +203,5 @@ clusters/
 ```
 
 Application and platform overlays remain reusable, while cluster directories capture only cluster-specific composition and deltas. Cluster-creation files such as Kind configuration should only be present for cluster implementations that use them.
+
+`K8S_ENVIRONMENTS` defaults to the directories under `K8S_CLUSTER_DIR` that contain a `kustomization.yaml`. Select a concrete cluster with, for example, `make k8s-render K8S_ENV=prod-us-east-1-01`. For compositions outside that directory, set both `K8S_CLUSTER_PATH` and an explicit `K8S_ENVIRONMENTS` allowlist containing the selected `K8S_ENV`.

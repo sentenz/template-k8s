@@ -4,13 +4,5 @@ kind: Kustomization
 resources:
   - ../../../platform/services/postgresql/overlays/dev
 
-secretGenerator:
-  - name: dependency-track-tls
-    namespace: dependency-track
-    type: kubernetes.io/tls
-    files:
-      - tls.crt=../dependency-track.localhost+1.pem
-      - tls.key=../dependency-track.localhost+1-key.pem
-
-generatorOptions:
-  disableNameSuffixHash: true
+components:
+  - ../labels

@@ -3,3 +3,6 @@ kind: Kustomization
 
 resources:
   - ../../../platform/services/postgresql/overlays/stage
+
+components:
+  - ../labels

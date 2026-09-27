@@ -116,7 +116,7 @@ Effective operation = Permission AND ACL access
   > **Documented.** Permissions define allowed operations such as `VIEW_PORTFOLIO`, `BOM_UPLOAD`, `PORTFOLIO_MANAGEMENT_UPDATE`, or `VULNERABILITY_ANALYSIS`.
 
 - Portfolio Access Control
-  > **Documented.** With PAC enabled, project ACL membership is additionally required for project operations.
+  > **Documented.** With PAC enabled, project ACL access is additionally required for project operations, unless the principal holds `PORTFOLIO_ACCESS_CONTROL_BYPASS`.
 
 - Hierarchical inheritance
   > **Documented.** A team granted access to a parent project can access its descendants. Descendants cannot revoke access inherited from an ancestor.
@@ -139,9 +139,11 @@ role-sbom-developer
 access-product-a-service-1
   ACL: Product A / Service 1
 
-user/service-account membership:
+user membership:
   role-sbom-developer + access-product-a-service-1
 ```
+
+The vendored chart defaults to Dependency-Track 5.0.4. For automation on this version, use a team API key whose owning team has both the required permissions and project ACL access; a team API key does not combine memberships from separate role and access teams. Dedicated service accounts require Dependency-Track 5.2.0 or later.
 
 Tags and project properties may describe ownership but do not constitute authorization boundaries.
 
