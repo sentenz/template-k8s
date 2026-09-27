@@ -1,6 +1,6 @@
-# Platform Configurations
+# Infrastructure Configurations
 
-Shared configuration consumed by platform controllers or services belongs here when it has a lifecycle distinct from the capability installation itself.
+Shared configuration consumed by infrastructure controllers or services belongs here when it has a lifecycle distinct from the capability installation itself.
 
 Examples include cert-manager `ClusterIssuer` resources, Traefik middleware or TLS options, external-secret stores, shared policy resources, and other controller-specific custom resources.
 

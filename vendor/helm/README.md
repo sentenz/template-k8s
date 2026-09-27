@@ -26,11 +26,11 @@ vendor/helm/
 Treat everything below `vendor/helm/` as upstream source:
 
 - do not hand-edit vendored chart templates or default values;
-- configure charts through `apps/<name>/overlays/<env>/values.yaml` or `platform/<category>/<name>/overlays/<env>/values.yaml`;
+- configure charts through `apps/<name>/overlays/<env>/values.yaml` or `infrastructure/<category>/<name>/overlays/<env>/values.yaml`;
 - use Kustomize patches for Kubernetes-level changes that are clearer after Helm rendering;
 - maintain forks outside this vendor tree if an upstream chart itself must be changed.
 
-Renovate updates the `helmCharts.version` declarations under `apps/` and `platform/`. The matching vendored chart must be refreshed in the same dependency-update change so repository builds remain reproducible and do not fall back to an upstream chart download.
+Renovate updates the `helmCharts.version` declarations under `apps/` and `infrastructure/`. The matching vendored chart must be refreshed in the same dependency-update change so repository builds remain reproducible and do not fall back to an upstream chart download.
 
 ## Refreshing a chart
 
