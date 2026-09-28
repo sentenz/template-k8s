@@ -12,8 +12,8 @@ secretGenerator:
     namespace: dependency-track
     type: kubernetes.io/tls
     files:
-      - tls.crt=secrets/dependency-track.localhost+1.pem
-      - tls.key=secrets/dependency-track.localhost+1-key.pem
+      - tls.crt=../secrets/dependency-track.localhost+1.pem
+      - tls.key=../secrets/dependency-track.localhost+1-key.pem
 
 generatorOptions:
   disableNameSuffixHash: true

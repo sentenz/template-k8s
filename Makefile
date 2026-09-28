@@ -776,7 +776,7 @@ container-docker-teardown:
 # ─── Certificate Manager ─────────────────────────────────────────────────────────────────────────
 
 CERT_HOSTNAME ?=
-CERT_DIR ?= .
+CERT_DIR ?= $(K8S_CLUSTER_PATH)/secrets
 CERT_DAYS ?= 365
 
 # Usage: make cert-certificate-generate CERT_HOSTNAME=<hostname-or-url> [CERT_DIR=<directory>] [CERT_DAYS=<days>]

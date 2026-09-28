@@ -28,14 +28,14 @@ dependency-track/
 
 ## 2. Development
 
-The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Encrypted TLS fixtures live in `secrets/`, beneath the application composition that consumes them.
+The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local TLS fixtures live in `clusters/dev/secrets/` and are owned by the development cluster composition.
 
 Before rendering the dev environment, decrypt the certificate fixtures:
 
 ```bash
 make secrets-sops-decrypt \
-  path/to/secrets/dependency-track.localhost+1.pem.enc \
-  path/to/secrets/dependency-track.localhost+1-key.pem.enc
+  clusters/dev/secrets/dependency-track.localhost+1.pem.enc \
+  clusters/dev/secrets/dependency-track.localhost+1-key.pem.enc
 ```
 
 Decryption writes sibling `.pem` files, which Git ignores. Kustomize does not decrypt SOPS files: `clusters/dev/apps/kustomization.yaml` reads the plaintext files and generates the `dependency-track-tls` Secret in the `dependency-track` namespace. Its stable name matches the ingress reference in the development Helm values.
@@ -43,10 +43,10 @@ Decryption writes sibling `.pem` files, which Git ignores. Kustomize does not de
 Alternatively, generate a fresh local self-signed certificate without accessing the encrypted fixtures:
 
 ```bash
-make cert-certificate-generate CERT_HOSTNAME=dependency-track.localhost CERT_DIR=path/to/secrets
+make cert-certificate-generate CERT_HOSTNAME=dependency-track.localhost CERT_DIR=clusters/dev/secrets
 ```
 
-override it when generating material for another consuming Kustomization. The Kind CI action generates an ephemeral pair at the same location, uses the certificate for its HTTPS checks, and restores any pre-existing plaintext files during cleanup. Commit only encrypted fixtures; remove plaintext files after use. Rendered manifests also contain Secret data and must be treated as sensitive.
+`CERT_DIR` defaults to `$(K8S_CLUSTER_PATH)/secrets` (`clusters/dev/secrets` for the default environment); override it when generating material for another cluster. The Kind CI action generates an ephemeral pair at the same location, uses the certificate for its HTTPS checks, and restores any pre-existing plaintext files during cleanup. Commit only encrypted fixtures; remove plaintext files after use. Rendered manifests also contain Secret data and must be treated as sensitive.
 
 `clusters/dev` remains the canonical development entry point. The Kind topology for this environment is defined by `clusters/dev/kind-cluster.yaml`.
 
