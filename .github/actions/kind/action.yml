@@ -141,10 +141,10 @@ runs:
       run: |
         set -euo pipefail
 
-        certificate_path="${KUSTOMIZE_PATH}/${INGRESS_HOST}+1.pem"
-        private_key_path="${KUSTOMIZE_PATH}/${INGRESS_HOST}+1-key.pem"
+        certificate_path="${KUSTOMIZE_PATH}/apps/secrets/${INGRESS_HOST}+1.pem"
+        private_key_path="${KUSTOMIZE_PATH}/apps/secrets/${INGRESS_HOST}+1-key.pem"
 
-        mkdir -p "${CERTIFICATE_BACKUP}"
+        mkdir -p "${CERTIFICATE_BACKUP}" "${KUSTOMIZE_PATH}/apps/secrets"
         for path in "${certificate_path}" "${private_key_path}"; do
           name="$(basename "${path}")"
           if [[ -e "${path}" ]]; then
@@ -345,7 +345,7 @@ runs:
         set -euo pipefail
 
         curl_options=(
-          --cacert "${KUSTOMIZE_PATH}/${INGRESS_HOST}+1.pem"
+          --cacert "${KUSTOMIZE_PATH}/apps/secrets/${INGRESS_HOST}+1.pem"
           --connect-timeout 5
           --fail-with-body
           --location
@@ -456,6 +456,7 @@ runs:
       shell: bash
       env:
         KUSTOMIZE_PATH: ${{ inputs.kustomize-path }}
+        INGRESS_HOST: ${{ inputs.ingress-host }}
         KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
         RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
         CERTIFICATE_BACKUP: ${{ runner.temp }}/kind-certificate-backup
@@ -464,7 +465,7 @@ runs:
         set +e
 
         for name in "${INGRESS_HOST}+1.pem" "${INGRESS_HOST}+1-key.pem"; do
-          path="${KUSTOMIZE_PATH}/${name}"
+          path="${KUSTOMIZE_PATH}/apps/secrets/${name}"
           if [[ -f "${CERTIFICATE_BACKUP}/${name}.present" ]]; then
             mv -f -- "${CERTIFICATE_BACKUP}/${name}" "${path}"
           else

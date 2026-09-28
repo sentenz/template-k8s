@@ -60,6 +60,8 @@ Orchestration platform for automating deployment, scaling, and management of con
 
       `K8S_ENV` defaults to `dev`, so the local Kind workflow uses `clusters/dev/kind-cluster.yaml`, deploys `clusters/dev`, and stores its generated kubeconfig at `.local/kubeconfig/dev.yaml`.
 
+      Before rendering or deploying, [prepare the development TLS files](apps/dependency-track/README.md#2-development) in `clusters/dev/apps/secrets/` by decrypting the fixtures or generating a fresh local certificate.
+
       ```bash
       make k8s-setup
       make k8s-render

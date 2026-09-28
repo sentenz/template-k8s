@@ -31,9 +31,11 @@ This repository separates application packaging, infrastructure capabilities, en
 │   │   ├── controllers/kustomization.yaml
 │   │   ├── configs/kustomization.yaml
 │   │   ├── labels/kustomization.yaml
-│   │   ├── apps/kustomization.yaml
-│   │   ├── dependency-track.localhost+1.pem.enc
-│   │   └── dependency-track.localhost+1-key.pem.enc
+│   │   └── apps/
+│   │       ├── kustomization.yaml
+│   │       └── secrets/
+│   │           ├── dependency-track.localhost+1.pem.enc
+│   │           └── dependency-track.localhost+1-key.pem.enc
 │   ├── stage/
 │   │   └── kustomization.yaml
 │   └── prod/
@@ -126,16 +128,21 @@ See `vendor/helm/README.md` for the vendor contract and refresh procedure.
 
 The development environment is backed by Kind. Its version-controlled cluster topology is therefore colocated with its composition at `clusters/dev/kind-cluster.yaml`. This file defines the Kind node topology and local host port mappings, while `clusters/dev/kustomization.yaml` defines what is deployed into that cluster.
 
-Cluster-specific TLS fixtures also remain under `clusters/dev` because their certificate and hostname are properties of the development cluster composition rather than the reusable application overlay.
+Cluster-specific TLS fixtures live under `clusters/dev/apps/secrets/` because their certificate and hostname are properties of the development cluster composition. Their `secretGenerator` remains in `clusters/dev/apps/kustomization.yaml`. Keeping file inputs below their consuming Kustomization root avoids parent-directory references for these files.
 
 The resulting boundary is:
 
 ```text
-clusters/dev/
-├── kind-cluster.yaml        # how the dev Kubernetes cluster is created
-├── kustomization.yaml       # what is deployed into the dev cluster
-└── *.enc                    # encrypted dev-only cluster fixtures
+clusters/dev/kind-cluster.yaml                         # cluster topology
+clusters/dev/kustomization.yaml                        # aggregate composition
+clusters/dev/apps/kustomization.yaml                   # workloads and TLS Secret
+clusters/dev/apps/secrets/<hostname>+1.pem.enc          # encrypted certificate
+clusters/dev/apps/secrets/<hostname>+1-key.pem.enc      # encrypted private key
 ```
+
+`secrets/` is a repository convention, not a Kubernetes-reserved directory. Placement follows ownership: application-owned environment secrets can live under `apps/<app>/overlays/<env>/secrets/` with their generator in that overlay; cluster-owned inputs belong below the relevant cluster child root. Platform-owned issuer configuration belongs under `infrastructure/configs/`. This specializes the [project-layout guidance](https://github.com/sentenz/convention/blob/main/content/guides/project-layout-guidance.md#162-project) for cluster-local inputs without copying workload manifests into cluster directories.
+
+The existing build commands retain `LoadRestrictionsNone`; this relocation does not establish that other repository inputs work with the default load restrictions.
 
 The shared infrastructure convention is a `LoadBalancer` ingress Service. The Kind
 profile is the documented local exception: it uses fixed `NodePort` values and
@@ -158,7 +165,7 @@ This keeps environment deltas explicit and avoids conditional logic such as `if 
 
 ## Secret contract
 
-Development uses disposable fixture credentials and the existing SOPS-encrypted TLS certificate files under `clusters/dev`.
+Development uses disposable fixture credentials and SOPS-encrypted TLS certificate files under `clusters/dev/apps/secrets/`. Follow the [development instructions](../apps/dependency-track/README.md#2-development) to decrypt them or generate a fresh local pair before rendering. Kustomize consumes the ignored plaintext siblings, not the `.enc` files.
 
 Stage and production expect externally managed Secrets:
 

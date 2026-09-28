@@ -28,17 +28,27 @@ dependency-track/
 
 ## 2. Development
 
-The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local topology and TLS material are owned by `clusters/dev`.
+The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local topology and TLS material are owned by `clusters/dev`. Encrypted TLS fixtures live in `clusters/dev/apps/secrets/`, beneath the application composition that consumes them.
 
 Before rendering the dev environment, decrypt the certificate fixtures:
 
 ```bash
 make secrets-sops-decrypt \
-  clusters/dev/dependency-track.localhost+1.pem.enc \
-  clusters/dev/dependency-track.localhost+1-key.pem.enc
+  clusters/dev/apps/secrets/dependency-track.localhost+1.pem.enc \
+  clusters/dev/apps/secrets/dependency-track.localhost+1-key.pem.enc
 ```
 
-The `clusters/dev` kustomization generates the `dependency-track-tls` Secret from the decrypted files and is the canonical development entry point. The Kind topology for this environment is defined by `clusters/dev/kind-cluster.yaml`.
+Decryption writes sibling `.pem` files, which Git ignores. Kustomize does not decrypt SOPS files: `clusters/dev/apps/kustomization.yaml` reads the plaintext files and generates the `dependency-track-tls` Secret in the `dependency-track` namespace. Its stable name matches the ingress reference in the development Helm values.
+
+Alternatively, generate a fresh local self-signed certificate without accessing the encrypted fixtures:
+
+```bash
+make cert-certificate-generate CERT_HOSTNAME=dependency-track.localhost
+```
+
+`CERT_DIR` defaults to `$(K8S_CLUSTER_PATH)/apps/secrets`; override it when generating material for another consuming Kustomization. The Kind CI action generates an ephemeral pair at the same location, uses the certificate for its HTTPS checks, and restores any pre-existing plaintext files during cleanup. Commit only encrypted fixtures; remove plaintext files after use. Rendered manifests also contain Secret data and must be treated as sensitive.
+
+`clusters/dev` remains the canonical development entry point. The Kind topology for this environment is defined by `clusters/dev/kind-cluster.yaml`.
 
 ## 3. Stage and production secrets
 
