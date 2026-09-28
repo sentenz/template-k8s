@@ -28,14 +28,10 @@ This repository separates application packaging, infrastructure capabilities, en
 │   ├── dev/
 │   │   ├── kind-cluster.yaml
 │   │   ├── kustomization.yaml
-│   │   ├── controllers/kustomization.yaml
-│   │   ├── configs/kustomization.yaml
-│   │   ├── labels/kustomization.yaml
+│   │   ├── controllers/
+│   │   ├── configs/
+│   │   ├── labels/
 │   │   └── apps/
-│   │       ├── kustomization.yaml
-│   │       └── secrets/
-│   │           ├── dependency-track.localhost+1.pem.enc
-│   │           └── dependency-track.localhost+1-key.pem.enc
 │   ├── stage/
 │   │   └── kustomization.yaml
 │   └── prod/
