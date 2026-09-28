@@ -33,8 +33,6 @@ This repository separates application packaging, infrastructure capabilities, en
 │   │   ├── labels/
 │   │   ├── apps/
 │   │   └── secrets/
-│   │       ├── dependency-track.localhost+1.pem.enc
-│   │       └── dependency-track.localhost+1-key.pem.enc
 │   ├── stage/
 │   │   └── kustomization.yaml
 │   └── prod/
