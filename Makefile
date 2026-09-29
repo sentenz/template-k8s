@@ -91,7 +91,7 @@ skills-agent-update:
 # ─── Kubernetes Manager ──────────────────────────────────────────────────────────────────────────
 
 # K8S_KIND_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
-K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.12@sha256:85ad896d74faabe43ac34465951670b6063d873ee8101a26abc79160949b5d85
+K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.13@sha256:77a4af852ea39a2b7c140437195b9c868c7938f8ef4da9e2416ee5c8e56e935e
 
 # Validate the selected cluster composition before Kubernetes operations
 k8s-validate:
@@ -129,7 +129,7 @@ k8s-teardown:
 	@rm -f "$(K8S_KUBECONFIG)"
 .PHONY: k8s-teardown
 
-K8S_TOOLS_IMAGE ?= alpine/k8s:1.37.0@sha256:b421c2e9419edb98db39b6ab641669f4db7bb2acf354f22450c6b7e7176d1ff4
+K8S_TOOLS_IMAGE ?= alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
 K8S_TOOLS_ALIAS := docker run --rm --network host --volume "$(CURDIR):/workspace" --workdir /workspace "$(K8S_TOOLS_IMAGE)"
 
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
@@ -198,7 +198,7 @@ k8s-observability:
 
 # ─── Helm Charts ─────────────────────────────────────────────────────────────────────────────────
 
-K8S_HELM_IMAGE ?= alpine/helm:4.2.4@sha256:76c375eed56144c68d6197c55bc5a4552fb42002190b796729901cbab3ae6e51
+K8S_HELM_IMAGE ?= alpine/helm:4.3.0@sha256:a6cf54599ccb99d90cf0712b30f03fdb3cab062e6b94e0418cc4db7e8a1464b2
 K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
 HELM_DEPENDENCY_TRACK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/dependency-track-*/dependency-track))
 HELM_POSTGRESQL_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/postgresql-*/postgresql))
@@ -283,7 +283,7 @@ helm-render-charts:
 
 # ─── Dependency Manager ──────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.65.5@sha256:4e10f76a79f1c597f427f83c788a9f5b14a6295784c4cb68307b89b0a954abce
+DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.121.0@sha256:c52cacf3a1e21075790b02cf0aa6c862bd8b551544b11ed6a158a04afd402ec2
 DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_RENOVATE_IMAGE)"
 
 ## Update project dependencies locally using Renovate and generate a report
@@ -430,7 +430,7 @@ secrets-sops-view:
 
 # ─── Policy Manager ──────────────────────────────────────────────────────────────────────────────
 
-POLICY_CONFTEST_IMAGE ?= docker.io/openpolicyagent/conftest:v0.69.0@sha256:a38ba21668929a00dce2fe6ee43d1312228340bce5fd243f47dd0ce90516e558
+POLICY_CONFTEST_IMAGE ?= docker.io/openpolicyagent/conftest:v0.70.1@sha256:82f23e0e1f3faf2f3798f4b1974676c1aed96b05c6656ec6820435c31867c532
 POLICY_CONFTEST_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_CONFTEST_IMAGE)"
 
 # Usage: make policy-conftest-test <filepath>
@@ -447,7 +447,7 @@ policy-conftest-test:
 	$(POLICY_CONFTEST_ALIAS) test "$(filter-out $@,$(MAKECMDGOALS))" > logs/policy/conftest-report.json 2>&1
 .PHONY: policy-conftest-test
 
-POLICY_REGAL_IMAGE ?= ghcr.io/open-policy-agent/regal:0.42.0@sha256:07984036043f772a1f921bd0ad9045b8bd9dc58460a1d76f476c458dc8a98b16
+POLICY_REGAL_IMAGE ?= ghcr.io/open-policy-agent/regal:0.43.0@sha256:29460f0ec1340d37f6c0c74bcbd88dd232fd8382c7a2337f0684415bd4c46da1
 POLICY_REGAL_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_REGAL_IMAGE)"
 
 # Usage: make policy-regal-lint <filepath>
@@ -466,7 +466,7 @@ policy-regal-lint:
 
 # ─── SAST Manager ────────────────────────────────────────────────────────────────────────────────
 
-SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.176.1@sha256:34ab619bf1391a24bfda3f05debd0d8a6ce3093c2d5f9d39cfc00f83c1397823
+SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
 SAST_SEMGREP_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_SEMGREP_IMAGE)"
 SAST_SEMGREP_FILES ?= .
 SAST_SEMGREP_FILTER = $(if $(strip $(SAST_SEMGREP_FILES)),$(SAST_SEMGREP_FILES),.)
@@ -678,7 +678,7 @@ sast-gitleaks-staged:
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_GITLEAKS)" protect --redact --staged --source /workspace --report-format json --report-path logs/sast/gitleaks-protect.json 2>&1
 .PHONY: sast-gitleaks-staged
 
-SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.97.4@sha256:562bc231afa9de3d04de44cfe624252b08207de1fc3cebc5e7ed92bed7f279e4
+SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.97.9@sha256:52e67fef4d054ecff5c2ce4b4ae376626d1ef54aa0898b53cac19c25e92e14db
 
 ## Scan local filesystem for leaked secrets using TruffleHog and generate a report
 sast-trufflehog-fs:
