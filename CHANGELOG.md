@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.13](https://github.com/sentenz/template-k8s/compare/2.1.12...2.1.13) (2026-09-29)
+
+### Bug Fixes
+
+* group development TLS fixtures under cluster secrets ([#126](https://github.com/sentenz/template-k8s/issues/126)) ([64bd0bd](https://github.com/sentenz/template-k8s/commit/64bd0bdef07642d310de223a012331a0444b104e))
+
 ## [2.1.12](https://github.com/sentenz/template-k8s/compare/2.1.11...2.1.12) (2026-08-30)
 
 ### Bug Fixes
