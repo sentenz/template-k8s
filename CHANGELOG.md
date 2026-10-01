@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.15](https://github.com/sentenz/template-k8s/compare/2.1.14...2.1.15) (2026-10-01)
+
+### Bug Fixes
+
+* **deps:** update helm release traefik to v41.6.1 ([#131](https://github.com/sentenz/template-k8s/issues/131)) ([6a9e82c](https://github.com/sentenz/template-k8s/commit/6a9e82c4cc6644e889b0d3698672b00e71453cad))
+
 ## [2.1.14](https://github.com/sentenz/template-k8s/compare/2.1.13...2.1.14) (2026-09-29)
 
 ### Bug Fixes
