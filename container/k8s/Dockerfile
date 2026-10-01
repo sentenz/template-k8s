@@ -8,6 +8,7 @@ FROM alpine/helm:4.3.0@sha256:a6cf54599ccb99d90cf0712b30f03fdb3cab062e6b94e0418c
 
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS tools-kind
 
+# renovate: datasource=github-releases depName=kubernetes-sigs/kind
 ARG KIND_VERSION=v0.32.0
 ARG TARGETOS=linux
 ARG TARGETARCH

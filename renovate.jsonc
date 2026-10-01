@@ -3,13 +3,12 @@
   "extends": [
     "config:recommended"
   ],
+  "semanticCommits": "enabled",
   "rebaseWhen": "behind-base-branch",
   "minimumReleaseAge": "1 day",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "internalChecksFilter": "strict",
   "dependencyDashboard": true,
-  "prHourlyLimit": 0,
-  "prConcurrentLimit": 0,
   "ignorePaths": [
     "**/vendor/**",
     "**/node_modules/**",
@@ -57,6 +56,18 @@
       "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{else}}{{#if currentDigest}}@{{{currentDigest}}}{{/if}}{{/if}}",
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update versions declared by Renovate annotations in Dockerfiles and Containerfiles.",
+      "managerFilePatterns": [
+        "/Dockerfile$/",
+        "/Containerfile$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z0-9-]+) depName=(?<depName>[a-z0-9._/-]+)\\s*\\nARG [A-Z][A-Z0-9_]*=(?<currentValue>\\S+)"
+      ],
+      "autoReplaceStringTemplate": "# renovate: datasource={{datasource}} depName={{depName}}\nARG KIND_VERSION={{newValue}}"
     }
   ],
   "packageRules": [
@@ -75,7 +86,6 @@
         "major"
       ],
       "groupName": "major versions",
-      "groupSlug": "major-versions",
       "automerge": false
     },
     {
@@ -93,7 +103,6 @@
         "minor"
       ],
       "groupName": "minor versions",
-      "groupSlug": "minor-versions",
       "automerge": false
     },
     {
@@ -111,7 +120,6 @@
         "patch"
       ],
       "groupName": "patch versions",
-      "groupSlug": "patch-versions",
       "automerge": false
     },
     {
@@ -126,13 +134,12 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
       "groupName": "kubernetes dependencies",
-      "groupSlug": "kubernetes-dependencies",
-      "semanticCommits": "enabled",
       "semanticCommitType": "fix",
-      "semanticCommitScope": "deps",
       "automerge": false
     },
     {
@@ -145,7 +152,14 @@
       "matchDatasources": [
         "docker"
       ],
-      "pinDigests": true,
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigests"
+      ],
       "automerge": false
     },
     {
@@ -156,7 +170,14 @@
       "matchDatasources": [
         "docker"
       ],
-      "pinDigests": true,
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigests"
+      ],
       "automerge": false
     },
     {
@@ -171,11 +192,11 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
-      "pinDigests": true,
       "groupName": "dockerfile container images",
-      "groupSlug": "dockerfile-container-images",
       "automerge": false
     },
     {
@@ -186,7 +207,14 @@
       "matchDatasources": [
         "docker"
       ],
-      "pinDigests": true,
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigests"
+      ],
       "automerge": false
     },
     {
@@ -206,11 +234,11 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
-      "pinDigests": true,
       "groupName": "makefile container images",
-      "groupSlug": "makefile-container-images",
       "automerge": true
     },
     {
@@ -229,14 +257,12 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
-      "pinDigests": true,
       "groupName": "kind container images",
-      "groupSlug": "kind-container-images",
-      "semanticCommits": "enabled",
       "semanticCommitType": "fix",
-      "semanticCommitScope": "deps",
       "automerge": false
     },
     {
@@ -266,15 +292,31 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
-      "pinDigests": true,
       "groupName": "github actions container images",
       "groupSlug": "github-actions-container-images",
-      "semanticCommits": "enabled",
       "semanticCommitType": "ci",
-      "semanticCommitScope": "deps",
       "automerge": true
+    },
+    {
+      "description": "Group Kind version updates from renovate-annotated ARGs in Dockerfiles and Containerfiles.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "**/Dockerfile",
+        "**/Containerfile",
+        "**/*.Dockerfile",
+        "**/*.Containerfile"
+      ],
+      "matchDepNames": [
+        "kubernetes-sigs/kind"
+      ],
+      "groupName": "kind version",
+      "automerge": false
     }
   ]
 }
