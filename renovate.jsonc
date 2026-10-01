@@ -3,13 +3,12 @@
   "extends": [
     "config:recommended"
   ],
+  "semanticCommits": "enabled",
   "rebaseWhen": "behind-base-branch",
   "minimumReleaseAge": "1 day",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "internalChecksFilter": "strict",
   "dependencyDashboard": true,
-  "prHourlyLimit": 0,
-  "prConcurrentLimit": 0,
   "ignorePaths": [
     "**/vendor/**",
     "**/node_modules/**",
@@ -26,7 +25,7 @@
   },
   "kubernetes": {
     "managerFilePatterns": [
-      "/^(apps|platform|clusters)/.+\\.ya?ml$/"
+      "/^(apps|infrastructure|clusters)/.+\\.ya?ml$/"
     ]
   },
   "labels": [
@@ -87,7 +86,6 @@
         "major"
       ],
       "groupName": "major versions",
-      "groupSlug": "major-versions",
       "automerge": false
     },
     {
@@ -105,7 +103,6 @@
         "minor"
       ],
       "groupName": "minor versions",
-      "groupSlug": "minor-versions",
       "automerge": false
     },
     {
@@ -123,7 +120,6 @@
         "patch"
       ],
       "groupName": "patch versions",
-      "groupSlug": "patch-versions",
       "automerge": false
     },
     {
@@ -138,13 +134,12 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
       "groupName": "kubernetes dependencies",
-      "groupSlug": "kubernetes-dependencies",
-      "semanticCommits": "enabled",
       "semanticCommitType": "fix",
-      "semanticCommitScope": "deps",
       "automerge": false
     },
     {
@@ -157,7 +152,14 @@
       "matchDatasources": [
         "docker"
       ],
-      "pinDigests": true,
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigests"
+      ],
       "automerge": false
     },
     {
@@ -168,7 +170,14 @@
       "matchDatasources": [
         "docker"
       ],
-      "pinDigests": true,
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigests"
+      ],
       "automerge": false
     },
     {
@@ -183,11 +192,11 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
-      "pinDigests": true,
       "groupName": "dockerfile container images",
-      "groupSlug": "dockerfile-container-images",
       "automerge": false
     },
     {
@@ -198,7 +207,14 @@
       "matchDatasources": [
         "docker"
       ],
-      "pinDigests": true,
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigests"
+      ],
       "automerge": false
     },
     {
@@ -218,11 +234,11 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
-      "pinDigests": true,
       "groupName": "makefile container images",
-      "groupSlug": "makefile-container-images",
       "automerge": true
     },
     {
@@ -241,14 +257,12 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
-      "pinDigests": true,
       "groupName": "kind container images",
-      "groupSlug": "kind-container-images",
-      "semanticCommits": "enabled",
       "semanticCommitType": "fix",
-      "semanticCommitScope": "deps",
       "automerge": false
     },
     {
@@ -278,14 +292,13 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "pin",
+        "digest",
+        "pinDigests"
       ],
-      "pinDigests": true,
       "groupName": "github actions container images",
       "groupSlug": "github-actions-container-images",
-      "semanticCommits": "enabled",
       "semanticCommitType": "ci",
-      "semanticCommitScope": "deps",
       "automerge": true
     },
     {
@@ -303,10 +316,6 @@
         "kubernetes-sigs/kind"
       ],
       "groupName": "kind version",
-      "groupSlug": "kind-version",
-      "semanticCommits": "enabled",
-      "semanticCommitType": "chore",
-      "semanticCommitScope": "deps",
       "automerge": false
     }
   ]
