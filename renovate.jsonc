@@ -13,7 +13,6 @@
     "**/vendor/**",
     "**/node_modules/**",
     "**/bower_components/**",
-    "**/charts/**",
     "test/**",
     "tests/**"
   ],
@@ -26,6 +25,11 @@
   "kubernetes": {
     "managerFilePatterns": [
       "/^(apps|infrastructure|clusters)/.+\\.ya?ml$/"
+    ]
+  },
+  "helm-values": {
+    "managerFilePatterns": [
+      "/(^|/)values(?:[-.][^/]+)?\\.ya?ml$/"
     ]
   },
   "labels": [
@@ -136,7 +140,7 @@
         "patch",
         "pin",
         "digest",
-        "pinDigests"
+        "pinDigest"
       ],
       "groupName": "kubernetes dependencies",
       "semanticCommitType": "fix",
@@ -152,14 +156,7 @@
       "matchDatasources": [
         "docker"
       ],
-      "matchUpdateTypes": [
-        "major",
-        "minor",
-        "patch",
-        "pin",
-        "digest",
-        "pinDigests"
-      ],
+      "pinDigests": true,
       "automerge": false
     },
     {
@@ -176,7 +173,7 @@
         "patch",
         "pin",
         "digest",
-        "pinDigests"
+        "pinDigest"
       ],
       "automerge": false
     },
@@ -194,7 +191,7 @@
         "patch",
         "pin",
         "digest",
-        "pinDigests"
+        "pinDigest"
       ],
       "groupName": "dockerfile container images",
       "automerge": false
@@ -213,7 +210,7 @@
         "patch",
         "pin",
         "digest",
-        "pinDigests"
+        "pinDigest"
       ],
       "automerge": false
     },
@@ -236,7 +233,7 @@
         "patch",
         "pin",
         "digest",
-        "pinDigests"
+        "pinDigest"
       ],
       "groupName": "makefile container images",
       "automerge": true
@@ -259,7 +256,7 @@
         "patch",
         "pin",
         "digest",
-        "pinDigests"
+        "pinDigest"
       ],
       "groupName": "kind container images",
       "semanticCommitType": "fix",
@@ -294,7 +291,7 @@
         "patch",
         "pin",
         "digest",
-        "pinDigests"
+        "pinDigest"
       ],
       "groupName": "github actions container images",
       "groupSlug": "github-actions-container-images",
