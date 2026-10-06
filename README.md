@@ -48,6 +48,9 @@ Orchestration platform for automating deployment, scaling, and management of con
     - [Project Layout](docs/project-layout.md)
       > Helm and Kustomize repository structure for development, stage, and production environments.
 
+    - [Dependency-Track SBOM Organisation](docs/dependency-track-sbom-organisation.md)
+      > Reference architecture for release inventories, collection reporting, environment metadata, and team access.
+
 2. Usage and Instructions
 
     - CI/CD

@@ -1,0 +1,100 @@
+# Local declarative example, not a native Dependency-Track import or Kubernetes resource.
+# Resolve parentRef through projects[].id; send project fields through the REST API.
+format: sentenz.dependency-track/portfolio-v1
+projects:
+  - id: organisation-a
+    project:
+      name: org-a
+      collectionLogic: AGGREGATE_DIRECT_CHILDREN
+      active: true
+      isLatest: false
+      tags:
+        - name: org:org-a
+    properties:
+      - {groupName: ownership, propertyName: organisation-id, propertyValue: org-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: team-id, propertyValue: organisation-a-governance, propertyType: STRING}
+
+  - id: group-a
+    parentRef: organisation-a
+    project:
+      name: org-a.group-a
+      collectionLogic: AGGREGATE_DIRECT_CHILDREN
+      active: true
+      isLatest: false
+      tags:
+        - name: org:org-a
+        - name: group:org-a.group-a
+    properties:
+      - {groupName: ownership, propertyName: organisation-id, propertyValue: org-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: group-id, propertyValue: group-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: team-id, propertyValue: group-a-governance, propertyType: STRING}
+
+  - id: product-a
+    parentRef: group-a
+    project:
+      name: org-a.product-a
+      collectionLogic: AGGREGATE_DIRECT_CHILDREN
+      active: true
+      isLatest: false
+      tags:
+        - name: org:org-a
+        - name: group:org-a.group-a
+        - name: product:org-a.product-a
+    properties:
+      - {groupName: ownership, propertyName: organisation-id, propertyValue: org-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: group-id, propertyValue: group-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: product-id, propertyValue: product-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: team-id, propertyValue: product-a-governance, propertyType: STRING}
+
+  - id: service-1
+    parentRef: product-a
+    project:
+      name: org-a.product-a.service-1.releases
+      collectionLogic: AGGREGATE_LATEST_VERSION_CHILDREN
+      active: true
+      isLatest: false
+      tags:
+        - name: org:org-a
+        - name: group:org-a.group-a
+        - name: product:org-a.product-a
+        - name: service:org-a.product-a.service-1
+    # YAML aliases below expand these properties explicitly onto both releases.
+    properties: &service_ownership
+      - {groupName: ownership, propertyName: organisation-id, propertyValue: org-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: group-id, propertyValue: group-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: product-id, propertyValue: product-a, propertyType: STRING}
+      - {groupName: ownership, propertyName: service-id, propertyValue: service-1, propertyType: STRING}
+      - {groupName: ownership, propertyName: team-id, propertyValue: service-1-maintainers, propertyType: STRING}
+
+  - id: service-1-1-2-0
+    parentRef: service-1
+    project:
+      name: org-a.product-a.service-1
+      version: "1.2.0"
+      classifier: APPLICATION
+      active: true
+      isLatest: false
+      tags:
+        - name: org:org-a
+        - name: group:org-a.group-a
+        - name: product:org-a.product-a
+        - name: service:org-a.product-a.service-1
+        - name: env:prod
+    properties: *service_ownership
+
+  - id: service-1-1-3-0
+    parentRef: service-1
+    project:
+      name: org-a.product-a.service-1
+      version: "1.3.0"
+      classifier: APPLICATION
+      active: true
+      isLatest: true
+      tags:
+        - name: org:org-a
+        - name: group:org-a.group-a
+        - name: product:org-a.product-a
+        - name: service:org-a.product-a.service-1
+        - name: env:dev
+        - name: env:test
+    properties: *service_ownership
