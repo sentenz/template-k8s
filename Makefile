@@ -283,7 +283,7 @@ helm-render-charts:
 
 # ─── Dependency Manager ──────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.132.5@sha256:2c801b47ce82c349453e554188abe4fa0b51bde333cfea54e67ad8a88d525087
+DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.149.3@sha256:11431b10c52c306bb280171f80d409e1fb482e5a61a845cfef93f34b4d649d5d
 DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_RENOVATE_IMAGE)"
 
 ## Update project dependencies locally using Renovate and generate a report
@@ -430,7 +430,7 @@ secrets-sops-view:
 
 # ─── Policy Manager ──────────────────────────────────────────────────────────────────────────────
 
-POLICY_CONFTEST_IMAGE ?= docker.io/openpolicyagent/conftest:v0.71.0@sha256:3ec6dad358db08acecda56b7a3184037cd810394a65046fafa4f33c7750141b1
+POLICY_CONFTEST_IMAGE ?= docker.io/openpolicyagent/conftest:v0.71.1@sha256:0e77cdf7c1fcde035f3c579e4aaa6664ee2a8be5777eaa9af9f520cdd02280c0
 POLICY_CONFTEST_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(POLICY_CONFTEST_IMAGE)"
 
 # Usage: make policy-conftest-test <filepath>
@@ -466,7 +466,7 @@ policy-regal-lint:
 
 # ─── SAST Manager ────────────────────────────────────────────────────────────────────────────────
 
-SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b
+SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.180.0@sha256:529ee8a277ec8adc5b534d7c74eea0a47e9de21d62852b6ba7ac6ba9566845c3
 SAST_SEMGREP_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_SEMGREP_IMAGE)"
 SAST_SEMGREP_FILES ?= .
 SAST_SEMGREP_FILTER = $(if $(strip $(SAST_SEMGREP_FILES)),$(SAST_SEMGREP_FILES),.)
@@ -678,7 +678,7 @@ sast-gitleaks-staged:
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_GITLEAKS)" protect --redact --staged --source /workspace --report-format json --report-path logs/sast/gitleaks-protect.json 2>&1
 .PHONY: sast-gitleaks-staged
 
-SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.97.9@sha256:52e67fef4d054ecff5c2ce4b4ae376626d1ef54aa0898b53cac19c25e92e14db
+SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
 
 ## Scan local filesystem for leaked secrets using TruffleHog and generate a report
 sast-trufflehog-fs:
