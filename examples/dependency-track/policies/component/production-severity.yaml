@@ -1,0 +1,22 @@
+# Local envelope containing native REST request bodies and a tag assignment.
+# Create the policy, attach scope tags, then create conditions through separate calls.
+format: sentenz.dependency-track/component-policy-v1
+policy:
+  name: example-production-high-severity
+  operator: ANY
+  violationState: FAIL
+  # Production may run an older retained release.
+  onlyLatestProjectVersion: false
+scope:
+  tags: [env:prod]
+conditions:
+  - id: high-severity
+    request:
+      subject: SEVERITY
+      operator: IS
+      value: HIGH
+  - id: critical-severity
+    request:
+      subject: SEVERITY
+      operator: IS
+      value: CRITICAL
