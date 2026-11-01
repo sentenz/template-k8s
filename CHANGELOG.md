@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.16](https://github.com/sentenz/template-k8s/compare/2.1.15...2.1.16) (2026-11-01)
+
+### Bug Fixes
+
+* **deps:** update kubernetes dependencies ([#144](https://github.com/sentenz/template-k8s/issues/144)) ([df1eb67](https://github.com/sentenz/template-k8s/commit/df1eb6700a4cfea3c832c2f50ed671fe86365257))
+
 ## [2.1.15](https://github.com/sentenz/template-k8s/compare/2.1.14...2.1.15) (2026-10-01)
 
 ### Bug Fixes
