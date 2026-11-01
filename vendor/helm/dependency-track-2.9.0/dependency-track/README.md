@@ -1,6 +1,6 @@
 # dependency-track
 
-![Version: 2.5.0](https://img.shields.io/badge/Version-2.5.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.1.1](https://img.shields.io/badge/AppVersion-5.1.1-informational?style=flat-square)
+![Version: 2.9.0](https://img.shields.io/badge/Version-2.9.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 5.2.1](https://img.shields.io/badge/AppVersion-5.2.1-informational?style=flat-square)
 
 Dependency-Track is an intelligent Component Analysis platform
 that allows organizations to identify and reduce risk in the software supply chain.
@@ -196,6 +196,7 @@ Do note however:
 | extraObjects | list | `[]` | Extra manifests via values. |
 | fileStorage.local.accessModes | list | `["ReadWriteOnce"]` | Access modes for the created PVC. MUST use `ReadWriteMany` in order to support multiple api-server replicas! Ignored when `existingClaim` is provided. |
 | fileStorage.local.existingClaim | string | `""` | Name of an existing PVC. When set, no PVC is created by the chart. |
+| fileStorage.local.labels | object | `{}` | Labels to attach to the created PVC. Ignored when `existingClaim` is provided. |
 | fileStorage.local.mountPath | string | `"/data"` | Mount path of the PVC. Should match the api server's `dt.data.directory` config property, which defaults to `/data`. If you alter that property, you need to modify this path accordingly. |
 | fileStorage.local.size | string | `"10Gi"` | Storage capacity of the created PVC. Ignored when `existingClaim` is provided. |
 | fileStorage.local.storageClassName | string | `""` | Name of the `StorageClass` for the created PVC. Ignored when `existingClaim` is provided. |
