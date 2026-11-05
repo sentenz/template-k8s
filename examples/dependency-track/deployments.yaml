@@ -1,0 +1,11 @@
+# Local snapshot of deployment membership, not a Dependency-Track object type.
+# Project references resolve against organisation.yaml; no new projects are implied.
+format: sentenz.dependency-track/deployments-v1
+environments: [dev, test, stage, prod]
+memberships:
+  - projectRef: service-1-1-2-0
+    environment: prod
+  - projectRef: service-1-1-3-0
+    environment: dev
+  - projectRef: service-1-1-3-0
+    environment: test
