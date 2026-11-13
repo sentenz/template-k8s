@@ -9,6 +9,12 @@ on:
         description: Git release tag (for example, 1.2.3)
         required: true
         type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing Git release tag (for example, 1.2.3)
+        required: true
+        type: string
 
 permissions: {}
 
@@ -18,31 +24,25 @@ concurrency:
 
 jobs:
   sbom:
-    outputs:
-      artifact-id: ${{ steps.evidence.outputs.artifact-id }}
-    name: Build release artifacts
+    name: Generate, Scan, Sign and Publish Release Assets
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write
+      id-token: write
     steps:
-      - name: Checkout trusted workflow code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.version }}
-          path: source
           persist-credentials: false
 
       - name: Generate SBOM (CycloneDX)
         uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
           scan-type: sbom-generate
-          scan-target: source
+          scan-target: "."
           format: cyclonedx
           output: sbom.cdx.json
 
@@ -50,7 +50,7 @@ jobs:
         uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
           scan-type: sbom-generate
-          scan-target: source
+          scan-target: "."
           format: spdx-json
           output: sbom.spdx.json
 
@@ -68,97 +68,35 @@ jobs:
           scan-target: sbom.cdx.json
         continue-on-error: false
 
-      - name: Build reproducible release archives and manifest
-        env:
-          VERSION: ${{ inputs.version }}
+      - name: Create release archives
         run: |
           set -euo pipefail
-          git -C source archive --format=tar --prefix=template-k8s/ HEAD | gzip -n > source.tar.gz
-          git -C source archive --format=zip --prefix=template-k8s/ HEAD > source.zip
-          python3 .github/actions/sigstore/release.py create "$VERSION" "$(git -C source rev-parse HEAD)"
-      - id: evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          git archive --format=tar --prefix=template-k8s/ HEAD | gzip -n > source.tar.gz
+          git archive --format=zip --prefix=template-k8s/ HEAD > source.zip
+
+      - name: Sign and verify release assets
+        uses: ./.github/actions/sigstore
         with:
-          name: unsigned-release-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
+          identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@refs/heads/main
+          files: |
             source.tar.gz
             source.zip
             sbom.cdx.json
             sbom.spdx.json
-            release-manifest.json
-          if-no-files-found: error
-          retention-days: 7
 
-  sign:
-    outputs:
-      artifact-id: ${{ steps.evidence.outputs.artifact-id }}
-    needs: sbom
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Publish verified release assets
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
-          persist-credentials: false
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
-        with:
-          artifact-ids: ${{ needs.sbom.outputs.artifact-id }}
-          merge-multiple: true
-          path: artifacts
-      - uses: ./.github/actions/sigstore
-        with:
-          operation: sign
-          kind: release
-          identity: https://github.com/sentenz/template-k8s/.github/workflows/sbom.yml@refs/heads/main
+          tag_name: ${{ inputs.version }}
+          fail_on_unmatched_files: true
           files: |
-            artifacts/source.tar.gz
-            artifacts/source.zip
-            artifacts/sbom.cdx.json
-            artifacts/sbom.spdx.json
-            artifacts/release-manifest.json
-      - id: evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: signed-release-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/*
-          if-no-files-found: error
-          retention-days: 90
-
-  stage:
-    needs: sign
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
-        with:
-          artifact-ids: ${{ needs.sign.outputs.artifact-id }}
-          merge-multiple: true
-          path: artifacts
-      - name: Verify before attaching release assets
-        uses: ./.github/actions/sigstore
-        with:
-          operation: verify
-          kind: release
-          identity: https://github.com/sentenz/template-k8s/.github/workflows/sbom.yml@refs/heads/main
-          files: |
-            artifacts/source.tar.gz
-            artifacts/source.zip
-            artifacts/sbom.cdx.json
-            artifacts/sbom.spdx.json
-            artifacts/release-manifest.json
-      - name: Attach verified artifacts to the draft only
+            source.tar.gz
+            source.tar.gz.sigstore.json
+            source.zip
+            source.zip.sigstore.json
+            sbom.cdx.json
+            sbom.cdx.json.sigstore.json
+            sbom.spdx.json
+            sbom.spdx.json.sigstore.json
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          [[ "$(gh release view "$VERSION" --json isDraft --jq .isDraft)" == true ]]
-          gh release upload "$VERSION" artifacts/*
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

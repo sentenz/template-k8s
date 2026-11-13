@@ -1,47 +1,89 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Sigstore
-description: Keyless signing and fail-closed verification against repository policy
+description: Sign immutable images or files with GitHub OIDC and require successful verification
 inputs:
-  operation:
-    description: sign or verify (sign also verifies before returning)
-    required: true
-  kind:
-    description: image, release (archives and SBOMs), or firmware
-    required: true
-  identity:
-    description: Exact certificate identity, which must be allowed by the policy
-    required: true
   image:
-    description: Immutable registry reference including sha256 digest
+    description: Fully qualified image reference including its sha256 digest; mutually exclusive with files
     default: ""
   files:
-    description: Newline-delimited exact files; no globs. Each gets a .sigstore.json bundle
+    description: Newline-delimited exact file paths (archives, SBOMs, or firmware); each gets an adjacent .sigstore.json bundle
     default: ""
+  identity:
+    description: Exact expected certificate identity, including workflow path and ref
+    required: true
+  issuer:
+    description: Expected certificate OIDC issuer
+    default: https://token.actions.githubusercontent.com
   bundle:
-    description: Output image bundle (blob bundles are adjacent to each file)
+    description: Output bundle for an image signature
     default: image.sigstore.json
-  release-version:
-    description: Signed release-version annotation required for image promotion
+  deployment:
+    description: public (signing metadata is public) or private
+    default: public
+  signing-config:
+    description: Approved private Sigstore signing configuration file
     default: ""
-  policy:
-    description: Reviewed policy path, independent of downloaded artifacts
-    default: .github/sigstore/policy.json
+  trusted-root:
+    description: Approved private Sigstore trusted root file, distributed independently of the artifact
+    default: ""
 runs:
   using: composite
   steps:
-    - name: Install pinned Cosign
+    - name: Install Cosign
       uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
       with:
         cosign-release: v3.1.4
-    - name: Enforce Sigstore policy
+
+    - name: Sign and verify
       shell: bash
       env:
-        SIGSTORE_OPERATION: ${{ inputs.operation }}
-        SIGSTORE_KIND: ${{ inputs.kind }}
-        SIGSTORE_IDENTITY: ${{ inputs.identity }}
-        SIGSTORE_IMAGE: ${{ inputs.image }}
-        SIGSTORE_FILES: ${{ inputs.files }}
-        SIGSTORE_BUNDLE: ${{ inputs.bundle }}
-        SIGSTORE_RELEASE_VERSION: ${{ inputs.release-version }}
-        SIGSTORE_POLICY: ${{ inputs.policy }}
-      run: python3 "${GITHUB_ACTION_PATH}/sigstore.py"
+        IMAGE: ${{ inputs.image }}
+        FILES: ${{ inputs.files }}
+        IDENTITY: ${{ inputs.identity }}
+        ISSUER: ${{ inputs.issuer }}
+        BUNDLE: ${{ inputs.bundle }}
+        DEPLOYMENT: ${{ inputs.deployment }}
+        SIGNING_CONFIG: ${{ inputs.signing-config }}
+        TRUSTED_ROOT: ${{ inputs.trusted-root }}
+      run: |
+        set -euo pipefail
+        fail() { echo "::error::$*" >&2; exit 1; }
+        [[ -n "$IDENTITY" && -n "$ISSUER" ]] || fail "An exact identity and issuer are required"
+        [[ -n "$IMAGE" && -z "$FILES" || -z "$IMAGE" && -n "$FILES" ]] || fail "Provide exactly one of image or files"
+
+        signing=(--yes --oidc-provider github-actions --oidc-client-id sigstore)
+        verification=(--certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER")
+        case "$DEPLOYMENT" in
+          public)
+            [[ -z "$SIGNING_CONFIG" && -z "$TRUSTED_ROOT" ]] || fail "Custom trust requires deployment: private"
+            # Cosign uses its embedded public Sigstore TUF root and authenticated updates.
+            ;;
+          private)
+            [[ -s "$SIGNING_CONFIG" && -s "$TRUSTED_ROOT" ]] || fail "Private signing requires approved signing-config and trusted-root files"
+            signing+=(--signing-config "$SIGNING_CONFIG" --trusted-root "$TRUSTED_ROOT")
+            verification+=(--trusted-root "$TRUSTED_ROOT")
+            ;;
+          *) fail "deployment must be public or private" ;;
+        esac
+
+        if [[ -n "$IMAGE" ]]; then
+          [[ "$IMAGE" =~ ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$ ]] || fail "image must include an immutable sha256 digest"
+          [[ -n "$BUNDLE" && ! -L "$BUNDLE" ]] || fail "Invalid image bundle path"
+          cosign sign "${signing[@]}" --bundle "$BUNDLE" "$IMAGE"
+          [[ -s "$BUNDLE" ]] || fail "Image verification bundle was not created"
+          cosign verify "${verification[@]}" "$IMAGE"
+        else
+          artifacts=()
+          while IFS= read -r file || [[ -n "$file" ]]; do
+            [[ -n "$file" ]] || continue
+            [[ -f "$file" && -s "$file" && ! -L "$file" ]] || fail "Missing, empty, or symlinked artifact: $file"
+            [[ "$file" != *.sigstore.json && ! -L "$file.sigstore.json" ]] || fail "Invalid bundle path: $file"
+            artifacts+=("$(realpath -- "$file")")
+          done <<< "$FILES"
+          (( ${#artifacts[@]} > 0 )) || fail "At least one artifact is required"
+          for file in "${artifacts[@]}"; do
+            cosign sign-blob "${signing[@]}" --bundle "$file.sigstore.json" "$file"
+            [[ -s "$file.sigstore.json" ]] || fail "Artifact verification bundle was not created"
+            cosign verify-blob "${verification[@]}" --bundle "$file.sigstore.json" "$file"
+          done
+        fi

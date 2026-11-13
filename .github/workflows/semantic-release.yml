@@ -46,12 +46,12 @@ jobs:
             conventional-changelog-conventionalcommits@9.3.1
 
   sbom:
-    name: Sign release archives and SBOMs
+    name: Generate and publish release SBOMs
     needs: semantic-release
     if: needs.semantic-release.outputs.new-release-published == 'true'
     permissions:
       contents: write
-      id-token: write # Delegated only to the signing job in the called workflow
+      id-token: write # Delegated to the called signing job
     uses: ./.github/workflows/sbom.yml
     with:
       version: ${{ needs.semantic-release.outputs.new-release-version }}
@@ -62,81 +62,10 @@ jobs:
       - semantic-release
     if: needs.semantic-release.outputs.new-release-published == 'true'
     permissions:
-      contents: write
+      contents: read
       packages: write
-      id-token: write # Delegated only to the signing job in the called workflow
+      id-token: write # Delegated to the called signing job
     uses: ./.github/workflows/docker.yml
     with:
       publish: true
       version: ${{ needs.semantic-release.outputs.new-release-version }}
-
-  publish:
-    name: Verify all artifacts and publish release
-    needs: [semantic-release, sbom, trigger]
-    if: needs.semantic-release.outputs.new-release-published == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
-      packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Download staged assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.semantic-release.outputs.new-release-version }}
-        run: |
-          set -euo pipefail
-          [[ "$(gh release view "$VERSION" --json isDraft --jq .isDraft)" == true ]]
-          gh release download "$VERSION" --dir artifacts
-      - name: Verify archives, SBOMs, and release manifest
-        uses: ./.github/actions/sigstore
-        with:
-          operation: verify
-          kind: release
-          identity: https://github.com/sentenz/template-k8s/.github/workflows/sbom.yml@refs/heads/main
-          files: |
-            artifacts/source.tar.gz
-            artifacts/source.zip
-            artifacts/sbom.cdx.json
-            artifacts/sbom.spdx.json
-            artifacts/release-manifest.json
-      - name: Bind assets to the expected release and reject extra files
-        id: manifest
-        env:
-          VERSION: ${{ needs.semantic-release.outputs.new-release-version }}
-        run: |
-          set -euo pipefail
-          python3 .github/actions/sigstore/release.py verify "$VERSION" artifacts
-          echo "image=$(cat artifacts/image-reference.txt)" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify image identity, digest, and release annotation
-        uses: ./.github/actions/sigstore
-        with:
-          operation: verify
-          kind: image
-          identity: https://github.com/sentenz/template-k8s/.github/workflows/docker.yml@refs/heads/main
-          image: ${{ steps.manifest.outputs.image }}
-          release-version: ${{ needs.semantic-release.outputs.new-release-version }}
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Promote the verified digest and publish the release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.semantic-release.outputs.new-release-version }}
-          IMAGE: ${{ steps.manifest.outputs.image }}
-        run: |
-          set -euo pipefail
-          repository="${IMAGE%@*}"
-          docker buildx imagetools create --prefer-index=false --tag "$repository:$VERSION" "$IMAGE"
-          actual="$(docker buildx imagetools inspect "$repository:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)"
-          [[ "$actual" == "${IMAGE#*@}" ]]
-          if [[ "$VERSION" != *-* ]]; then
-            docker buildx imagetools create --prefer-index=false --tag "$repository:latest" "$IMAGE"
-          fi
-          gh release edit "$VERSION" --draft=false

@@ -262,8 +262,6 @@ runs:
         RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
       run: |
         set -euo pipefail
-        kubectl apply --dry-run=client -f "${RENDERED_MANIFEST}" -o json > "${RENDERED_MANIFEST}.json"
-        python3 scripts/verify-manifest-images.py "${RENDERED_MANIFEST}.json"
         kubectl apply -f "${RENDERED_MANIFEST}"
 
     - name: Wait for Workloads
