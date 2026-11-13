@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: SBOM
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Git release tag (for example, 1.2.3)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing Git release tag (for example, 1.2.3)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: sbom-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  sbom:
+    name: Generate, Scan and Publish Release SBOMs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.version }}
+          persist-credentials: false
+
+      - name: Generate SBOM (CycloneDX)
+        uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
+        with:
+          scan-type: sbom-generate
+          scan-target: "."
+          format: cyclonedx
+          output: sbom.cdx.json
+
+      - name: Generate SBOM (SPDX)
+        uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
+        with:
+          scan-type: sbom-generate
+          scan-target: "."
+          format: spdx-json
+          output: sbom.spdx.json
+
+      - name: Scan SBOM (SPDX)
+        uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
+        with:
+          scan-type: sbom
+          scan-target: sbom.spdx.json
+        continue-on-error: false
+
+      - name: Scan SBOM (CycloneDX)
+        uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
+        with:
+          scan-type: sbom
+          scan-target: sbom.cdx.json
+        continue-on-error: false
+
+      - name: Publish release SBOM assets
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          tag_name: ${{ inputs.version }}
+          files: |
+            sbom.cdx.json
+            sbom.spdx.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
