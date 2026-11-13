@@ -97,12 +97,14 @@ shell.
 
 ## 4. Publication
 
-`.github/workflows/docker.yml` validates image changes on pull requests and is
-called by the release workflow to publish images. A semantic Git tag such as
-`v1.2.3` publishes the immutable `ghcr.io/sentenz/k8s:v1.2.3` manifest after
-both architecture candidates pass smoke tests and critical-vulnerability
-scans. Stable tags also promote `latest`; prerelease tags do not.
+`.github/workflows/docker.yml` builds an untagged candidate by digest. A dedicated
+OIDC job signs it with Cosign and verifies the registry signature. The final
+release gate independently verifies image, archive, and SBOM signatures before
+promoting the digest to version and stable `latest` tags and publishing the
+GitHub release. BuildKit provenance and SBOM metadata are covered by the signed
+multi-platform index digest.
 
-Publication is serialized per image version and refuses to overwrite an
-existing immutable tag. Published images include OCI metadata, BuildKit
-provenance, and an SBOM.
+The commands above illustrate local development. Released artifacts must be
+consumed by verified digest; `latest` alone is not an integrity check. The
+[artifact signing guide](../../docs/artifact-signing.md) documents consumer gates,
+exact signer identities, bundle retention, and migration from historical images.

@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Sigstore policy tests
+on:
+  pull_request:
+    paths:
+      - .github/actions/**
+      - .github/sigstore/**
+      - .github/workflows/**
+      - .releaserc.json
+      - tests/sigstore/**
+      - scripts/*verified*.sh
+      - scripts/verify-manifest-images.py
+      - Makefile
+  push:
+    branches: [main]
+    paths:
+      - .github/actions/**
+      - .github/sigstore/**
+      - .github/workflows/**
+      - .releaserc.json
+      - tests/sigstore/**
+      - scripts/*verified*.sh
+      - scripts/verify-manifest-images.py
+      - Makefile
+permissions:
+  contents: read
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check workflows and consumer scripts
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.11/actionlint_1.7.11_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "900919a84f2229bac68ca9cd4103ea297abc35e9689ebb842c6e34a3d1b01b0a  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" .github/workflows/{docker,sbom,semantic-release,firmware,sigstore}.yml
+          bash -n scripts/deploy-verified-image.sh scripts/install-verified-firmware.sh
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
+        with:
+          cosign-release: v3.1.4
+      - name: Check policy and real cryptographic rejection cases
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64.sigstore.json \
+            --output "$RUNNER_TEMP/cosign.sigstore.json"
+          export COSIGN_TEST_BLOB="$(command -v cosign)"
+          export COSIGN_TEST_BUNDLE="$RUNNER_TEMP/cosign.sigstore.json"
+          python3 -m unittest discover -s tests/sigstore -v

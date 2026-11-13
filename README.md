@@ -141,3 +141,10 @@ Orchestration platform for automating deployment, scaling, and management of con
 - Sentenz [Template DX](https://github.com/sentenz/template-dx) repository.
 - Sentenz [Actions](https://github.com/sentenz/actions) repository.
 - Sentenz [Manager Tools](https://sentenz.github.io/convention/articles/manager-tools/) article.
+
+## Artifact signing
+
+Container images, release archives, and SBOMs use keyless Sigstore signing with
+verification gates before publication and consumption. A reusable firmware
+signing workflow is also available. See [artifact signing](docs/artifact-signing.md)
+for trust policy, private deployments, verification, and migration requirements.

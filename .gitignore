@@ -34,3 +34,7 @@ logs/
 *.cer
 *.der
 *.priv
+
+### Python verification tools ###
+__pycache__/
+*.pyc

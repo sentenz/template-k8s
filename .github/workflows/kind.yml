@@ -8,6 +8,9 @@ on:
       - main
     paths:
       - ".github/actions/kind/**"
+      - ".github/actions/sigstore/**"
+      - ".github/sigstore/**"
+      - "scripts/verify-manifest-images.py"
       - ".github/workflows/kind.yml"
       - "apps/**"
       - "vendor/helm/**"
@@ -21,6 +24,9 @@ on:
       - main
     paths:
       - ".github/actions/kind/**"
+      - ".github/actions/sigstore/**"
+      - ".github/sigstore/**"
+      - "scripts/verify-manifest-images.py"
       - ".github/workflows/kind.yml"
       - "apps/**"
       - "vendor/helm/**"
@@ -48,6 +54,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Install verifier for repository-owned workload images
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532
+        with:
+          cosign-release: v3.1.4
 
       - name: Test Kind Deployment
         uses: ./.github/actions/kind

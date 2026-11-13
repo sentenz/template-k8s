@@ -106,7 +106,7 @@ k8s-validate:
 .PHONY: k8s-validate
 
 ## Setup the selected local Kubernetes cluster using Kind
-k8s-setup: k8s-validate
+k8s-setup: k8s-validate k8s-verify-image
 	@if [[ ! -f "$(KIND_CONFIG)" ]]; then \
 		echo "error: Kind cluster configuration not found for '$(K8S_ENV)': $(KIND_CONFIG)" >&2; \
 		exit 1; \
@@ -122,7 +122,7 @@ k8s-setup: k8s-validate
 .PHONY: k8s-setup
 
 ## Tear down the selected local Kubernetes Kind cluster
-k8s-teardown:
+k8s-teardown: k8s-verify-image
 	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock \
 		"$(K8S_KIND_IMAGE)" kind delete cluster --name "$(KIND_CLUSTER_NAME)"
 
@@ -154,8 +154,13 @@ k8s-render: k8s-validate
 
 ## Deploy the selected Kubernetes cluster composition
 k8s-deploy: k8s-validate k8s-confirm
-	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f -
+	@manifest="$$(mktemp)"
+	json_manifest="$$(mktemp)"
+	trap 'rm -f "$$manifest" "$$json_manifest"' EXIT
+	$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$$manifest"
+	kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" --dry-run=client -f "$$manifest" -o json > "$$json_manifest"
+	python3 scripts/verify-manifest-images.py "$$json_manifest"
+	kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f "$$manifest"
 .PHONY: k8s-deploy
 
 ## Destroy the selected Kubernetes cluster composition
@@ -696,51 +701,23 @@ sast-trufflehog-git:
 
 # ─── Supply Chain Security ───────────────────────────────────────────────────────────────────────
 
-SAST_COSIGN_IMAGE ?= cgr.dev/chainguard/cosign:3.0.0@sha256:b6bc266358e9368be1b3d01fca889b78d5ad5a47832986e14640c34a237ef638
-SAST_COSIGN_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_COSIGN_IMAGE)"
+SIGSTORE_VERIFY := python3 .github/actions/sigstore/sigstore.py --operation verify
+SIGSTORE_IMAGE_IDENTITY := https://github.com/sentenz/template-k8s/.github/workflows/docker.yml@refs/heads/main
 
-## Generate Cosign key pair
-sast-cosign-generate-key-pair:
-	$(SAST_COSIGN_ALIAS) generate-key-pair
-.PHONY: sast-cosign-generate-key-pair
+## Verify the immutable Kubernetes toolchain image before running it with host privileges
+k8s-verify-image:
+	$(SIGSTORE_VERIFY) --kind image --identity "$(SIGSTORE_IMAGE_IDENTITY)" --image "$(K8S_KIND_IMAGE)"
+.PHONY: k8s-verify-image
 
-# Usage: make sast-cosign-attest <image_name>
-#
-## Attest an image with the generated SBOM using Cosign
-sast-cosign-attest:
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-cosign-attest <image_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f cosign.key ]; then \
-		echo "Error: cosign.key not found. Run 'make sast-cosign-generate-key-pair' first."; \
-		exit 1; \
-	fi
-	@if [ ! -f logs/sbom/sbom.cdx.json ]; then \
-		echo "Error: logs/sbom/sbom.cdx.json not found. Run 'make sast-trivy-sbom-cyclonedx <image_name>' first."; \
-		exit 1; \
-	fi
-
-	$(SAST_COSIGN_ALIAS) attest --key cosign.key --type cyclonedx --predicate logs/sbom/sbom.cdx.json "$(filter-out $@,$(MAKECMDGOALS))"
-.PHONY: sast-cosign-attest
-
-# Usage: make sast-cosign-verify <image_name>
-#
-## Verify SBOM attestation for an image using Cosign
+## Verify a released container digest (IMAGE=registry/repository@sha256:digest)
 sast-cosign-verify:
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-cosign-verify <image_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f cosign.pub ]; then \
-		echo "Error: cosign.pub not found. Run 'make sast-cosign-generate-key-pair' first."; \
-		exit 1; \
-	fi
-
-	@mkdir -p logs/sast
-
-	$(SAST_COSIGN_ALIAS) verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
+	$(SIGSTORE_VERIFY) --kind image --identity "$(SIGSTORE_IMAGE_IDENTITY)" --image "$(IMAGE)"
 .PHONY: sast-cosign-verify
+
+## Verify a release archive or SBOM and its adjacent bundle (ARTIFACT=path)
+sast-cosign-verify-blob:
+	$(SIGSTORE_VERIFY) --kind release --identity "https://github.com/sentenz/template-k8s/.github/workflows/sbom.yml@refs/heads/main" --files "$(ARTIFACT)"
+.PHONY: sast-cosign-verify-blob
 
 # ─── Container Manager ───────────────────────────────────────────────────────────────────────────
 
