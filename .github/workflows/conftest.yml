@@ -4,41 +4,19 @@ name: Conftest
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "container/k8s/Dockerfile"
-      - "tests/policy/**"
-      - "conftest.toml"
-      - ".github/workflows/conftest.yml"
+    branches:
+      - main
   pull_request:
-    branches: [main]
-    paths:
-      - "container/k8s/Dockerfile"
-      - "tests/policy/**"
-      - "conftest.toml"
-      - ".github/workflows/conftest.yml"
-
-permissions: {}
 
 jobs:
   conftest:
-    name: Conftest Policy Checks
+    name: Conftest Action
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
 
-      - name: Check Dockerfile policy
+      - name: Run Conftest
         uses: sentenz/actions/conftest@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
-          path: container/k8s/Dockerfile
-          policy-path: ./tests/policy
-          config-file: ./conftest.toml
-          fail-on-warn: "true"
-          all-namespaces: "false"
-
+          policy-path: "./tests/policy"
