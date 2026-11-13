@@ -255,6 +255,18 @@ runs:
           --validate=strict \
           -f "${RENDERED_MANIFEST}"
 
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      with:
+        cosign-release: v3.0.2
+    - name: Verify Workload Signatures
+      shell: bash
+      env:
+        RENDERED_MANIFEST: ${{ runner.temp }}/template-k8s-rendered.yaml
+      run: |
+        python3 -m pip install --require-hashes -r security/sigstore/requirements.txt
+        python3 scripts/verify-deployment.py "$RENDERED_MANIFEST"
+
     - name: Deploy Manifests
       shell: bash
       env:

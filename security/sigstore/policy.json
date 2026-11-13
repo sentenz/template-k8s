@@ -1,0 +1,12 @@
+{
+  "deployment": "public",
+  "public_metadata_approved": true,
+  "issuer": "https://token.actions.githubusercontent.com",
+  "identity": "https://github.com/sentenz/template-k8s/.github/workflows/semantic-release.yml@refs/heads/main",
+  "images": {
+    "ghcr.io/sentenz/k8s": {
+      "issuer": "https://token.actions.githubusercontent.com",
+      "identity": "https://github.com/sentenz/template-k8s/.github/workflows/semantic-release.yml@refs/heads/main"
+    }
+  }
+}

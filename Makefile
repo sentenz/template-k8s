@@ -107,6 +107,7 @@ k8s-validate:
 
 ## Setup the selected local Kubernetes cluster using Kind
 k8s-setup: k8s-validate
+	python3 scripts/artifact-security.py verify-image "$(K8S_KIND_IMAGE)"
 	@if [[ ! -f "$(KIND_CONFIG)" ]]; then \
 		echo "error: Kind cluster configuration not found for '$(K8S_ENV)': $(KIND_CONFIG)" >&2; \
 		exit 1; \
@@ -123,6 +124,7 @@ k8s-setup: k8s-validate
 
 ## Tear down the selected local Kubernetes Kind cluster
 k8s-teardown:
+	python3 scripts/artifact-security.py verify-image "$(K8S_KIND_IMAGE)"
 	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock \
 		"$(K8S_KIND_IMAGE)" kind delete cluster --name "$(KIND_CLUSTER_NAME)"
 
@@ -154,8 +156,11 @@ k8s-render: k8s-validate
 
 ## Deploy the selected Kubernetes cluster composition
 k8s-deploy: k8s-validate k8s-confirm
-	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f -
+	@manifest="$$(mktemp)"
+	trap 'rm -f "$$manifest"' EXIT
+	$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$$manifest"
+	python3 scripts/verify-deployment.py "$$manifest"
+	kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f "$$manifest"
 .PHONY: k8s-deploy
 
 ## Destroy the selected Kubernetes cluster composition
@@ -696,51 +701,15 @@ sast-trufflehog-git:
 
 # ─── Supply Chain Security ───────────────────────────────────────────────────────────────────────
 
-SAST_COSIGN_IMAGE ?= cgr.dev/chainguard/cosign:3.0.0@sha256:b6bc266358e9368be1b3d01fca889b78d5ad5a47832986e14640c34a237ef638
-SAST_COSIGN_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_COSIGN_IMAGE)"
-
-## Generate Cosign key pair
-sast-cosign-generate-key-pair:
-	$(SAST_COSIGN_ALIAS) generate-key-pair
-.PHONY: sast-cosign-generate-key-pair
-
-# Usage: make sast-cosign-attest <image_name>
-#
-## Attest an image with the generated SBOM using Cosign
-sast-cosign-attest:
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-cosign-attest <image_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f cosign.key ]; then \
-		echo "Error: cosign.key not found. Run 'make sast-cosign-generate-key-pair' first."; \
-		exit 1; \
-	fi
-	@if [ ! -f logs/sbom/sbom.cdx.json ]; then \
-		echo "Error: logs/sbom/sbom.cdx.json not found. Run 'make sast-trivy-sbom-cyclonedx <image_name>' first."; \
-		exit 1; \
-	fi
-
-	$(SAST_COSIGN_ALIAS) attest --key cosign.key --type cyclonedx --predicate logs/sbom/sbom.cdx.json "$(filter-out $@,$(MAKECMDGOALS))"
-.PHONY: sast-cosign-attest
-
-# Usage: make sast-cosign-verify <image_name>
-#
-## Verify SBOM attestation for an image using Cosign
+## Verify an immutable image using the reviewed Sigstore policy
 sast-cosign-verify:
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-cosign-verify <image_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f cosign.pub ]; then \
-		echo "Error: cosign.pub not found. Run 'make sast-cosign-generate-key-pair' first."; \
-		exit 1; \
-	fi
-
-	@mkdir -p logs/sast
-
-	$(SAST_COSIGN_ALIAS) verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
+	python3 scripts/artifact-security.py verify-image "$(IMAGE)"
 .PHONY: sast-cosign-verify
+
+## Verify a release archive, SBOM or firmware and its adjacent Sigstore bundle
+sast-cosign-verify-file:
+	python3 scripts/artifact-security.py verify-file "$(ARTIFACT)"
+.PHONY: sast-cosign-verify-file
 
 # ─── Container Manager ───────────────────────────────────────────────────────────────────────────
 

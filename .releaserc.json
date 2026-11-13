@@ -29,6 +29,11 @@
         "message": "chore(release): version ${nextRelease.version} [skip ci]"
       }
     ],
-    "@semantic-release/github"
+    [
+      "@semantic-release/github",
+      {
+        "draftRelease": true
+      }
+    ]
   ]
 }

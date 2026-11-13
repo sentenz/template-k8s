@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Signing policy
+on:
+  pull_request:
+    paths:
+      - .github/**
+      - security/sigstore/**
+      - scripts/*artifact*.py
+      - scripts/verify-deployment.py
+      - tests/signing/**
+      - Makefile
+  push:
+    branches: [main]
+    paths:
+      - .github/**
+      - security/sigstore/**
+      - scripts/*artifact*.py
+      - scripts/verify-deployment.py
+      - tests/signing/**
+      - Makefile
+permissions:
+  contents: read
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install --require-hashes -r security/sigstore/requirements.txt
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: v3.0.2
+      - run: python3 -m unittest discover -s tests/signing -v

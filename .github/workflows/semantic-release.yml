@@ -27,7 +27,6 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-      id-token: write
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,6 +51,7 @@ jobs:
     if: needs.semantic-release.outputs.new-release-published == 'true'
     permissions:
       contents: write
+      id-token: write
     uses: ./.github/workflows/sbom.yml
     with:
       version: ${{ needs.semantic-release.outputs.new-release-version }}
@@ -60,11 +60,49 @@ jobs:
     name: Trigger Workflows
     needs:
       - semantic-release
-    if: always() && needs.semantic-release.outputs.new-release-published == 'true'
+    if: needs.semantic-release.outputs.new-release-published == 'true'
     permissions:
       contents: read
       packages: write
+      id-token: write
     uses: ./.github/workflows/docker.yml
     with:
       publish: true
       version: ${{ needs.semantic-release.outputs.new-release-version }}
+
+  publish:
+    name: Verify release assets and publish
+    needs: [semantic-release, sbom, trigger]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: v3.0.2
+      - name: Verify exact release payload before publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.semantic-release.outputs.new-release-version }}
+          IMAGE: ${{ needs.trigger.outputs.image }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          mkdir release-download
+          gh release download "$RELEASE_TAG" --dir release-download
+          for name in source.tar.gz sbom.cdx.json sbom.spdx.json; do
+            python scripts/artifact-security.py verify-file "release-download/$name"
+          done
+          # Reject extra unsigned payloads (including firmware attached by a producer).
+          for file in release-download/*; do
+            [[ "$file" == *.sigstore.json ]] && continue
+            python scripts/artifact-security.py verify-file "$file"
+          done
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          python scripts/artifact-security.py verify-image "$IMAGE"
+          gh release edit "$RELEASE_TAG" --draft=false

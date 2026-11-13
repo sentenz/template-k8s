@@ -9,12 +9,6 @@ on:
         description: Git release tag (for example, 1.2.3)
         required: true
         type: string
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Existing Git release tag (for example, 1.2.3)
-        required: true
-        type: string
 
 permissions: {}
 
@@ -29,6 +23,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      id-token: write
     steps:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,12 +61,28 @@ jobs:
           scan-target: sbom.cdx.json
         continue-on-error: false
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          cosign-release: v3.0.2
+      - name: Build release archive and sign all release files
+        run: |
+          set -euo pipefail
+          git archive --format=tar HEAD | gzip -n > source.tar.gz
+          for file in source.tar.gz sbom.cdx.json sbom.spdx.json; do
+            python scripts/artifact-security.py sign-file "$file"
+          done
+
       - name: Publish release SBOM assets
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
+          draft: true
+          fail_on_unmatched_files: true
           tag_name: ${{ inputs.version }}
           files: |
             sbom.cdx.json
             sbom.spdx.json
+            source.tar.gz
+            *.sigstore.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
