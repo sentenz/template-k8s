@@ -4,19 +4,25 @@ name: Semgrep
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+
+permissions: {}
 
 jobs:
   semgrep:
     name: Semgrep Action
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Run Semgrep
         uses: sentenz/actions/semgrep@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
@@ -24,3 +30,11 @@ jobs:
           config: "auto"
           metrics: "auto"
           no-secrets-validation: "true"
+          sarif-output: semgrep-results.sarif
+
+      - name: Preserve and upload SARIF results
+        if: always()
+        uses: ./.github/actions/upload-sarif
+        with:
+          sarif-file: semgrep-results.sarif
+          artifact-name: semgrep-sarif

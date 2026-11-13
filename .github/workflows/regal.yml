@@ -4,20 +4,33 @@ name: Regal
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - "tests/policy/**"
+      - ".github/workflows/regal.yml"
   pull_request:
+    branches: [main]
+    paths:
+      - "tests/policy/**"
+      - ".github/workflows/regal.yml"
+
+permissions: {}
 
 jobs:
   regal:
-    name: Regal Action
+    name: Rego Policy Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Run Regal
         uses: sentenz/actions/regal@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
-          path: "./tests/policy"
+          path: ./tests/policy
           regal-version: "latest"
