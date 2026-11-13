@@ -70,3 +70,44 @@ consumers must also pass their approved `--trusted-root`. Registry signatures
 and release bundles must be retained throughout the artifact support lifetime;
 the additional image bundle uploaded to Actions has 90-day retention. This change
 does not configure cluster admission control or redesign release publication.
+
+## Make tasks for Software Supply Chain Security
+
+Install host Cosign v3.1.4, matching the CI version, and authenticate to the
+registry with `docker login` when needed. `SSCS_COSIGN` can select an executable
+path. Native execution retains access to registry credentials and browser OIDC;
+the previous container wrapper did not forward either registry or CI OIDC credentials.
+
+| Target | Operation |
+| --- | --- |
+| `sscs-cosign-sign` | Sign an image digest, retain its bundle, then verify |
+| `sscs-cosign-verify` | Verify the image signature |
+| `sscs-cosign-attest` | Attach a CycloneDX SBOM attestation, retain its bundle, then verify |
+| `sscs-cosign-verify-attestation` | Verify the CycloneDX attestation and emit its envelopes |
+
+```bash
+make sscs-cosign-verify \
+  SSCS_COSIGN_IMAGE='ghcr.io/sentenz/k8s@sha256:<64-hex-digest>' \
+  SSCS_COSIGN_IDENTITY='https://github.com/sentenz/template-k8s/.github/workflows/docker.yml@refs/heads/main'
+```
+
+`SSCS_COSIGN_IDENTITY` is required; the default issuer is GitHub Actions.
+Local signing uses interactive OIDC: explicitly supply the approved personal
+identity and its issuer through `SSCS_COSIGN_IDENTITY` and `SSCS_COSIGN_ISSUER`.
+It does not create a GitHub workflow identity. Within GitHub Actions, signing
+selects its ambient provider and requires job-level `id-token: write`.
+
+The SBOM default is `logs/sbom/sbom-image.cdx.json`, matching the existing image
+SBOM generator; override `SSCS_COSIGN_SBOM` for another path. The SBOM must describe
+the exact image digest. An attestation proves its signed association, not SBOM
+completeness or absence of vulnerabilities. CI currently signs SBOM files as blobs;
+that does not create an OCI attestation, so `verify-attestation` requires a
+separately produced attestation. Its stdout contains envelopes, not raw CycloneDX.
+
+For private infrastructure, provide `SSCS_COSIGN_TRUSTED_ROOT` for verification
+and also `SSCS_COSIGN_SIGNING_CONFIG` for signing. Signature bundles default to
+`logs/sscs/image.sigstore.json` and `logs/sscs/sbom.sigstore.json`. Retain them as
+needed; no private key is written. Legacy `sast-cosign-*` names and the key-pair
+generator are removed. The old verification target's attestation behavior is
+now explicitly named `sscs-cosign-verify-attestation`. Use named Make variables;
+a positional image name is interpreted by Make as another target.
