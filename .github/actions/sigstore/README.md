@@ -20,6 +20,49 @@ and require immediate verification. No persistent signing keys are used.
 | Input validation | Rejects conflicting image/file inputs, empty file lists, missing or empty artifacts, artifact symlinks, and symlinked bundle destinations |
 | Tool installation | Installs Cosign v3.1.4 through a commit-pinned `sigstore/cosign-installer` |
 
+## Action reference
+
+### Inputs
+
+| Input | Default | Required | Purpose |
+| --- | --- | --- | --- |
+| `image` | Empty | In image mode | Fully qualified OCI image reference ending in `@sha256:<64 lowercase hex characters>`. |
+| `files` | Empty | In file mode | Newline-delimited exact paths to existing, nonempty regular files. Globs are not expanded. |
+| `identity` | None | Yes | Exact expected certificate identity, including the signing workflow path and Git ref. |
+| `issuer` | `https://token.actions.githubusercontent.com` | No | Exact expected certificate OIDC issuer. |
+| `bundle` | `image.sigstore.json` | No | Local output path for the image signature bundle. File mode uses adjacent bundles. |
+| `deployment` | `public` | No | Selects the public or private Sigstore deployment. |
+| `signing-config` | Empty | In private mode | Path to an approved, nonempty signing configuration file. |
+| `trusted-root` | Empty | In private mode | Path to an approved, nonempty trusted root file used for signing and verification. |
+
+Supply exactly one of `image` and `files`. Leave `signing-config` and
+`trusted-root` empty in public mode.
+
+### Outputs
+
+The composite action declares no GitHub Actions step outputs. Use the
+following paths and registry artifacts in subsequent steps:
+
+| Mode | Result |
+| --- | --- |
+| Image | Cosign publishes the signature to the registry and writes a local bundle at `bundle`. |
+| Files | Cosign writes `<file>.sigstore.json` next to each input file. |
+
+Upload or retain local bundles in the calling workflow. The action fails if
+an expected bundle is missing or empty, or if verification fails.
+
+### Permissions
+
+Grant `id-token: write` to the signing job in both modes so Cosign can request
+a GitHub Actions OIDC token. When using a reusable workflow, the calling job
+must grant that permission so the called job can use it.
+
+| Permission | When to grant it |
+| --- | --- |
+| `contents: read` | When a job checks out the repository using `GITHUB_TOKEN`. The Docker publishing job uses this scope. |
+| `packages: write` | When the job uses `GITHUB_TOKEN` to publish the image and its signature to GHCR. Blob signing alone does not require it. |
+| `contents: write` | When the job publishes GitHub release assets, as the SBOM job does. This scope also covers checkout. |
+
 ## Image and file signing
 
 | | Image | Local file |
