@@ -1,12 +1,12 @@
-# syntax=docker/dockerfile:1.28@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
+# syntax=docker/dockerfile:1.29@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 # SPDX-License-Identifier: Apache-2.0
 
 
-FROM alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4 AS tools-k8s
+FROM alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0 AS tools-k8s
 
-FROM alpine/helm:4.3.1@sha256:e3f8d5c462d75470fbb1fce79ad5c20063657096d1f98c0fcea869e2600e2e5e AS tools-helm
+FROM alpine/helm:4.3.2@sha256:a3b9d617c0c30a6c488cebb429c4ba83995a26dc2184599af5fd408a361b2e67 AS tools-helm
 
-FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS tools-kind
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS tools-kind
 
 # renovate: datasource=github-releases depName=kind packageName=kubernetes-sigs/kind
 ARG KIND_VERSION=v0.33.0
@@ -28,7 +28,7 @@ RUN INSTALL_DIR=/opt/k8s/bin \
     TARGETARCH="${TARGETARCH}" \
     /usr/local/bin/bootstrap.sh --tool kind
 
-FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS runtime
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 
 LABEL org.opencontainers.image.title="Kubernetes toolchain" \
     org.opencontainers.image.description="Pinned Kubernetes command-line toolchain for local workflows" \
