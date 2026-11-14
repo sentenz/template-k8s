@@ -53,15 +53,14 @@ an expected bundle is missing or empty, or if verification fails.
 
 ### Permissions
 
-Grant `id-token: write` to the signing job in both modes so Cosign can request
-a GitHub Actions OIDC token. When using a reusable workflow, the calling job
-must grant that permission so the called job can use it.
-
 | Permission | When to grant it |
 | --- | --- |
+| `id-token: write` | Required in both signing modes so Cosign can request a GitHub Actions OIDC token. |
 | `contents: read` | When a job checks out the repository using `GITHUB_TOKEN`. The Docker publishing job uses this scope. |
 | `packages: write` | When the job uses `GITHUB_TOKEN` to publish the image and its signature to GHCR. Blob signing alone does not require it. |
 | `contents: write` | When the job publishes GitHub release assets, as the SBOM job does. This scope also covers checkout. |
+When using a reusable workflow, the calling job must grant `id-token: write`
+so the called signing job can use it.
 
 ## Image and file signing
 
