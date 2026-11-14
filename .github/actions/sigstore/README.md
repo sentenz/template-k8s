@@ -1,10 +1,54 @@
 # Sigstore signing
 
-This action installs pinned Cosign, signs with GitHub Actions OIDC (audience
-`sigstore`), and requires verification of the exact certificate identity and
-issuer. Image inputs must include a SHA-256 digest. File signatures cover the
-actual bytes and produce adjacent `.sigstore.json` bundles containing signatures,
-certificates, and transparency evidence. No persistent signing keys are used.
+This composite action supports both `cosign sign` for OCI images and
+`cosign sign-blob` for local files. Both use keyless GitHub Actions OIDC signing
+and require immediate verification. No persistent signing keys are used.
+
+## Supported features
+
+| Feature | Behavior |
+| --- | --- |
+| Container images | `image:` accepts one immutable `@sha256:…` reference; tag-only references are rejected |
+| Release archives, SBOMs, and firmware | `files:` accepts newline-separated exact local file paths; globs are not expanded |
+| Keyless authentication | Uses the `github-actions` OIDC provider with audience `sigstore`; the calling job needs `id-token: write` |
+| Non-interactive signing | Both signing commands use `--yes` |
+| Mandatory verification | Runs `cosign verify` for images or `cosign verify-blob` for each file; failures fail the action |
+| Signer restrictions | Matches the exact supplied `identity:` and `issuer:`; the default issuer is `https://token.actions.githubusercontent.com` |
+| Verification bundles | Images use `bundle:` (default `image.sigstore.json`); each file receives an adjacent `FILE.sigstore.json` |
+| Public Sigstore | Default `deployment: public` uses Cosign's embedded public TUF trust anchor and authenticated updates |
+| Private Sigstore | `deployment: private` requires both approved `signing-config:` and `trusted-root:` files |
+| Input validation | Rejects conflicting image/file inputs, empty file lists, missing or empty artifacts, artifact symlinks, and symlinked bundle destinations |
+| Tool installation | Installs Cosign v3.1.4 through a commit-pinned `sigstore/cosign-installer` |
+
+## Image and file signing
+
+| | Image | Local file |
+| --- | --- | --- |
+| Action input | `image:` | `files:` |
+| Signing command | `cosign sign` | `cosign sign-blob` |
+| Signed content | Signature payload identifying the immutable OCI image digest | File contents through a cryptographic digest |
+| Signature storage | OCI registry plus the requested local bundle | Adjacent local bundle |
+| Verification command | `cosign verify` | `cosign verify-blob` |
+
+Bundles contain signatures, signing certificates, and verification evidence.
+The calling workflow must upload and retain local bundles; for files, distribute
+each artifact with its bundle. The action checks that bundles were created.
+
+## Boundaries
+
+- Each invocation accepts **one image or a list of files**, never both.
+- The action signs and verifies; it has no verification-only mode. Downstream
+  consumers use Cosign verification commands or the Make targets below.
+- It does not run `cosign attest`. Signing an SBOM file proves that document's
+  integrity and signer identity; it does not bind the SBOM to an image digest.
+  The separate Make attestation targets support that association.
+- It does not build firmware, publish release assets, or configure admission
+  control. Those responsibilities remain with producers and consumers.
+- It does not prevent the preceding Docker action from pushing an image before
+  signing. A failure stops subsequent workflow steps but does not retract the
+  image; downstream verification remains required.
+- The caller supplies the trusted identity and issuer. The action does not
+  independently maintain an identity allowlist or enforce branch restrictions.
 
 ## Images
 
@@ -26,7 +70,9 @@ tags, and workflow/action changes with review requirements.
 
 ## Archives, SBOMs, and firmware
 
-Provide `files` instead of `image`; globs are not expanded:
+Grant `id-token: write` to the signing job. Blob signing itself does not require
+`packages: write`; add only permissions needed for checkout or artifact publication.
+Provide `files` instead of `image`:
 
 ```yaml
 - uses: ./.github/actions/sigstore
