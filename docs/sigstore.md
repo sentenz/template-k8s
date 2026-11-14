@@ -1,6 +1,6 @@
 # Sigstore signing
 
-This composite action supports both `cosign sign` for OCI images and
+The shared [Sigstore action](https://github.com/sentenz/actions/tree/2f64add54257e1cb22b66ff4755a2ca9fd4454fc/sigstore) supports both `cosign sign` for OCI images and
 `cosign sign-blob` for local files. Both use keyless GitHub Actions OIDC signing
 and require immediate verification. No persistent signing keys are used.
 
@@ -101,11 +101,10 @@ each artifact with its bundle. The action checks that bundles were created.
 
 Grant `contents: read`, `packages: write`, and `id-token: write` to the signing
 job. Keep read-only build jobs without OIDC permission. After the pinned
-`sentenz/actions/docker` step with `id: docker-build`, check out the signing
-action as shown in [Troubleshooting](#troubleshooting), then sign its output:
+`sentenz/actions/docker` step with `id: docker-build`, sign and verify its output:
 
 ```yaml
-- uses: ./.signing-tools/.github/actions/sigstore
+- uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc
   with:
     image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
     identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@refs/heads/main
@@ -123,7 +122,7 @@ Grant `id-token: write` to the signing job. Blob signing itself does not require
 Provide `files` instead of `image`:
 
 ```yaml
-- uses: ./.github/actions/sigstore
+- uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc
   with:
     identity: https://github.com/ORG/REPO/.github/workflows/firmware.yml@refs/heads/main
     files: |
@@ -136,55 +135,26 @@ uploading them with their bundles. GitHub's automatically generated source
 archives are separate and are not signed. This repository has no firmware build;
 a firmware producer can use the same action and retain the binary and bundle.
 
-## Troubleshooting
+## Action source and troubleshooting
 
-### Signing step fails with `Can't find 'action.yml'`
+The [Docker workflow](../.github/workflows/docker.yml) and
+[SBOM workflow](../.github/workflows/sbom.yml) use the shared action pinned to
+`2f64add54257e1cb22b66ff4755a2ca9fd4454fc`. Its `action.yml` was verified to be
+byte-for-byte identical to the former local implementation at migration, including
+all inputs, Cosign v3.1.4, OIDC options, validation, and mandatory verification.
+Future dependency updates must preserve these requirements.
 
-The runner can report that it cannot find `action.yml`, `action.yaml`, or
-`Dockerfile` at the path in `uses:`. This happens before Cosign starts.
-Check the path in the error and which revision supplied that directory.
-A release tag created before the signing action was added lacks
-`.github/actions/sigstore`. A missing checkout can produce the same error.
+GitHub downloads the shared composite action separately from the release-tag
+checkout. No `.signing-tools` checkout is needed, and older release tags do not
+need to contain the action. The expected certificate identity remains the signing
+workflow in `sentenz/template-k8s`; using an external composite action does not
+change it to an identity in `sentenz/actions`.
 
-The [SBOM workflow](../../workflows/sbom.yml) and
-[Docker workflow](../../workflows/docker.yml) use the release tag as the
-artifact source. After the build, scan, or archive steps, they check out the
-signing action separately at the workflow commit. Keeping this checkout
-after artifact generation keeps its files out of the build and scan inputs.
-
-The SBOM workflow uses these steps:
-
-```yaml
-- name: Checkout signing action from workflow revision
-  uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-  with:
-    ref: ${{ github.workflow_sha }}
-    path: .signing-tools
-    sparse-checkout: .github/actions/sigstore
-    persist-credentials: false
-
-- name: Sign and verify release assets
-  uses: ./.signing-tools/.github/actions/sigstore
-  with:
-    identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@refs/heads/main
-    files: |
-      source.tar.gz
-      source.zip
-      sbom.cdx.json
-      sbom.spdx.json
-```
-
-For an older release, start a **new** SBOM workflow run from `main` once it
-contains the fix, and enter the existing release tag as `version`. If lookup
-still fails, confirm that **Checkout signing action from workflow revision**
-succeeded, that its commit contains `.github/actions/sigstore/action.yml`,
-and that no later checkout at the workspace root removed `.signing-tools`.
-
-This example assumes the caller and reusable workflow are in the same
-repository and use the same commit, as with this repository's local workflow
-calls. For a reusable workflow called from another repository, explicitly
-check out the repository and trusted revision that contain the action.
-Keep the certificate identity tied to the signing workflow path and Git ref.
+If an older run reports `Can't find action.yml` under a local action path, start
+a new workflow run from `main` after this migration is merged, using the desired
+release tag. Rerunning an old run retains its original workflow revision. For a
+shared-action download failure, check the pinned commit, action path, and repository
+access rather than adding another checkout of the artifact source.
 
 ## Trust and consumption
 
