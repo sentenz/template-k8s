@@ -124,9 +124,6 @@ Orchestration platform for automating deployment, scaling, and management of con
 - [SAST Manager](CONTRIBUTING.md#12-sast-manager)
   > Identifying security vulnerabilities and issues in source code, container images, and artifacts.
 
-- [Sigstore Signing](docs/sigstore.md)
-  > Keyless signing, verification, trust configuration, and SSCS Make tasks.
-
 - [Supply Chain Manager](CONTRIBUTING.md#13-supply-chain-manager)
   > Software Supply Chain Security for identifying vulnerabilities in dependencies by scanning SBOMs, container images, filesystems, and compliance issues.
 
