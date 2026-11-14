@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.17](https://github.com/sentenz/template-k8s/compare/2.1.16...2.1.17) (2026-11-14)
+
+### Bug Fixes
+
+* **deps:** update dockerfile container images ([#145](https://github.com/sentenz/template-k8s/issues/145)) ([f8bd98c](https://github.com/sentenz/template-k8s/commit/f8bd98cd0ad4183bf020162c9cded6cc7ec9ba8b))
+
 ## [2.1.16](https://github.com/sentenz/template-k8s/compare/2.1.15...2.1.16) (2026-11-01)
 
 ### Bug Fixes
