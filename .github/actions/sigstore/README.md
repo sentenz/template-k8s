@@ -54,10 +54,11 @@ each artifact with its bundle. The action checks that bundles were created.
 
 Grant `contents: read`, `packages: write`, and `id-token: write` to the signing
 job. Keep read-only build jobs without OIDC permission. After the pinned
-`sentenz/actions/docker` step with `id: docker-build`:
+`sentenz/actions/docker` step with `id: docker-build`, check out the signing
+action as shown in [Troubleshooting](#troubleshooting), then sign its output:
 
 ```yaml
-- uses: ./.github/actions/sigstore
+- uses: ./.signing-tools/.github/actions/sigstore
   with:
     image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
     identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@refs/heads/main
@@ -90,24 +91,53 @@ a firmware producer can use the same action and retain the binary and bundle.
 
 ## Troubleshooting
 
-### GitHub Actions cannot find the signing action for an older release tag
+### Signing step fails with `Can't find 'action.yml'`
 
-If the signing step reports that it cannot find `action.yml`, `action.yaml`,
-or `Dockerfile` under `./.github/actions/sigstore`, check which revision was
-checked out. A release tag created before the signing action was added does
-not contain that directory, even when the workflow running from `main` does.
+The runner can report that it cannot find `action.yml`, `action.yaml`, or
+`Dockerfile` at the path in `uses:`. This happens before Cosign starts.
+Check the path in the error and which revision supplied that directory.
+A release tag created before the signing action was added lacks
+`.github/actions/sigstore`. A missing checkout can produce the same error.
 
 The [SBOM workflow](../../workflows/sbom.yml) and
-[Docker workflow](../../workflows/docker.yml) use the release tag to build
-artifacts. After artifact generation, they separately check out the signing
-action from `${{ github.workflow_sha }}` into `.signing-tools` and invoke it via
-`./.signing-tools/.github/actions/sigstore`.
+[Docker workflow](../../workflows/docker.yml) use the release tag as the
+artifact source. After the build, scan, or archive steps, they check out the
+signing action separately at the workflow commit. Keeping this checkout
+after artifact generation keeps its files out of the build and scan inputs.
 
-For an older SBOM release, start a new run of the updated SBOM workflow from
-`main` and enter the existing release tag as `version`. If the action still
-cannot be found, check that the **Checkout signing action from workflow
-revision** step succeeded and that the workflow commit contains
-`.github/actions/sigstore/action.yml`.
+The SBOM workflow uses these steps:
+
+```yaml
+- name: Checkout signing action from workflow revision
+  uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+  with:
+    ref: ${{ github.workflow_sha }}
+    path: .signing-tools
+    sparse-checkout: .github/actions/sigstore
+    persist-credentials: false
+
+- name: Sign and verify release assets
+  uses: ./.signing-tools/.github/actions/sigstore
+  with:
+    identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@refs/heads/main
+    files: |
+      source.tar.gz
+      source.zip
+      sbom.cdx.json
+      sbom.spdx.json
+```
+
+For an older release, start a **new** SBOM workflow run from `main` once it
+contains the fix, and enter the existing release tag as `version`. If lookup
+still fails, confirm that **Checkout signing action from workflow revision**
+succeeded, that its commit contains `.github/actions/sigstore/action.yml`,
+and that no later checkout at the workspace root removed `.signing-tools`.
+
+This example assumes the caller and reusable workflow are in the same
+repository and use the same commit, as with this repository's local workflow
+calls. For a reusable workflow called from another repository, explicitly
+check out the repository and trusted revision that contain the action.
+Keep the certificate identity tied to the signing workflow path and Git ref.
 
 ## Trust and consumption
 
