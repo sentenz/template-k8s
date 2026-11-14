@@ -8,6 +8,7 @@ on:
       - container/k8s/**
       - scripts/bootstrap.sh
       - .github/workflows/docker.yml
+      - .github/actions/sigstore/**
   workflow_call:
     inputs:
       publish:
@@ -50,20 +51,22 @@ jobs:
 
   publish:
     name: Docker Action - Publish
-    if: inputs.publish
+    if: inputs.publish && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.version }}
+          ref: refs/tags/${{ inputs.version }}
           persist-credentials: false
 
       - name: Run Docker Publish
+        id: docker-build
         uses: sentenz/actions/docker@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
           version: ${{ inputs.version }}
@@ -73,3 +76,25 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout signing action from workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .signing-tools
+          sparse-checkout: .github/actions/sigstore
+          persist-credentials: false
+
+      - name: Sign and verify image digest
+        uses: ./.signing-tools/.github/actions/sigstore
+        with:
+          image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
+          identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@refs/heads/main
+
+      - name: Retain image verification bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: image-signature-${{ inputs.version }}-${{ github.run_attempt }}
+          path: image.sigstore.json
+          if-no-files-found: error
+          retention-days: 90

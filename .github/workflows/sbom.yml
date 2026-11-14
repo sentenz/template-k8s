@@ -24,16 +24,18 @@ concurrency:
 
 jobs:
   sbom:
-    name: Generate, Scan and Publish Release SBOMs
+    name: Generate, Scan, Sign and Publish Release Assets
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
+      id-token: write
     steps:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.version }}
+          ref: refs/tags/${{ inputs.version }}
           persist-credentials: false
 
       - name: Generate SBOM (CycloneDX)
@@ -66,12 +68,43 @@ jobs:
           scan-target: sbom.cdx.json
         continue-on-error: false
 
-      - name: Publish release SBOM assets
+      - name: Create release archives
+        run: |
+          set -euo pipefail
+          git archive --format=tar --prefix=template-k8s/ HEAD | gzip -n > source.tar.gz
+          git archive --format=zip --prefix=template-k8s/ HEAD > source.zip
+
+      - name: Checkout signing action from workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .signing-tools
+          sparse-checkout: .github/actions/sigstore
+          persist-credentials: false
+
+      - name: Sign and verify release assets
+        uses: ./.signing-tools/.github/actions/sigstore
+        with:
+          identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@refs/heads/main
+          files: |
+            source.tar.gz
+            source.zip
+            sbom.cdx.json
+            sbom.spdx.json
+
+      - name: Publish verified release assets
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ inputs.version }}
+          fail_on_unmatched_files: true
           files: |
+            source.tar.gz
+            source.tar.gz.sigstore.json
+            source.zip
+            source.zip.sigstore.json
             sbom.cdx.json
+            sbom.cdx.json.sigstore.json
             sbom.spdx.json
+            sbom.spdx.json.sigstore.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
