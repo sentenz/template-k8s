@@ -27,7 +27,6 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-      id-token: write
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,6 +51,7 @@ jobs:
     if: needs.semantic-release.outputs.new-release-published == 'true'
     permissions:
       contents: write
+      id-token: write # Delegated to the called signing job
     uses: ./.github/workflows/sbom.yml
     with:
       version: ${{ needs.semantic-release.outputs.new-release-version }}
@@ -60,10 +60,11 @@ jobs:
     name: Trigger Workflows
     needs:
       - semantic-release
-    if: always() && needs.semantic-release.outputs.new-release-published == 'true'
+    if: needs.semantic-release.outputs.new-release-published == 'true'
     permissions:
       contents: read
       packages: write
+      id-token: write # Delegated to the called signing job
     uses: ./.github/workflows/docker.yml
     with:
       publish: true

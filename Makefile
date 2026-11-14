@@ -694,53 +694,89 @@ sast-trufflehog-git:
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRUFFLEHOG)" git file:///workspace --no-update --json > logs/sast/trufflehog-git.json 2> logs/sast/trufflehog-git.log
 .PHONY: sast-trufflehog-git
 
-# ─── Supply Chain Security ───────────────────────────────────────────────────────────────────────
+# ─── Software Supply Chain Security (SSCS) ─────────────────────────────────────────────────────────
 
-SAST_COSIGN_IMAGE ?= cgr.dev/chainguard/cosign:3.0.0@sha256:b6bc266358e9368be1b3d01fca889b78d5ad5a47832986e14640c34a237ef638
-SAST_COSIGN_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_COSIGN_IMAGE)"
+# Install Cosign v3.1.4 (matching the CI action) on the host. Native execution
+# preserves registry credentials and supports browser OIDC locally or ambient OIDC in CI.
+SSCS_COSIGN ?= cosign
+SSCS_COSIGN_IMAGE ?=
+SSCS_COSIGN_IDENTITY ?=
+SSCS_COSIGN_ISSUER ?= https://token.actions.githubusercontent.com
+SSCS_COSIGN_SBOM ?= logs/sbom/sbom-image.cdx.json
+SSCS_COSIGN_BUNDLE ?= logs/sscs/image.sigstore.json
+SSCS_COSIGN_ATTESTATION_BUNDLE ?= logs/sscs/sbom.sigstore.json
+SSCS_COSIGN_TRUSTED_ROOT ?=
+SSCS_COSIGN_SIGNING_CONFIG ?=
+export SSCS_COSIGN SSCS_COSIGN_IMAGE SSCS_COSIGN_IDENTITY SSCS_COSIGN_ISSUER
+export SSCS_COSIGN_SBOM SSCS_COSIGN_BUNDLE SSCS_COSIGN_ATTESTATION_BUNDLE
+export SSCS_COSIGN_TRUSTED_ROOT SSCS_COSIGN_SIGNING_CONFIG
 
-## Generate Cosign key pair
-sast-cosign-generate-key-pair:
-	$(SAST_COSIGN_ALIAS) generate-key-pair
-.PHONY: sast-cosign-generate-key-pair
+# Shared validation runs in each recipe's shell; values are passed through the
+# environment, not interpolated into shell source. Exact identity, never a regexp.
+define SSCS_COSIGN_OPTIONS
+command -v "$$SSCS_COSIGN" >/dev/null || { echo "error: install Cosign v3.1.4" >&2; exit 1; }
+[[ "$$SSCS_COSIGN_IMAGE" =~ ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$$ ]] || { echo "error: SSCS_COSIGN_IMAGE must include a sha256 digest" >&2; exit 1; }
+[[ -n "$$SSCS_COSIGN_IDENTITY" && -n "$$SSCS_COSIGN_ISSUER" ]] || { echo "error: set an exact SSCS_COSIGN_IDENTITY and SSCS_COSIGN_ISSUER" >&2; exit 1; }
+verification=(--certificate-identity "$$SSCS_COSIGN_IDENTITY" --certificate-oidc-issuer "$$SSCS_COSIGN_ISSUER")
+trust=()
+[[ -z "$$SSCS_COSIGN_SIGNING_CONFIG" || -n "$$SSCS_COSIGN_TRUSTED_ROOT" ]] || { echo "error: signing config requires a trusted root" >&2; exit 1; }
+if [[ -n "$$SSCS_COSIGN_TRUSTED_ROOT" ]]; then
+    [[ -s "$$SSCS_COSIGN_TRUSTED_ROOT" ]] || { echo "error: trusted root file is missing or empty" >&2; exit 1; }
+    trust=(--trusted-root "$$SSCS_COSIGN_TRUSTED_ROOT")
+fi
+endef
 
-# Usage: make sast-cosign-attest <image_name>
-#
-## Attest an image with the generated SBOM using Cosign
-sast-cosign-attest:
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-cosign-attest <image_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f cosign.key ]; then \
-		echo "Error: cosign.key not found. Run 'make sast-cosign-generate-key-pair' first."; \
-		exit 1; \
-	fi
-	@if [ ! -f logs/sbom/sbom.cdx.json ]; then \
-		echo "Error: logs/sbom/sbom.cdx.json not found. Run 'make sast-trivy-sbom-cyclonedx <image_name>' first."; \
-		exit 1; \
-	fi
+# Public Sigstore is the default and discloses signing metadata. Private signing
+# requires BOTH approved configuration files; verification needs only the root.
+define SSCS_COSIGN_SIGNING_OPTIONS
+signing=(--yes "$${trust[@]}")
+if [[ -n "$$SSCS_COSIGN_SIGNING_CONFIG" || -n "$$SSCS_COSIGN_TRUSTED_ROOT" ]]; then
+    [[ -s "$$SSCS_COSIGN_SIGNING_CONFIG" && -s "$$SSCS_COSIGN_TRUSTED_ROOT" ]] || { echo "error: private signing requires signing config and trusted root files" >&2; exit 1; }
+    signing+=(--signing-config "$$SSCS_COSIGN_SIGNING_CONFIG")
+fi
+if [[ "$${GITHUB_ACTIONS:-}" == true ]]; then
+    signing+=(--oidc-provider github-actions --oidc-client-id sigstore)
+fi
+endef
 
-	$(SAST_COSIGN_ALIAS) attest --key cosign.key --type cyclonedx --predicate logs/sbom/sbom.cdx.json "$(filter-out $@,$(MAKECMDGOALS))"
-.PHONY: sast-cosign-attest
+# Usage: make sscs-cosign-sign SSCS_COSIGN_IMAGE=<image@sha256:digest> SSCS_COSIGN_IDENTITY=<exact-identity>
+## Sign an immutable image keylessly, retain its bundle, and require verification
+sscs-cosign-sign:
+	@$(SSCS_COSIGN_OPTIONS)
+	$(SSCS_COSIGN_SIGNING_OPTIONS)
+	[[ -n "$$SSCS_COSIGN_BUNDLE" && ! -L "$$SSCS_COSIGN_BUNDLE" ]] || { echo "error: invalid signature bundle path" >&2; exit 1; }
+	mkdir -p -- "$$(dirname -- "$$SSCS_COSIGN_BUNDLE")"
+	"$$SSCS_COSIGN" sign "$${signing[@]}" --bundle "$$SSCS_COSIGN_BUNDLE" "$$SSCS_COSIGN_IMAGE"
+	test -s "$$SSCS_COSIGN_BUNDLE"
+	"$$SSCS_COSIGN" verify "$${trust[@]}" "$${verification[@]}" "$$SSCS_COSIGN_IMAGE"
+.PHONY: sscs-cosign-sign
 
-# Usage: make sast-cosign-verify <image_name>
-#
-## Verify SBOM attestation for an image using Cosign
-sast-cosign-verify:
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sast-cosign-verify <image_name>"; \
-		exit 1; \
-	fi
-	@if [ ! -f cosign.pub ]; then \
-		echo "Error: cosign.pub not found. Run 'make sast-cosign-generate-key-pair' first."; \
-		exit 1; \
-	fi
+# Usage: make sscs-cosign-verify SSCS_COSIGN_IMAGE=<image@sha256:digest> SSCS_COSIGN_IDENTITY=<exact-identity>
+## Verify an image signature against its digest, trusted certificate identity, and issuer
+sscs-cosign-verify:
+	@$(SSCS_COSIGN_OPTIONS)
+	"$$SSCS_COSIGN" verify "$${trust[@]}" "$${verification[@]}" "$$SSCS_COSIGN_IMAGE"
+.PHONY: sscs-cosign-verify
 
-	@mkdir -p logs/sast
+# SSCS_COSIGN_SBOM must describe this exact image, not an unrelated filesystem.
+# The default path matches the existing sast-trivy-sbom-cyclonedx-image output.
+## Attest an image with a CycloneDX SBOM, retain its bundle, and require verification
+sscs-cosign-attest:
+	@$(SSCS_COSIGN_OPTIONS)
+	$(SSCS_COSIGN_SIGNING_OPTIONS)
+	[[ -s "$$SSCS_COSIGN_SBOM" && -f "$$SSCS_COSIGN_SBOM" ]] || { echo "error: SSCS_COSIGN_SBOM must name a nonempty CycloneDX SBOM for this image" >&2; exit 1; }
+	[[ -n "$$SSCS_COSIGN_ATTESTATION_BUNDLE" && ! -L "$$SSCS_COSIGN_ATTESTATION_BUNDLE" ]] || { echo "error: invalid attestation bundle path" >&2; exit 1; }
+	mkdir -p -- "$$(dirname -- "$$SSCS_COSIGN_ATTESTATION_BUNDLE")"
+	"$$SSCS_COSIGN" attest "$${signing[@]}" --type cyclonedx --predicate "$$SSCS_COSIGN_SBOM" --bundle "$$SSCS_COSIGN_ATTESTATION_BUNDLE" "$$SSCS_COSIGN_IMAGE"
+	test -s "$$SSCS_COSIGN_ATTESTATION_BUNDLE"
+	"$$SSCS_COSIGN" verify-attestation "$${trust[@]}" "$${verification[@]}" --type cyclonedx "$$SSCS_COSIGN_IMAGE"
+.PHONY: sscs-cosign-attest
 
-	$(SAST_COSIGN_ALIAS) verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
-.PHONY: sast-cosign-verify
+## Verify a CycloneDX attestation (distinct from an image signature); emit verified envelopes to stdout
+sscs-cosign-verify-attestation:
+	@$(SSCS_COSIGN_OPTIONS)
+	"$$SSCS_COSIGN" verify-attestation "$${trust[@]}" "$${verification[@]}" --type cyclonedx "$$SSCS_COSIGN_IMAGE"
+.PHONY: sscs-cosign-verify-attestation
 
 # ─── Container Manager ───────────────────────────────────────────────────────────────────────────
 
