@@ -77,7 +77,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign and verify image digest
-        uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc
+        uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
         with:
           image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
           identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@refs/heads/main
