@@ -88,6 +88,27 @@ uploading them with their bundles. GitHub's automatically generated source
 archives are separate and are not signed. This repository has no firmware build;
 a firmware producer can use the same action and retain the binary and bundle.
 
+## Troubleshooting
+
+### GitHub Actions cannot find the signing action for an older release tag
+
+If the signing step reports that it cannot find `action.yml`, `action.yaml`,
+or `Dockerfile` under `./.github/actions/sigstore`, check which revision was
+checked out. A release tag created before the signing action was added does
+not contain that directory, even when the workflow running from `main` does.
+
+The [SBOM workflow](../../workflows/sbom.yml) and
+[Docker workflow](../../workflows/docker.yml) use the release tag to build
+artifacts. After artifact generation, they separately check out the signing
+action from `${{ github.workflow_sha }}` into `.signing-tools` and invoke it via
+`./.signing-tools/.github/actions/sigstore`.
+
+For an older SBOM release, start a new run of the updated SBOM workflow from
+`main` and enter the existing release tag as `version`. If the action still
+cannot be found, check that the **Checkout signing action from workflow
+revision** step succeeded and that the workflow commit contains
+`.github/actions/sigstore/action.yml`.
+
 ## Trust and consumption
 
 `deployment: public` is an explicit default for this public repository: signing
