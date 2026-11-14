@@ -77,8 +77,16 @@ jobs:
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Checkout signing action from workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .signing-tools
+          sparse-checkout: .github/actions/sigstore
+          persist-credentials: false
+
       - name: Sign and verify image digest
-        uses: ./.github/actions/sigstore
+        uses: ./.signing-tools/.github/actions/sigstore
         with:
           image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
           identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@refs/heads/main

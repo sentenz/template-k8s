@@ -74,8 +74,16 @@ jobs:
           git archive --format=tar --prefix=template-k8s/ HEAD | gzip -n > source.tar.gz
           git archive --format=zip --prefix=template-k8s/ HEAD > source.zip
 
+      - name: Checkout signing action from workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .signing-tools
+          sparse-checkout: .github/actions/sigstore
+          persist-credentials: false
+
       - name: Sign and verify release assets
-        uses: ./.github/actions/sigstore
+        uses: ./.signing-tools/.github/actions/sigstore
         with:
           identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@refs/heads/main
           files: |
