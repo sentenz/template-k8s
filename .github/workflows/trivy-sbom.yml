@@ -66,7 +66,7 @@ jobs:
       - name: Sign and verify release assets
         uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
         with:
-          identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@${{ github.ref }}
+          identity: https://github.com/${{ github.repository }}/.github/workflows/trivy-sbom.yml@${{ github.ref }}
           files: |
             sbom.cdx.json
             sbom.spdx.json
