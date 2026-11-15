@@ -74,6 +74,8 @@ jobs:
         with:
           identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@${{ github.ref }}
           files: |
+            source.tar.gz
+            source.zip
             sbom.cdx.json
             sbom.spdx.json
 
@@ -83,6 +85,10 @@ jobs:
           tag_name: ${{ github.ref_name }}
           fail_on_unmatched_files: true
           files: |
+            source.tar.gz
+            source.tar.gz.sigstore.json
+            source.zip
+            source.zip.sigstore.json
             sbom.cdx.json
             sbom.cdx.json.sigstore.json
             sbom.spdx.json
