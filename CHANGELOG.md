@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.18](https://github.com/sentenz/template-k8s/compare/2.1.17...2.1.18) (2026-11-15)
+
+### Bug Fixes
+
+* **ci:** authenticate Semantic Release with RELEASE_PAT ([#158](https://github.com/sentenz/template-k8s/issues/158)) ([1c74a0b](https://github.com/sentenz/template-k8s/commit/1c74a0b198a6d9f02cf3be5f41a686e2718590e1))
+* **ci:** replace RELEASE_PAT with RELEASE_TOKEN for Semantic Release ([5dfbdf6](https://github.com/sentenz/template-k8s/commit/5dfbdf61d1fb41608489715088af1860a7206785))
+
 ## [2.1.17](https://github.com/sentenz/template-k8s/compare/2.1.16...2.1.17) (2026-11-14)
 
 ### Bug Fixes
