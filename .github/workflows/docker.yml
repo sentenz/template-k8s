@@ -9,6 +9,11 @@ on:
       - scripts/bootstrap.sh
       - .github/workflows/docker.yml
   workflow_call:
+    outputs:
+      image:
+        value: ${{ jobs.publish.outputs.image }}
+      digest:
+        value: ${{ jobs.publish.outputs.digest }}
     inputs:
       publish:
         description: Publish the container image to GHCR
@@ -50,9 +55,12 @@ jobs:
 
   publish:
     name: Docker Action - Publish
-    if: inputs.publish && github.ref == 'refs/heads/main'
+    if: inputs.publish && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+      digest: ${{ steps.docker-build.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -61,26 +69,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.version }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Run Docker Publish
-        id: docker-build
-        uses: sentenz/actions/docker@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
+      - name: Validate release source
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: bash scripts/ci/validate-release.sh
+
+      - name: Resolve image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/k8s" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6
         with:
-          version: ${{ inputs.version }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish versioned image with provenance
+        id: docker-build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
           context: .
           file: container/k8s/Dockerfile
-          image-name: k8s
           platforms: linux/amd64,linux/arm64
           push: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          tags: ${{ steps.image.outputs.name }}:${{ inputs.version }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ steps.image.outputs.name }}
+          cache-to: type=gha,mode=max,scope=${{ steps.image.outputs.name }}
 
       - name: Sign and verify image digest
         uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
         with:
-          image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
-          identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@refs/heads/main
+          image: ${{ steps.image.outputs.name }}@${{ steps.docker-build.outputs.digest }}
+          identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@${{ github.ref }}
 
       - name: Retain image verification bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

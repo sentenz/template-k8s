@@ -3,6 +3,7 @@
 name: Regal
 
 on:
+  workflow_call:
   push:
     branches:
       - main

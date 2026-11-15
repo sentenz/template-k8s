@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Release Validation
+on:
+  workflow_call:
+permissions: {}
+jobs:
+  conftest:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/conftest.yml
+  regal:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/regal.yml
+  semgrep:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/semgrep.yml
+  trivy:
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/trivy.yml
+  trufflehog:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/trufflehog.yml
+  kind:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/kind.yml
+  workflow-checks:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-checks.yml
