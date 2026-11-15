@@ -8,16 +8,11 @@ on:
       - container/k8s/**
       - scripts/bootstrap.sh
       - .github/workflows/docker.yml
-  workflow_call:
-    inputs:
-      publish:
-        description: Publish the container image to GHCR
-        required: true
-        type: boolean
-      version:
-        description: Container image version and Git tag to publish
-        required: true
-        type: string
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+  # Select an existing tag when dispatching a recovery run.
+  workflow_dispatch:
 
 concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}
@@ -39,7 +34,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Docker Build
-        uses: sentenz/actions/docker@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
+        uses: sentenz/actions/docker@df6abdf4c93db5d926177c074f25362775658ca3 # 1.7.0
         with:
           version: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           context: .
@@ -50,7 +45,7 @@ jobs:
 
   publish:
     name: Docker Action - Publish
-    if: inputs.publish && github.ref == 'refs/heads/main'
+    if: github.ref_type == 'tag' && github.event.deleted != true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -61,31 +56,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.version }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Run Docker Publish
+      - name: Publish attested versioned image
         id: docker-build
-        uses: sentenz/actions/docker@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
+        uses: sentenz/actions/docker@df6abdf4c93db5d926177c074f25362775658ca3 # 1.7.0
         with:
-          version: ${{ inputs.version }}
+          version: ${{ github.ref_name }}
           context: .
           file: container/k8s/Dockerfile
           image-name: k8s
           platforms: linux/amd64,linux/arm64
           push: true
+          publish-latest: false
+          provenance: mode=max
+          sbom: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign and verify image digest
         uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
         with:
           image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
-          identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@refs/heads/main
+          identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@${{ github.ref }}
 
       - name: Retain image verification bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: image-signature-${{ inputs.version }}-${{ github.run_attempt }}
+          name: image-signature-${{ github.ref_name }}-${{ github.run_attempt }}
           path: image.sigstore.json
           if-no-files-found: error
           retention-days: 90

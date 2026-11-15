@@ -3,29 +3,22 @@
 name: SBOM
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: Git release tag (for example, 1.2.3)
-        required: true
-        type: string
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+  # Select an existing tag when dispatching a recovery run.
   workflow_dispatch:
-    inputs:
-      version:
-        description: Existing Git release tag (for example, 1.2.3)
-        required: true
-        type: string
 
 permissions: {}
 
 concurrency:
-  group: sbom-${{ inputs.version }}
+  group: sbom-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   sbom:
     name: Generate, Scan, Sign and Publish Release Assets
-    if: github.ref == 'refs/heads/main'
+    if: github.ref_type == 'tag' && github.event.deleted != true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -35,7 +28,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.version }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Generate SBOM (CycloneDX)
@@ -57,6 +50,7 @@ jobs:
       - name: Scan SBOM (SPDX)
         uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
+          exit-code: "1"
           scan-type: sbom
           scan-target: sbom.spdx.json
         continue-on-error: false
@@ -64,36 +58,25 @@ jobs:
       - name: Scan SBOM (CycloneDX)
         uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
+          exit-code: "1"
           scan-type: sbom
           scan-target: sbom.cdx.json
         continue-on-error: false
 
-      - name: Create release archives
-        run: |
-          set -euo pipefail
-          git archive --format=tar --prefix=template-k8s/ HEAD | gzip -n > source.tar.gz
-          git archive --format=zip --prefix=template-k8s/ HEAD > source.zip
-
       - name: Sign and verify release assets
         uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
         with:
-          identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@refs/heads/main
+          identity: https://github.com/${{ github.repository }}/.github/workflows/sbom.yml@${{ github.ref }}
           files: |
-            source.tar.gz
-            source.zip
             sbom.cdx.json
             sbom.spdx.json
 
       - name: Publish verified release assets
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
-          tag_name: ${{ inputs.version }}
+          tag_name: ${{ github.ref_name }}
           fail_on_unmatched_files: true
           files: |
-            source.tar.gz
-            source.tar.gz.sigstore.json
-            source.zip
-            source.zip.sigstore.json
             sbom.cdx.json
             sbom.cdx.json.sigstore.json
             sbom.spdx.json

@@ -6,9 +6,6 @@ on:
   push:
     branches:
       - main
-      - next
-      - beta
-      - alpha
 
 permissions: {}
 
@@ -20,52 +17,33 @@ jobs:
   semantic-release:
     name: Semantic-Release Action
     runs-on: ubuntu-latest
-    outputs:
-      new-release-published: ${{ steps.release.outputs.new-release-published }}
-      new-release-version: ${{ steps.release.outputs.new-release-version }}
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read
     steps:
+      - name: Create release token
+        id: app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-workflows: write
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
       - name: Checkout (full history)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Run Semantic Release
         id: release
         uses: sentenz/actions/semantic-release@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app.outputs.token }}
           semantic-version: "25.0.3"
           extra-plugins: |
             @semantic-release/changelog@^6
             @semantic-release/git@^10
             conventional-changelog-conventionalcommits@9.3.1
-
-  sbom:
-    name: Generate and publish release SBOMs
-    needs: semantic-release
-    if: needs.semantic-release.outputs.new-release-published == 'true'
-    permissions:
-      contents: write
-      id-token: write # Delegated to the called signing job
-    uses: ./.github/workflows/sbom.yml
-    with:
-      version: ${{ needs.semantic-release.outputs.new-release-version }}
-
-  trigger:
-    name: Trigger Workflows
-    needs:
-      - semantic-release
-    if: needs.semantic-release.outputs.new-release-published == 'true'
-    permissions:
-      contents: read
-      packages: write
-      id-token: write # Delegated to the called signing job
-    uses: ./.github/workflows/docker.yml
-    with:
-      publish: true
-      version: ${{ needs.semantic-release.outputs.new-release-version }}

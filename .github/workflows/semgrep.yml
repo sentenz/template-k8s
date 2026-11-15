@@ -24,3 +24,4 @@ jobs:
           config: "auto"
           metrics: "auto"
           no-secrets-validation: "true"
+          json-output: semgrep.json
