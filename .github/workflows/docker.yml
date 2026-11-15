@@ -61,7 +61,7 @@ jobs:
 
       - name: Publish attested versioned image
         id: docker-build
-        uses: sentenz/actions/docker@df6abdf4c93db5d926177c074f25362775658ca3 # sentenz/actions#151
+        uses: sentenz/actions/docker@df6abdf4c93db5d926177c074f25362775658ca3 # 1.7.0
         with:
           version: ${{ github.ref_name }}
           context: .
