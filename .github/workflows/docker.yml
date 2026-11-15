@@ -59,24 +59,25 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Publish versioned image with provenance
+      - name: Publish attested versioned image
         id: docker-build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        uses: sentenz/actions/docker@fdf2061e53b42ec6d6c102dd9a7226215d4b8dce # sentenz/actions#151 (pin merged commit before merge)
         with:
+          version: ${{ github.ref_name }}
           context: .
           file: container/k8s/Dockerfile
+          image-name: k8s
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.image.outputs.name }}:${{ github.ref_name }}
+          publish-latest: false
           provenance: mode=max
           sbom: true
-          cache-from: type=gha,scope=${{ steps.image.outputs.name }}
-          cache-to: type=gha,mode=max,scope=${{ steps.image.outputs.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign and verify image digest
         uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
         with:
-          image: ${{ steps.image.outputs.name }}@${{ steps.docker-build.outputs.digest }}
+          image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
           identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@${{ github.ref }}
 
       - name: Retain image verification bundle
