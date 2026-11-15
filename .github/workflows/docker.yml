@@ -61,7 +61,7 @@ jobs:
 
       - name: Publish attested versioned image
         id: docker-build
-        uses: sentenz/actions/docker@fdf2061e53b42ec6d6c102dd9a7226215d4b8dce # sentenz/actions#151 (pin merged commit before merge)
+        uses: sentenz/actions/docker@c23a8648a9f4db0e62dcd046f709787e8546153e # sentenz/actions#151 (repin after upstream merge)
         with:
           version: ${{ github.ref_name }}
           context: .
