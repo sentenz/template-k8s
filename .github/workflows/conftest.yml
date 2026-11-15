@@ -3,7 +3,6 @@
 name: Conftest
 
 on:
-  workflow_call:
   push:
     branches:
       - main

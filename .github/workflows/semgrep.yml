@@ -3,7 +3,6 @@
 name: Semgrep
 
 on:
-  workflow_call:
   push:
     branches:
       - main

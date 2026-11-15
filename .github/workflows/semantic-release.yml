@@ -14,14 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validate:
-    permissions:
-      contents: read
-      security-events: write
-    uses: ./.github/workflows/release-validation.yml
-
   semantic-release:
-    needs: validate
     name: Semantic-Release Action
     runs-on: ubuntu-latest
     permissions:

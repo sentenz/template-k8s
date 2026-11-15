@@ -3,29 +3,22 @@
 name: SBOM
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: Git release tag (for example, 1.2.3)
-        required: true
-        type: string
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+  # Select an existing tag when dispatching a recovery run.
   workflow_dispatch:
-    inputs:
-      version:
-        description: Existing Git release tag (for example, 1.2.3)
-        required: true
-        type: string
 
 permissions: {}
 
 concurrency:
-  group: sbom-${{ inputs.version }}
+  group: sbom-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   sbom:
     name: Generate, Scan, Sign and Publish Release Assets
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && github.event.deleted != true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -38,10 +31,14 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Validate release source
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
-        run: bash scripts/ci/validate-release.sh
+      - name: Validate release tag
+        shell: bash
+        run: |
+          # The trigger is a glob; enforce strict stable SemVer for manual runs too.
+          if [[ ! "$GITHUB_REF_NAME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Expected a stable release tag such as 1.2.3"
+            exit 1
+          fi
 
       - name: Generate SBOM (CycloneDX)
         uses: sentenz/actions/trivy@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
@@ -94,7 +91,7 @@ jobs:
       - name: Upload assets to the existing release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           # Semantic Release creates the tag before its GitHub release.
