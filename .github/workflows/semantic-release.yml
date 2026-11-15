@@ -20,16 +20,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Create release token
-        id: app
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-workflows: write
-          permission-contents: write
-          permission-issues: write
-          permission-pull-requests: write
+      # PAT-authored tags trigger the downstream push.tags workflows.
+      - name: Validate release PAT
+        shell: bash
+        env:
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [[ -z "${RELEASE_PAT}" ]]; then
+            echo "::error::Configure the RELEASE_PAT repository secret for Semantic Release"
+            exit 1
+          fi
 
       - name: Checkout (full history)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,7 +41,7 @@ jobs:
         id: release
         uses: sentenz/actions/semantic-release@4e9e78d246486ad62d8df160a4d07020ece9668a # 1.5.6
         with:
-          github-token: ${{ steps.app.outputs.token }}
+          github-token: ${{ secrets.RELEASE_PAT }}
           semantic-version: "25.0.3"
           extra-plugins: |
             @semantic-release/changelog@^6
