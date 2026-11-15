@@ -78,14 +78,14 @@ jobs:
             sbom.spdx.json
 
       - name: Publish verified release assets
-         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
-         with:
-           tag_name: ${{ inputs.version }}
-           fail_on_unmatched_files: true
-           files: |
-             sbom.cdx.json
-             sbom.cdx.json.sigstore.json
-             sbom.spdx.json
-             sbom.spdx.json.sigstore.json
-          env:
-           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          tag_name: ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          files: |
+            sbom.cdx.json
+            sbom.cdx.json.sigstore.json
+            sbom.spdx.json
+            sbom.spdx.json.sigstore.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
