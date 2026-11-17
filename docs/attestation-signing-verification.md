@@ -1,13 +1,15 @@
 # Attestation, Signing, and Verification
 
-Attestation, signing, and verification establish claims about software artifacts, bind those artifacts to a signer, and evaluate the resulting evidence against an explicit trust policy. This repository combines Docker BuildKit attestations with [Sigstore Cosign](https://docs.sigstore.dev/cosign/verifying/verify/) signatures for container images and software bills of materials (SBOMs).
+Attestation records claims about software artifacts. Signing binds artifacts to a signer, and verification checks that evidence against an explicit trust policy. This repository combines Docker BuildKit attestations with [Sigstore Cosign](https://docs.sigstore.dev/cosign/verifying/verify/) signatures for container images and software bills of materials (SBOMs).
 
-This article describes the [Docker Sigstore workflow](../.github/workflows/docker-sigstore.yml) and [Trivy SBOM Sigstore workflow](../.github/workflows/trivy-sbom-sigstore.yml). It distinguishes configured publication behavior from evidence that a particular release completed successfully.
+This article covers the [Docker Sigstore workflow](../.github/workflows/docker-sigstore.yml) and [Trivy SBOM Sigstore workflow](../.github/workflows/trivy-sbom-sigstore.yml). Workflow configuration describes intended behavior; successful verification establishes evidence for a particular release.
 
 - [1. Artifact Categories](#1-artifact-categories)
 - [2. Trust Model](#2-trust-model)
   - [2.1. Workflow Identity](#21-workflow-identity)
-  - [2.2. Verification Boundaries](#22-verification-boundaries)
+  - [2.2. Workflow Self-Verification](#22-workflow-self-verification)
+  - [2.3. Independent Consumer Trust](#23-independent-consumer-trust)
+  - [2.4. Verification Guarantees and Limits](#24-verification-guarantees-and-limits)
 - [3. Attestation and Signing](#3-attestation-and-signing)
   - [3.1. Container Image](#31-container-image)
   - [3.2. Release SBOMs](#32-release-sboms)
@@ -23,7 +25,7 @@ This article describes the [Docker Sigstore workflow](../.github/workflows/docke
 
 ## 1. Artifact Categories
 
-Artifacts are classified by their subject and verification mechanism. The image SBOM and release SBOM files have different scan targets and are not interchangeable.
+The workflows produce two artifact groups: a container image with build metadata, and repository SBOM files. The image SBOM describes the image; the release SBOMs describe the repository checkout. These inventories are not interchangeable.
 
 | Artifact | Producer and subject | Publication location | Validation mechanism |
 | --- | --- | --- | --- |
@@ -53,22 +55,34 @@ A workflow's filename and Git ref are security-relevant parts of the expected ce
 
 Here, `<tag>` denotes the selected release tag, including its exact spelling.
 
-> [!IMPORTANT]
-> The inspected workflow configurations pass identities ending in `docker.yml@...` and `trivy-sbom.yml@...`, respectively. These differ from the actual filenames `docker-sigstore.yml` and `trivy-sbom-sigstore.yml`. The action's `identity` input controls verification; it does not change the identity issued to the signer. Runs of the named workflows are therefore expected to fail their immediate identity verification until the inputs match the executing workflow paths.
+### 2.2. Workflow Self-Verification
 
-Example: the required identity input for each named workflow is:
+Both workflows derive their immediate verification identity from the [GitHub Actions context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts):
+
+| Property | Value supplied |
+| --- | --- |
+| `github.server_url` | GitHub server URL |
+| `github.workflow_ref` | Repository, workflow file path, and full Git ref |
+
+Combining these properties follows workflow renames without duplicating the filename.
+
+Example: the same identity input applies to both workflows:
 
 ```yaml
-# .github/workflows/docker-sigstore.yml
-identity: https://github.com/${{ github.repository }}/.github/workflows/docker-sigstore.yml@${{ github.ref }}
-
-# .github/workflows/trivy-sbom-sigstore.yml
-identity: https://github.com/${{ github.repository }}/.github/workflows/trivy-sbom-sigstore.yml@${{ github.ref }}
+identity: ${{ github.server_url }}/${{ github.workflow_ref }}
 ```
 
-The examples below enforce the actual `-sigstore.yml` identities. Artifacts from another workflow require a separately approved identity; broad wildcard matching would weaken that boundary.
+The action's `identity` input constrains verification; it does not change the issued certificate identity. The expression applies to these directly executed workflows. Migration to reusable workflows requires reassessing the signing identity.
 
-### 2.2. Verification Boundaries
+### 2.3. Independent Consumer Trust
+
+External consumers must approve the repository, workflow path, and release tag independently of the artifact and its bundle. The verification examples therefore retain explicit `-sigstore.yml` identities.
+
+A workflow rename requires a reviewed consumer-policy update. Broad wildcard matching weakens this trust boundary.
+
+### 2.4. Verification Guarantees and Limits
+
+Signature verification establishes integrity and signer identity. Acceptance also requires authorization and artifact-specific policy checks.
 
 - Artifact Integrity
   > A valid signature binds the signed content or image digest to the certificate identity. A mutable tag alone does not provide a stable deployment reference.
@@ -84,25 +98,34 @@ The examples below enforce the actual `-sigstore.yml` identities. Artifacts from
 
 ## 3. Attestation and Signing
 
-Both workflows run on matching numeric release tags and support manual dispatch. Publishing jobs require a tag ref and exclude deleted-tag events. A recovery dispatch must therefore select an existing tag containing the intended workflow configuration.
+Both workflows run on matching numeric release tags and support manual dispatch. Publishing requires a tag ref and excludes deleted-tag events. Recovery runs must select an existing tag that contains the intended workflow configuration.
 
 ### 3.1. Container Image
 
-The Docker pull-request job builds without pushing. The tag publication job checks out `github.sha`, builds and pushes the multi-platform image with maximum-mode provenance and an image SBOM, then passes the action's image name and digest to Cosign.
+The Docker pull-request job builds without pushing. The tag publication job follows this sequence:
 
-[BuildKit attestations](https://docs.docker.com/build/metadata/attestations/) are in-toto records attached through the image index. The Sigstore action runs `cosign sign --bundle image.sigstore.json` against the immutable image reference, followed by `cosign verify` against that same reference.
+1. Check out `github.sha`.
+2. Build and push the multi-platform image with maximum-mode provenance and an image SBOM.
+3. Pass the image name and digest to `cosign sign --bundle image.sigstore.json`.
+4. Run `cosign verify` against the same immutable reference.
+5. Upload `image.sigstore.json` as the Actions artifact `image-signature-<tag>-<run_attempt>`, with a requested retention of 90 days.
 
-After successful verification, the workflow uploads `image.sigstore.json` as `image-signature-<tag>-<run_attempt>` with a requested retention of 90 days. The bundle is an Actions artifact, not a release asset.
+[BuildKit attestations](https://docs.docker.com/build/metadata/attestations/) are in-toto records attached through the image index. The signature bundle is retained separately as an Actions artifact, not a release asset.
 
-Image publication occurs before signing and verification. A failed signing step can therefore leave a published image, and an identity-verification failure can occur after signing. Registry presence alone is insufficient evidence of a successful release.
+An image can remain published after signing or verification fails. Signing may also succeed before identity verification fails. Registry presence alone does not establish a successful release.
 
 ### 3.2. Release SBOMs
 
 The pinned [Trivy action](https://github.com/sentenz/actions/blob/ac68a6837f8890c4570767c0d1f21bcfc133ab1a/trivy/action.yml) maps `sbom-generate` with target `.` to a filesystem scan. It generates CycloneDX and SPDX JSON inventories of the checked-out repository, rather than scanning the published container image.
 
-The workflow scans both generated SBOMs with `exit-code: "1"` and no continuation on error. Signing and release publication run only after those scans succeed. The action signs each file with `cosign sign-blob`, writes an adjacent `.sigstore.json` bundle, and immediately checks it with `cosign verify-blob`.
+After generation, the workflow follows this sequence:
 
-The release receives four assets: two SBOMs and their two bundles. These are signed blobs; neither workflow invokes `cosign attest` or publishes a separate Cosign predicate attestation. The signed SBOMs also do not constitute signed vulnerability reports.
+1. Scan both SBOMs with `exit-code: "1"` and no continuation on error.
+2. After both scans succeed, sign each file with `cosign sign-blob` and write its adjacent `.sigstore.json` bundle.
+3. Immediately verify each file with `cosign verify-blob`.
+4. Publish four release assets: the two SBOMs and their two bundles.
+
+Signing and publication stop if an earlier step fails. These are signed blobs; neither workflow invokes `cosign attest` or publishes a separate Cosign predicate attestation. The signed SBOMs also do not constitute signed vulnerability reports.
 
 ## 4. Verification
 
@@ -110,9 +133,22 @@ Verification must fail closed: artifacts are accepted only after every required 
 
 ### 4.1. Prerequisites
 
-Install Cosign `v3.1.4` to match the pinned action, Docker with Buildx for image inspection, and the GitHub CLI for asset downloads. Registry reads require access to the package; authenticated GitHub access is required for Actions artifact downloads.
+Prepare the tools and access required for the selected procedure:
 
-Set `TAG` to an approved release tag. For image verification, set `IMAGE_DIGEST` to the published index digest recorded for that release. For bundle retrieval, set `RUN_ID` and `RUN_ATTEMPT` from the corresponding successful Docker run. These are release-specific inputs, not values inferred from an untrusted bundle.
+| Tool | Purpose | Requirement |
+| --- | --- | --- |
+| Cosign | Signature verification | Version `v3.1.4`, matching the pinned action |
+| Docker with Buildx | Image metadata inspection | Read access to the registry package |
+| GitHub CLI | Release asset and Actions artifact downloads | Authenticated GitHub access for Actions artifacts |
+
+Set release inputs from approved records, not from an untrusted bundle:
+
+| Variable | Required value | Used for |
+| --- | --- | --- |
+| `TAG` | Exact approved release tag | All verification examples |
+| `IMAGE_DIGEST` | Published image index digest recorded for the release | Image verification |
+| `RUN_ID` | Corresponding successful Docker workflow run ID | Image bundle retrieval |
+| `RUN_ATTEMPT` | Attempt number from that successful run | Image bundle retrieval |
 
 Example:
 
@@ -130,7 +166,7 @@ docker buildx version
 gh --version
 ```
 
-Subsequent examples share these variables in the same shell.
+Run the remaining examples in this same shell so the variables and error-handling settings remain active.
 
 ### 4.2. Container Signature
 
@@ -149,7 +185,7 @@ cosign verify \
   "${IMAGE}"
 ```
 
-A zero exit status establishes successful signature verification under the specified identity and issuer constraints. Deploy the same digest reference after all required policy checks pass. Resolving a tag again at deployment time can select different content.
+A zero exit status confirms signature verification against the specified identity and issuer. After all policy checks pass, deploy this same digest reference. Resolving the tag again can select different content.
 
 ### 4.3. Build Attestations
 
@@ -167,7 +203,7 @@ docker buildx imagetools inspect "${IMAGE}" \
   --format '{{json .SBOM}}'
 ```
 
-Evaluate evidence for both target platforms. Acceptance criteria should require the expected source repository and revision, approved build inputs, and the required inventory coverage. Missing or unexpected evidence fails that policy even if the image signature is valid.
+Evaluate both target platforms against the expected source repository and revision, approved build inputs, and required inventory coverage. Missing or unexpected evidence fails that policy even when the signature is valid.
 
 These commands inspect metadata; they do not implement an automated provenance policy. The workflows' BuildKit records are not independently created Cosign attestations, so `cosign verify-attestation` is not a substitute for this verification and inspection sequence.
 
@@ -218,7 +254,7 @@ gh run download "${RUN_ID}" \
 test -s "${BUNDLE_DIR}/image.sigstore.json"
 ```
 
-This checks retrieval and nonempty content only. The image verification procedure above deliberately follows the action's registry-based `cosign verify` path; downloading the bundle is not itself verification, and the image bundle is not a bundle for either SBOM file.
+The download and `test -s` check establish only that a nonempty bundle was retrieved. Image verification still uses the registry-based `cosign verify` procedure above. This image bundle cannot replace either SBOM's bundle.
 
 ## 5. Troubleshooting
 
@@ -226,7 +262,7 @@ Failures must be resolved at their source without disabling identity, issuer, or
 
 | Symptom | Likely cause | Corrective action |
 | --- | --- | --- |
-| Certificate identity mismatch | Configured workflow filename differs from the executing filename, or the tag is wrong | Match the exact approved workflow path and ref; correct the workflow inputs described in Section 2.1 |
+| Certificate identity mismatch | Configured workflow filename differs from the executing filename, or the tag is wrong | Confirm the producing workflow and tag; use the dynamic input for immediate verification and an independently approved identity for consumers |
 | SBOM release assets absent | Scan, signing, or immediate verification failed before publication | Inspect the selected SBOM run and resolve the failed step |
 | Image exists after a failed run | Push precedes signing and verification | Require successful signature and policy checks before deployment |
 | No image signature found | Wrong digest, unavailable signature data, or signing did not finish | Confirm the publication index digest and signing logs |
@@ -235,7 +271,7 @@ Failures must be resolved at their source without disabling identity, issuer, or
 | Registry access denied | Package visibility or registry credentials prevent reads | Obtain authorized read access and repeat verification |
 | Provenance or image SBOM absent | Wrong image, incomplete attestation publication, or unsupported inspection tooling | Confirm the digest, Buildx support, and publication settings; reject missing required evidence |
 
-The Docker workflow's pull-request path filter also names `.github/workflows/docker.yml`. Changes limited to `docker-sigstore.yml` therefore do not match that entry. This trigger configuration is separate from certificate verification and requires its own workflow correction.
+The Docker pull-request filter includes `.github/workflows/docker-sigstore.yml`, so workflow changes trigger its build job. The filter remains a literal path: future renames require a filter update even though the signing identity updates automatically.
 
 ## 6. Terminology
 
@@ -264,6 +300,7 @@ The Docker workflow's pull-request path filter also names `.github/workflows/doc
 - Sentenz [Sigstore Action at the Pinned Revision](https://github.com/sentenz/actions/blob/2f64add54257e1cb22b66ff4755a2ca9fd4454fc/sigstore/action.yml) source file.
 - Sentenz [Docker Action at the Pinned Revision](https://github.com/sentenz/actions/blob/df6abdf4c93db5d926177c074f25362775658ca3/docker/action.yml) source file.
 - Sentenz [Trivy Action at the Pinned Revision](https://github.com/sentenz/actions/blob/ac68a6837f8890c4570767c0d1f21bcfc133ab1a/trivy/action.yml) source file.
+- GitHub [Contexts Reference](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) documentation.
 - Sigstore [Verifying Signatures](https://docs.sigstore.dev/cosign/verifying/verify/) documentation.
 - Sigstore [Signing Containers](https://docs.sigstore.dev/cosign/signing/signing_with_containers/) documentation.
 - Docker [Build Attestations](https://docs.docker.com/build/metadata/attestations/) documentation.
