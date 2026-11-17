@@ -53,20 +53,17 @@ A workflow's filename and Git ref are security-relevant parts of the expected ce
 
 Here, `<tag>` denotes the selected release tag, including its exact spelling.
 
-> [!IMPORTANT]
-> The inspected workflow configurations pass identities ending in `docker.yml@...` and `trivy-sbom.yml@...`, respectively. These differ from the actual filenames `docker-sigstore.yml` and `trivy-sbom-sigstore.yml`. The action's `identity` input controls verification; it does not change the identity issued to the signer. Runs of the named workflows are therefore expected to fail their immediate identity verification until the inputs match the executing workflow paths.
+Both workflows derive the identity for immediate verification from the [GitHub Actions context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts). The `github.workflow_ref` property contains the repository, workflow file path, and full Git ref; `github.server_url` supplies the server URL. This expression follows workflow renames without duplicating the filename.
 
-Example: the required identity input for each named workflow is:
+Example: the same identity input applies to both workflows:
 
 ```yaml
-# .github/workflows/docker-sigstore.yml
-identity: https://github.com/${{ github.repository }}/.github/workflows/docker-sigstore.yml@${{ github.ref }}
-
-# .github/workflows/trivy-sbom-sigstore.yml
-identity: https://github.com/${{ github.repository }}/.github/workflows/trivy-sbom-sigstore.yml@${{ github.ref }}
+identity: ${{ github.server_url }}/${{ github.workflow_ref }}
 ```
 
-The examples below enforce the actual `-sigstore.yml` identities. Artifacts from another workflow require a separately approved identity; broad wildcard matching would weaken that boundary.
+The action's `identity` input constrains verification; it does not change the certificate identity issued to the signer. This expression applies to the directly executed workflows described here. A migration to reusable workflows requires reassessing the expected signing identity.
+
+External consumers must retain an independently approved repository, workflow path, and release tag. The verification examples below therefore keep explicit `-sigstore.yml` identities rather than deriving trust from the artifact or its bundle. A workflow rename requires a corresponding reviewed update to consumer policy; broad wildcard matching would weaken that boundary.
 
 ### 2.2. Verification Boundaries
 
@@ -226,7 +223,7 @@ Failures must be resolved at their source without disabling identity, issuer, or
 
 | Symptom | Likely cause | Corrective action |
 | --- | --- | --- |
-| Certificate identity mismatch | Configured workflow filename differs from the executing filename, or the tag is wrong | Match the exact approved workflow path and ref; correct the workflow inputs described in Section 2.1 |
+| Certificate identity mismatch | Configured workflow filename differs from the executing filename, or the tag is wrong | Confirm the producing workflow and tag; use the dynamic input for immediate verification and an independently approved identity for consumers |
 | SBOM release assets absent | Scan, signing, or immediate verification failed before publication | Inspect the selected SBOM run and resolve the failed step |
 | Image exists after a failed run | Push precedes signing and verification | Require successful signature and policy checks before deployment |
 | No image signature found | Wrong digest, unavailable signature data, or signing did not finish | Confirm the publication index digest and signing logs |
@@ -235,7 +232,7 @@ Failures must be resolved at their source without disabling identity, issuer, or
 | Registry access denied | Package visibility or registry credentials prevent reads | Obtain authorized read access and repeat verification |
 | Provenance or image SBOM absent | Wrong image, incomplete attestation publication, or unsupported inspection tooling | Confirm the digest, Buildx support, and publication settings; reject missing required evidence |
 
-The Docker workflow's pull-request path filter also names `.github/workflows/docker.yml`. Changes limited to `docker-sigstore.yml` therefore do not match that entry. This trigger configuration is separate from certificate verification and requires its own workflow correction.
+The Docker workflow's pull-request path filter includes `.github/workflows/docker-sigstore.yml` so changes to that workflow trigger its build job. This filter remains a literal path and must be updated after a future rename; the dynamic signing identity does not update event filters.
 
 ## 6. Terminology
 
@@ -264,6 +261,7 @@ The Docker workflow's pull-request path filter also names `.github/workflows/doc
 - Sentenz [Sigstore Action at the Pinned Revision](https://github.com/sentenz/actions/blob/2f64add54257e1cb22b66ff4755a2ca9fd4454fc/sigstore/action.yml) source file.
 - Sentenz [Docker Action at the Pinned Revision](https://github.com/sentenz/actions/blob/df6abdf4c93db5d926177c074f25362775658ca3/docker/action.yml) source file.
 - Sentenz [Trivy Action at the Pinned Revision](https://github.com/sentenz/actions/blob/ac68a6837f8890c4570767c0d1f21bcfc133ab1a/trivy/action.yml) source file.
+- GitHub [Contexts Reference](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) documentation.
 - Sigstore [Verifying Signatures](https://docs.sigstore.dev/cosign/verifying/verify/) documentation.
 - Sigstore [Signing Containers](https://docs.sigstore.dev/cosign/signing/signing_with_containers/) documentation.
 - Docker [Build Attestations](https://docs.docker.com/build/metadata/attestations/) documentation.
