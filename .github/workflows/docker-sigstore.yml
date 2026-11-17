@@ -7,7 +7,7 @@ on:
     paths:
       - container/k8s/**
       - scripts/bootstrap.sh
-      - .github/workflows/docker.yml
+      - .github/workflows/docker-sigstore.yml
   push:
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
@@ -78,7 +78,7 @@ jobs:
         uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
         with:
           image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
-          identity: https://github.com/${{ github.repository }}/.github/workflows/docker.yml@${{ github.ref }}
+          identity: ${{ github.server_url }}/${{ github.workflow_ref }}
 
       - name: Retain Verification Bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
