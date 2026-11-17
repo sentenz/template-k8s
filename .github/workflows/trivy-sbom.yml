@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   sbom:
-    name: Generate, Scan, Sign and Publish Release Assets
+    name: Generate, Scan, Sign and Publish
     if: github.ref_type == 'tag' && github.event.deleted != true
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -25,7 +25,7 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - name: Checkout release tag
+      - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -63,7 +63,7 @@ jobs:
           scan-target: sbom.cdx.json
         continue-on-error: false
 
-      - name: Sign and verify release assets
+      - name: Sign and Verify Artifacts
         uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
         with:
           identity: https://github.com/${{ github.repository }}/.github/workflows/trivy-sbom.yml@${{ github.ref }}
@@ -71,7 +71,7 @@ jobs:
             sbom.cdx.json
             sbom.spdx.json
 
-      - name: Publish verified release assets
+      - name: Publish Release Assets
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ github.ref_name }}
