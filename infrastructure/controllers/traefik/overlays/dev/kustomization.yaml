@@ -5,6 +5,9 @@ kind: Kustomization
 resources:
   - ../../base
 
+components:
+  - ../../components/scoped-secrets
+
 helmGlobals:
   chartHome: ../../../../../vendor/helm
 
@@ -15,6 +18,8 @@ helmCharts:
     releaseName: traefik
     namespace: traefik
     valuesFile: values.yaml
+    additionalValuesFiles:
+      - ../../components/scoped-secrets/provider-values.yaml
 
 patches:
   - path: patch-service-nodeport.yaml
