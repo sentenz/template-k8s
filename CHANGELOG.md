@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.19](https://github.com/sentenz/template-k8s/compare/2.1.18...2.1.19) (2026-11-18)
+
+### Bug Fixes
+
+* **deps:** update helm release postgresql to v18.12.20 ([#154](https://github.com/sentenz/template-k8s/issues/154)) ([6f235bb](https://github.com/sentenz/template-k8s/commit/6f235bbc898ba61c1444dd3fe28c7dd1108ee864))
+
 ## [2.1.18](https://github.com/sentenz/template-k8s/compare/2.1.17...2.1.18) (2026-11-15)
 
 ### Bug Fixes
