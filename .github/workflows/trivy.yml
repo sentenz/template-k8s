@@ -52,7 +52,7 @@ jobs:
         with:
           exit-code: "1"
           scan-type: config
-          skip-dirs: vendor/helm/
+          skip-dirs: vendor/
           scan-target: "."
           format: sarif
           output: trivy-iac.sarif
