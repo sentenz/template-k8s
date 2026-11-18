@@ -64,7 +64,7 @@ jobs:
         continue-on-error: false
 
       - name: Sign and Verify Artifacts
-        uses: sentenz/actions/sigstore@2f64add54257e1cb22b66ff4755a2ca9fd4454fc # 1.6.0
+        uses: sentenz/actions/sigstore@48508443507cf772331e323ab90665657a1976ac # 1.6.0
         with:
           identity: ${{ github.server_url }}/${{ github.workflow_ref }}
           files: |
