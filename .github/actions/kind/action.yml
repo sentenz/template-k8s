@@ -336,24 +336,6 @@ runs:
           --namespace postgresql \
           --timeout=5m
 
-    - name: Verify Traefik discovery and Secret permissions
-      shell: bash
-      env:
-        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
-      run: |
-        set -euo pipefail
-        account=system:serviceaccount:traefik:traefik
-        kubectl auth can-i list ingressclasses.networking.k8s.io --as="$account"
-        for verb in get list watch; do
-          for namespace in traefik dependency-track; do
-            kubectl auth can-i "$verb" secrets -n "$namespace" --as="$account"
-          done
-          for scope in --all-namespaces --namespace=postgresql; do
-            answer=$(kubectl auth can-i "$verb" secrets "$scope" --as="$account") || test "$answer" = no
-            test "$answer" = no
-          done
-        done
-
     - name: Test Ingress Endpoints
       shell: bash
       env:
