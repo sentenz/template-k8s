@@ -18,4 +18,3 @@ helmCharts:
 
 patches:
   - path: patch-service-loadbalancer.yaml
-  - path: patch-deployment-hostnetwork-false.yaml

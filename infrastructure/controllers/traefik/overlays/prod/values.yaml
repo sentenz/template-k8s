@@ -1,4 +1,6 @@
 ---
+hostNetwork: false
+
 service:
   type: LoadBalancer
 
