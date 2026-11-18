@@ -264,6 +264,36 @@ runs:
         set -euo pipefail
         kubectl apply -f "${RENDERED_MANIFEST}"
 
+    - name: Verify Traefik permissions
+      shell: bash
+      env:
+        KUBECONFIG: ${{ runner.temp }}/template-k8s-kubeconfig.yaml
+      run: |
+        set -euo pipefail
+
+        account=system:serviceaccount:traefik:traefik
+        expect_denied() {
+          local decision
+          if decision=$(kubectl auth can-i --as="$account" "$@"); then
+            echo "Unexpected permission for $account: $*" >&2
+            return 1
+          fi
+          if [[ "${decision%% *}" != no ]]; then
+            echo "Could not verify denial for $account: $*" >&2
+            return 1
+          fi
+        }
+
+        for verb in get list watch; do
+          for namespace in traefik dependency-track; do
+            kubectl auth can-i --as="$account" "$verb" secrets --namespace "$namespace"
+          done
+          expect_denied "$verb" secrets --namespace postgresql
+          kubectl auth can-i --as="$account" "$verb" ingressclasses.networking.k8s.io
+        done
+        expect_denied list secrets --all-namespaces
+        expect_denied watch secrets --all-namespaces
+
     - name: Wait for Workloads
       shell: bash
       env:
