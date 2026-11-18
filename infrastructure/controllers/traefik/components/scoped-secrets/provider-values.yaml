@@ -1,0 +1,5 @@
+providers:
+  kubernetesIngress:
+    namespaces: [traefik, dependency-track]
+  kubernetesCRD:
+    namespaces: [traefik, dependency-track]

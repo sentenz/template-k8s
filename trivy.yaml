@@ -260,7 +260,8 @@ scan:
     # - secret
   show-suppressed: false
   skip-dirs: []
-  skip-files: []
+  skip-files:
+    - container/k8s/Dockerfile.dockerignore
   skip-version-check: false
 secret:
   config: trivy-secret.yaml

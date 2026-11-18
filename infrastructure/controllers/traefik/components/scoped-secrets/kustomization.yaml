@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - secret-access.yaml
+
+# Retain cluster discovery. Move only the chart's Secret rule into namespace Roles.
+patches:
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: traefik-traefik
+    patch: |-
+      - op: test
+        path: /rules/3
+        value:
+          apiGroups: [""]
+          resources: [secrets]
+          verbs: [get, list, watch]
+      - op: remove
+        path: /rules/3

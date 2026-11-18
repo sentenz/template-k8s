@@ -47,15 +47,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Render cluster manifests for the configuration scan
+        run: |
+          make cert-certificate-generate CERT_HOSTNAME=dependency-track.localhost CERT_DAYS=1
+          for environment in dev stage prod; do
+            make k8s-render K8S_ENV="$environment"
+          done
+
       - name: Run Trivy Config Scan
+        id: config-scan
         uses: sentenz/actions/trivy@ac68a6837f8890c4570767c0d1f21bcfc133ab1a # 1.5.8
         with:
           exit-code: "1"
           scan-type: config
+          skip-dirs: vendor/
           scan-target: "."
           format: sarif
           output: trivy-iac.sarif
           severity: HIGH,CRITICAL
+
+      - name: Print configuration findings
+        if: failure() && steps.config-scan.outcome == 'failure' && hashFiles('trivy-iac.sarif') != ''
+        run: |
+          jq -r '.runs[].results[] | [.ruleId, .locations[0].physicalLocation.artifactLocation.uri, .message.text] | @tsv' trivy-iac.sarif
 
       - name: Upload Trivy Config Scan
         if: always() && github.ref_type != 'tag'
