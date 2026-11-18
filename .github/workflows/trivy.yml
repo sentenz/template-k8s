@@ -52,17 +52,11 @@ jobs:
         with:
           exit-code: "1"
           scan-type: config
-          # The rendered overlays above include the effective chart resources and RBAC.
           skip-dirs: vendor/helm/traefik-*
           scan-target: "."
           format: sarif
           output: trivy-iac.sarif
           severity: HIGH,CRITICAL
-
-      - name: Report failing configuration checks
-        if: failure() && hashFiles('trivy-iac.sarif') != ''
-        run: |
-          jq -r '.runs[].results[] | [.ruleId, .locations[0].physicalLocation.artifactLocation.uri, .message.text] | @tsv' trivy-iac.sarif
 
       - name: Upload Trivy Config Scan
         if: always() && github.ref_type != 'tag'
