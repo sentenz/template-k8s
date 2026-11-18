@@ -261,7 +261,6 @@ scan:
   show-suppressed: false
   skip-dirs: []
   skip-files:
-    # Docker build-context patterns are not Dockerfile instructions.
     - container/k8s/Dockerfile.dockerignore
   skip-version-check: false
 secret:
