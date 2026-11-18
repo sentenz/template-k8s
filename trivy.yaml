@@ -260,7 +260,9 @@ scan:
     # - secret
   show-suppressed: false
   skip-dirs: []
-  skip-files: []
+  skip-files:
+    # Docker build-context patterns are not Dockerfile instructions.
+    - container/k8s/Dockerfile.dockerignore
   skip-version-check: false
 secret:
   config: trivy-secret.yaml
