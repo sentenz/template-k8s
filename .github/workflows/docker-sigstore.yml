@@ -34,7 +34,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Docker Build
-        uses: sentenz/actions/docker@65b662118ef093af20c69ed8b8b8017d9078ea5d # 1.7.0
+        uses: sentenz/actions/docker@23361c53dc10a0980b449d78bb4481e4997da7d3 # 1.7.1
         with:
           version: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           context: .
@@ -61,7 +61,7 @@ jobs:
 
       - name: Publish Attested Image
         id: docker-build
-        uses: sentenz/actions/docker@65b662118ef093af20c69ed8b8b8017d9078ea5d # 1.7.0
+        uses: sentenz/actions/docker@23361c53dc10a0980b449d78bb4481e4997da7d3 # 1.7.1
         with:
           version: ${{ github.ref_name }}
           context: .
