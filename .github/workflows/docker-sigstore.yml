@@ -75,7 +75,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign and Verify
-        uses: sentenz/actions/sigstore@48508443507cf772331e323ab90665657a1976ac # 1.6.0
+        uses: sentenz/actions/sigstore@23361c53dc10a0980b449d78bb4481e4997da7d3 # 1.7.1
         with:
           image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
           identity: ${{ github.server_url }}/${{ github.workflow_ref }}
