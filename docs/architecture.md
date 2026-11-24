@@ -103,7 +103,7 @@ Kustomize assembles and applies configuration in a defined hierarchy to ensure p
 
 ## Private Sigstore
 
-The development profile uses the existing kind cluster and Traefik for private image and artifact signing. Fulcio issues short-lived certificates for an interactive OIDC identity or a Kubernetes service account. The CT log and Rekor maintain separate trees in Trillian backed by a dedicated MySQL database.
+The development profile uses the existing kind cluster and Traefik for private image and artifact signing. Fulcio issues short-lived certificates for Kubernetes service accounts using the cluster’s OIDC issuer. The CT log and Rekor maintain separate trees in Trillian backed by a dedicated MySQL database.
 
 ```mermaid
 flowchart TD

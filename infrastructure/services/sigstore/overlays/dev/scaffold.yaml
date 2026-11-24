@@ -4,6 +4,8 @@ fulcio:
   namespace: {create: false}
   config:
     contents:
+      # The canonical entry enables Fulcio's authenticated in-cluster discovery.
+      # kind can also advertise the fully qualified service name as its token issuer.
       OIDCIssuers:
         https://kubernetes.default.svc:
           IssuerURL: https://kubernetes.default.svc
@@ -13,10 +15,6 @@ fulcio:
           IssuerURL: https://kubernetes.default.svc.cluster.local
           ClientID: sigstore
           Type: kubernetes
-        https://dex.sigstore.local:
-          IssuerURL: https://dex.sigstore.local
-          ClientID: sigstore
-          Type: email
   server:
     logging: {production: true}
     ingress:

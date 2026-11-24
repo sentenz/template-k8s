@@ -1,6 +1,6 @@
 # Private Sigstore on kind
 
-The development Kustomize composition includes Sigstore. The standard `make k8s-deploy K8S_ENV=dev` command applies the pinned scaffold and Policy Controller charts, the TUF mirror, Dex, the OCI registry, and the Traefik routes. The stage and production compositions are independent of this development overlay.
+The development Kustomize composition includes Sigstore. The standard `make k8s-deploy K8S_ENV=dev` command applies the pinned scaffold and Policy Controller charts, the TUF mirror, the OCI registry, and the Traefik routes. The stage and production compositions are independent of this development overlay.
 
 ## Prerequisites and networking
 
@@ -24,15 +24,15 @@ mkcert -install
 Add this entry to the workstation hosts file.
 
 ```text
-127.0.0.1 fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local dex.sigstore.local registry.local
+127.0.0.1 fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local registry.local
 ```
 
 Use existing private DNS or append a separate zone block to the CoreDNS Corefile. Replace `TRAEFIK_SERVICE_IP` with the ClusterIP of `traefik/traefik`. Retain the existing CoreDNS blocks and allow the normal reload interval.
 
 ```text
-fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local dex.sigstore.local registry.local {
+fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local registry.local {
     hosts {
-        TRAEFIK_SERVICE_IP fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local dex.sigstore.local registry.local
+        TRAEFIK_SERVICE_IP fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local registry.local
         ttl 30
     }
 }
@@ -83,7 +83,6 @@ cosign trusted-root create \
 cosign signing-config create \
   --fulcio="url=https://fulcio.sigstore.local,api-version=1,start-time=$start,operator=kind" \
   --rekor="url=https://rekor.sigstore.local,api-version=1,start-time=$start,operator=kind" --rekor-config ANY \
-  --oidc-provider="url=https://dex.sigstore.local,api-version=1,start-time=$start,operator=kind" \
   --out "$SIGSTORE_STATE/targets/signing_config.v0.2.json"
 ```
 
@@ -115,6 +114,11 @@ Make publishes the signed files, waits for the TUF service and controller, and a
 
 ## End-to-end verification
 
+The cluster’s service-account issuer supplies the OIDC identity. Fulcio accepts short-lived tokens with audience `sigstore` using its Kubernetes issuer type. The overlay explicitly configures both the chart’s built-in issuer `https://kubernetes.default.svc` and kind’s fully qualified variant `https://kubernetes.default.svc.cluster.local`. The deploy target checks which issuer the cluster advertises and admission requires that exact issuer and the release service-account identity.
+
+An operator with TokenRequest access can mint a token from a workstation. A CI job can pass the file containing a projected token. Both use `--identity-token`, so the signing configuration contains only the Fulcio and Rekor endpoints. The certificate identifies the service account. Restrict access to TokenRequests for `release` and to creating Pods that use it.
+
+
 Distribute `1.root.json` independently and verify its SHA-256 fingerprint before trusting the mirror. Use a private cache and the targets authenticated by Cosign. Replace the root path on runners with the independently distributed file.
 
 ```bash
@@ -129,7 +133,7 @@ identity=https://kubernetes.io/namespaces/sigstore-ci/serviceaccounts/release
 token="$SIGSTORE_STATE/release.token"
 kubectl -n sigstore-ci create token release --audience sigstore --duration 10m |
   tr -d '\n' > "$token"
-sign=(--yes --identity-token "$token" --signing-config "$signing" --trusted-root "$trusted")
+sign=(--yes --oidc-disable-ambient-providers --identity-token "$token" --signing-config "$signing" --trusted-root "$trusted")
 verify=(--trusted-root "$trusted" --certificate-identity "$identity" --certificate-oidc-issuer "$issuer")
 ```
 
@@ -154,8 +158,6 @@ make k8s-sigstore-test SIGNED_IMAGE="$SIGNED_IMAGE_DIGEST" \
 ```
 
 Use the bundle’s `verificationMaterial.tlogEntries[0].logIndex` to retrieve the entry from the private Rekor API at `/api/v1/log/entries?logIndex=INDEX`. Submit a Pod using the verified digest to `sigstore-test` and check that it runs. Repeat with a distinct unsigned digest and with a digest signed by the `unapproved` account. Each negative case should fail admission with the `sigstore-kind-signer` policy. Use `kubectl run --dry-run=server` to exercise the admission policy without starting a Pod.
-
-For interactive signing pass `--oidc-disable-ambient-providers --oidc-redirect-url http://localhost:5555/auth/callback` in place of the token option. Dex accepts `developer@sigstore.local` with the generated password in `$SIGSTORE_STATE/dex.password`. Verify against that email and issuer `https://dex.sigstore.local`. Admission continues to require the release service account.
 
 In CI, run build and tests, publish by digest, then sign and verify using the same private TUF targets. Run the trusted runner as `sigstore-ci/release` and project a service account token with audience `sigstore` and expiration `600` seconds. Pass its mounted path to Cosign. Publish the OCI signature and the artifact bundle with verification evidence. Submit the deployment by digest only after signature verification succeeds. The optional `overlays/dev/ci-access.yaml` grants the release service account access to submit and observe test Jobs.
 

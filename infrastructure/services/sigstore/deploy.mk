@@ -74,7 +74,7 @@ k8s-sigstore-inputs:
 			--from-file="$$state/mysql-database" --from-file="$$state/mysql-user" \
 			--from-file="$$state/mysql-password" --from-file="$$state/mysql-root-password"
 	fi
-	for entry in fulcio-system=fulcio.sigstore.local rekor-system=rekor.sigstore.local tuf-system=tuf.sigstore.local sigstore-oidc=dex.sigstore.local sigstore-registry=registry.local; do
+	for entry in fulcio-system=fulcio.sigstore.local rekor-system=rekor.sigstore.local tuf-system=tuf.sigstore.local sigstore-registry=registry.local; do
 		ns="$${entry%=*}"; host="$${entry#*=}"
 		if ! openssl verify -CAfile "$$ca" -verify_hostname "$$host" "$$state/$$host.crt" >/dev/null 2>&1 ||
 			! openssl x509 -checkend 86400 -noout -in "$$state/$$host.crt" >/dev/null; then
@@ -84,23 +84,8 @@ k8s-sigstore-inputs:
 			--cert="$$state/$$host.crt" --key="$$state/$$host.key" --dry-run=client -o yaml |
 			$(SIGSTORE_KUBECTL) apply --server-side --field-manager=template-k8s-sigstore -f -
 	done
-	for ns in fulcio-system sigstore-policy; do
-		$(SIGSTORE_KUBECTL) -n "$$ns" create configmap endpoint-ca --from-file=ca.crt="$$ca" --dry-run=client -o yaml |
-			$(SIGSTORE_KUBECTL) apply --server-side --field-manager=template-k8s-sigstore -f -
-	done
-	if secret_missing sigstore-oidc dex-config; then
-		[[ -s "$$state/dex.password" ]] || openssl rand -hex 24 | tr -d '\n' > "$$state/dex.password"
-		hash="$$(htpasswd -niB developer < "$$state/dex.password")"
-		jq -en --arg hash "$${hash#*:}" '{
-			issuer:"https://dex.sigstore.local",
-			storage:{type:"sqlite3",config:{file:"/data/dex.db"}},
-			web:{http:"0.0.0.0:5556"},telemetry:{http:"0.0.0.0:5558"},
-			enablePasswordDB:true,
-			staticClients:[{id:"sigstore",name:"Cosign",public:true,redirectURIs:["http://localhost:5555/auth/callback"]}],
-			staticPasswords:[{email:"developer@sigstore.local",username:"developer",
-				userID:"b03f8d91-966b-4f63-9c62-6fa219b761fb",hash:$$hash}]
-		}' | $(SIGSTORE_KUBECTL) -n sigstore-oidc create secret generic dex-config --from-file=config.json=/dev/stdin
-	fi
+	$(SIGSTORE_KUBECTL) -n sigstore-policy create configmap endpoint-ca --from-file=ca.crt="$$ca" --dry-run=client -o yaml |
+		$(SIGSTORE_KUBECTL) apply --server-side --field-manager=template-k8s-sigstore -f -
 	if secret_missing sigstore-registry registry-auth; then
 		[[ -s "$$state/registry.password" ]] || openssl rand -hex 24 | tr -d '\n' > "$$state/registry.password"
 		htpasswd -niB publisher < "$$state/registry.password" |
