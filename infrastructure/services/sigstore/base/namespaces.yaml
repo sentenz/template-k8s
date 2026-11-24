@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sigstore-system
+  labels:
+    sigstore.local/owner: template-k8s
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fulcio-system
+  labels:
+    sigstore.local/owner: template-k8s
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rekor-system
+  labels:
+    sigstore.local/owner: template-k8s
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ctlog-system
+  labels:
+    sigstore.local/owner: template-k8s
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trillian-system
+  labels:
+    sigstore.local/owner: template-k8s
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tuf-system
+  labels:
+    sigstore.local/owner: template-k8s
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sigstore-policy
+  labels:
+    sigstore.local/owner: template-k8s
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sigstore-ci
+  labels:
+    sigstore.local/owner: template-k8s
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sigstore-test
+  labels:
+    sigstore.local/owner: template-k8s

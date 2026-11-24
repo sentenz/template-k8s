@@ -8,15 +8,14 @@ Run from the repository root on the workstation that owns the cluster, with Bash
 
 ```bash
 export S=infrastructure/services/sigstore
-export KUBECONFIG="$PWD/.local/kubeconfig/dev.yaml"
 export KIND_CLUSTER_NAME=template-k8s
 python3 -m venv .local/sigstore-venv
 source .local/sigstore-venv/bin/activate
 pip install -r "$S/requirements.txt"
-"$S/scripts/inspect.sh"
+make k8s-sigstore-inspect
 ```
 
-Inspect namespaces, ready nodes, workload replicas, Helm releases, default StorageClass, ingress classes, Gateway resources, certificate issuers, Docker networks and registry discovery before installation. Save the inventory as a baseline. The script requires the selected context to be `kind-$KIND_CLUSTER_NAME`, an existing Traefik Service in `traefik` and the development overlay’s port mapping. Resolve differences with the live environment before applying this profile. A disposable registry used by another Make target can have a different hostname, protocol and lifetime.
+Inspect namespaces, ready nodes, workload replicas, Helm releases, default StorageClass, ingress classes, Gateway resources, certificate issuers, Docker networks and registry discovery before installation. Save the inventory as a baseline. Make uses `K8S_KUBECONFIG` and `KIND_CLUSTER_NAME` from the existing Kubernetes targets. The profile requires the selected context to be `kind-$KIND_CLUSTER_NAME`, an existing Traefik Service in `traefik` and the development overlay’s port mapping. Resolve differences with the live environment before applying this profile. A disposable registry used by another Make target can have a different hostname, protocol and lifetime.
 
 ## Network and endpoint TLS
 
@@ -45,8 +44,8 @@ If an existing registry already uses `registry.local`, set `USE_EXISTING_REGISTR
 export REGISTRY=registry.local       # Or the existing TLS registry authority
 # Optional existing interactive OIDC provider, registered as public client "sigstore":
 # export OIDC_ISSUER=https://identity.example.org OIDC_CA_FILE=/path/to/issuer-ca.pem
-"$S/scripts/install.sh"
-"$S/scripts/status.sh"
+make k8s-sigstore-deploy
+make k8s-sigstore-status
 ```
 
 The installer verifies package SHA-256 digests for official **scaffold 0.6.125** and **policy-controller 0.10.8** (controller 0.13.1). The scaffold lock selects Fulcio 2.11.7, Rekor 1.8.15, Trillian 0.5.0 and CT Log 0.2.71 chart versions. The Trillian-backed Rekor v1 API provides signing time and transparency evidence for this profile. The scaffold’s temporary TUF server is replaced by a read-only HTTP service serving host-signed TUF metadata over the existing ingress. Chart downloads and container pulls require upstream access unless mirrored. Signing, verification and admission use private trust services.
@@ -55,6 +54,24 @@ Helm waits for the component deployments and initialization Jobs. Namespaces, de
 
 When an existing policy-controller owns the cluster CRDs, installation stops before installing another controller. Integrate the private TrustRoot and authority with that controller after reviewing its global policies and webhook selectors. The dedicated namespace selector is the explicit system-workload exception. Only an administrator should extend it. Keep existing workloads in their original namespaces.
 
+Set `K8S_KUBECONFIG` on the Make command line to select a non-default kubeconfig. A normal `make k8s-deploy` manages the existing cluster composition independently of the opt-in Sigstore target.
+
+## Dedicated MySQL
+
+The default uses the scaffold’s dedicated MySQL deployment and PVC. An operator-managed MySQL 8.4 service can provide the same separation. Before the first install, provision a database for Trillian and grant a dedicated user schema creation and read/write permissions only for that database. The Helm initialization Job creates the tables and indexes. Keep the database on a private network and limit ingress to the Trillian namespace when the CNI supports it.
+
+Create and label the dedicated `trillian-system` namespace before the first install. If it already exists, confirm ownership before proceeding. Create the Secret `sigstore-mysql` in `trillian-system` through the existing secrets process. It must contain `mysql-user`, `mysql-password` and `mysql-database`. Start with an empty schema, or restore a coordinated backup of the trees and signing state before migration.
+
+```bash
+kubectl --kubeconfig .local/kubeconfig/dev.yaml --context "kind-$KIND_CLUSTER_NAME" create namespace trillian-system
+kubectl --kubeconfig .local/kubeconfig/dev.yaml --context "kind-$KIND_CLUSTER_NAME" \
+  label namespace trillian-system sigstore.local/owner=template-k8s
+# Provision the sigstore-mysql Secret before running the deploy target.
+make k8s-sigstore-deploy TRILLIAN_MYSQL_HOST=mysql.db.svc.cluster.local
+```
+
+Repeat the host setting on subsequent deployments. The installer records the database endpoint and blocks accidental changes to it. The Rekor search index uses the scaffold’s default Redis backend. Existing standalone Fulcio or Rekor deployments require an explicit migration covering Helm ownership, keys, database contents and tree IDs before this profile can take over their namespaces.
+
 ## Trust bootstrap and signing
 
 State is under `.local/sigstore/$KIND_CLUSTER_NAME` with owner-only permissions. The Fulcio file CA, Rekor ECDSA key, CT key, TUF role keys and endpoint TLS keys have distinct purposes. Chart initialization creates the CT key and trees. The installer retains the Fulcio and Rekor keys across upgrades. The TUF publication host stores separate Ed25519 keys for root, targets, snapshot and timestamp. Only public metadata and targets go to the TUF service. Distribute `metadata/1.root.json` through an authenticated, independent channel. Confirm its SHA-256 fingerprint with the operator. Never bootstrap a runner solely by downloading a first root from the mirror.
@@ -62,7 +79,7 @@ State is under `.local/sigstore/$KIND_CLUSTER_NAME` with owner-only permissions.
 ```bash
 state="$PWD/.local/sigstore/$KIND_CLUSTER_NAME"
 sha256sum "$state/metadata/1.root.json"
-source "$S/scripts/client.sh"
+source "$S/tools/client.sh"
 sigstore_client "$state/metadata/1.root.json"
 printf 'local artifact\n' > "$state/example.txt"
 cosign sign-blob --yes --oidc-disable-ambient-providers \
@@ -76,11 +93,18 @@ cosign verify-blob --trusted-root "$SIGSTORE_TRUSTED_ROOT" \
 
 The development Dex password for `developer@sigstore.local` is in `$state/dex.password`. An existing interactive provider must return a verified email and allow the registered loopback callback. The client initializes an isolated TUF cache and requires both authenticated targets. All sign and verify commands reference those targets explicitly.
 
+For an image already published by digest, the repository’s signing targets initialize private TUF automatically. Set `TOKEN_FILE` to a projected token on a runner. An operator with TokenRequest access can mint a short-lived token for the release account on demand.
+
+```bash
+make sscs-cosign-sign IMAGE="$IMAGE_DIGEST_REF"
+make sscs-cosign-verify-image IMAGE="$IMAGE_DIGEST_REF"
+```
+
 ## End-to-end acceptance
 
 ```bash
-"$S/scripts/e2e.sh"
-"$S/scripts/inspect.sh"
+make k8s-sigstore-test
+make k8s-sigstore-inspect
 ```
 
 The test runs the native sample, cross-compiles the OCI executable, pushes three distinct manifests and resolves their digests. It signs the approved image and binary, verifies the registry-hosted signature, checks the blob bundle, changes a byte sequence and requires verification to fail. It verifies that both bundles contain Rekor inclusion proofs and looks up their entries in the private log. A second short-lived token produces a valid signature from an unauthorized identity. Server-side admission must reject both that image and the unsigned control with a policy-specific error. The approved Pod must run to completion and print the expected output. Evidence stays under the printed test directory. Compare workload readiness with the baseline inventory.
@@ -89,12 +113,13 @@ With an existing registry, use `IMAGE_REPOSITORY` for an authorized repository a
 
 ## CI release gate
 
-`scripts/ci.sh` is a pipeline entry point for a trusted runner with network access to this cluster, a builder, ORAS, kubectl and Cosign. It builds and tests the sample, publishes the image and raw binary, signs and verifies both, attaches verification evidence to the immutable image and submits a Job to admission. A failed check terminates the release stage. Replace the sample build/test commands with the project’s own release commands. Use a runner isolated from untrusted pull requests.
+`make sscs-sigstore-release` is a pipeline entry point for a trusted runner with network access to this cluster, a builder, ORAS, kubectl and Cosign. It builds and tests the sample, publishes the image and raw binary, signs and verifies both, attaches verification evidence to the immutable image and submits a Job to admission. A failed check terminates the release stage. Replace the sample build/test commands with the project’s own release commands. Use a runner isolated from untrusted pull requests.
 
 Run the runner Pod as `release` in `sigstore-ci`. Mount its signing token using the following Pod-spec fragment. Kubernetes refreshes the token. Grant optional Job submission privileges with `kubectl apply -f "$S/overlays/dev/ci-access.yaml"`. Keep the runner’s Kubernetes API identity and its Sigstore-audience token in distinct mounts. Provide registry credentials separately, and provision `registry-pull` in the test namespace.
 
 ```yaml
 serviceAccountName: release
+automountServiceAccountToken: true  # API identity for submitting gated Jobs
 volumes:
   - name: signing-identity
     projected:
@@ -110,14 +135,14 @@ export TOKEN_FILE=/var/run/signing/token TUF_ANCHOR=/etc/private-sigstore/1.root
 export SIGNER_ISSUER=https://kubernetes.default.svc.cluster.local  # match cluster discovery exactly
 export SIGNER_IDENTITY=https://kubernetes.io/namespaces/sigstore-ci/serviceaccounts/release
 export IMAGE_REPOSITORY=registry.local/sigstore/release RELEASE_TAG="build-$BUILD_ID"
-"$S/scripts/ci.sh"
+make sscs-sigstore-release
 ```
 
 ## Operations and recovery
 
-- Check `scripts/status.sh` for health, private trust readiness, tree sizes, signed heads and TUF expiry. Alert on failed probes, unavailable replicas, stalled Jobs, PVC pressure, unexpected key fingerprints, decreasing tree sizes or conflicting roots at the same tree size. Collect Rekor and CT signed heads outside the cluster. Bundle verification authenticates per-signature evidence. A production monitor should independently verify successive signed checkpoints and Merkle consistency proofs.
+- Check `make k8s-sigstore-status` for health, private trust readiness, tree sizes, signed heads and TUF expiry. Alert on failed probes, unavailable replicas, stalled Jobs, PVC pressure, unexpected key fingerprints, decreasing tree sizes or conflicting roots at the same tree size. Collect Rekor and CT signed heads outside the cluster. Bundle verification authenticates per-signature evidence. A production monitor should independently verify successive signed checkpoints and Merkle consistency proofs.
 - Use `kubectl logs` for component and Job logs. Fulcio and Rekor use production log formatting. Chart annotations expose metrics on Rekor 2112 and CT 6963. Limit access to internal metrics. The database and Redis ingress policies require an enforcing CNI. Standard kind networking alone should not be assumed to enforce them.
-- Refresh TUF before its seven-day timestamp expiry with `scripts/publish-trust.sh "$OIDC_ISSUER"` (omit the argument for the bundled Dex). Snapshot and targets expire after 14 and 30 days. Keep the publisher state and its version counter together. Run one publisher at a time. Check that both targets initialize from a clean cache after each change.
+- Refresh TUF before its seven-day timestamp expiry with `make k8s-sigstore-refresh-trust` with the same `OIDC_ISSUER` as the installation. Snapshot and targets expire after 14 and 30 days. Keep the publisher state and its version counter together. Run one publisher at a time. Check that both targets initialize from a clean cache after each change.
 - Back up the Fulcio, Rekor and CT signing Secrets, all tree configuration ConfigMaps, MySQL database, registry and Dex volumes, chart values, operator state and public evidence. Encrypt backups, restrict access and test coherent restoration into an isolated environment. Restore the original log state and keys as a set, check old bundles and compare independent checkpoints before reopening signing. A fresh tree or new signing key requires an explicit trust transition.
 - For service-key rotation, retain old verification material with bounded validity, add new public keys and certificates to the trusted-root target, stage signer changes, publish and verify old and new bundles. The refresh script stops on unexpected key changes. For TUF root rotation produce sequential versioned roots signed by the old and new root thresholds and retain the complete root chain. Coordinate changes to the local publisher, controller, clients and independently distributed anchors before expiry. Renewing endpoint leaves uses the mkcert CA and does not require a Sigstore root rotation.
 - For production use an external HA database and durable registry, a production OIDC provider, HSM/KMS-backed signing, offline threshold TUF roots and delegated online roles, managed TLS renewal, secret encryption and audit logging. Plan log sharding, tree retention, independent witnesses, disaster recovery and highly available fail-closed admission. The single-workstation publisher and local development passwords have a narrower trust boundary.
@@ -126,7 +151,7 @@ export IMAGE_REPOSITORY=registry.local/sigstore/release RELEASE_TAG="build-$BUIL
 
 A TLS hostname error usually indicates that the client resolves the name to the wrong ingress or lacks the endpoint CA. Compare DNS inside a runner with the Traefik ClusterIP. For a pending PVC inspect the default provisioner and scheduling events. For a stalled CT job inspect Fulcio readiness, tree IDs and Trillian connectivity. For an OIDC failure compare discovery issuer, audience and verified SAN. For admission errors distinguish registry authorization, private TrustRoot readiness, identity mismatch and missing OCI referrers. Preserve exact digests and bundle JSON during diagnosis.
 
-For removal, archive the state and PVC contents first. Delete the named policy and TrustRoot, then uninstall `kind-policy` from `sigstore-policy` and `kind-sigstore` from `sigstore-system`. Review **all** ClusterImagePolicies and TrustRoots before uninstalling the controller because its Helm release owns their CRDs. Inspect namespaces with `kubectl get ns -l sigstore.local/owner=template-k8s`; deleting those namespaces deletes the associated local storage. Remove only the marked CoreDNS block with `python3 "$S/scripts/dns.py" "kind-$KIND_CLUSTER_NAME" remove unused`. On each kind node remove the marked registry.local hosts entry and the two profile-owned files in `/etc/containerd/certs.d/registry.local`. Remove only the corresponding workstation hosts entries and dedicated registry trust file. Retain the shared mkcert CA if other services use it. The cluster and Traefik remain available throughout.
+For removal, archive the state and PVC contents first. Delete the named policy and TrustRoot, then uninstall `kind-policy` from `sigstore-policy` and `kind-sigstore` from `sigstore-system`. Review **all** ClusterImagePolicies and TrustRoots before uninstalling the controller because its Helm release owns their CRDs. Inspect namespaces with `kubectl get ns -l sigstore.local/owner=template-k8s`; deleting those namespaces deletes the associated local storage. Remove only the marked CoreDNS block with `python3 "$S/tools/dns.py" "kind-$KIND_CLUSTER_NAME" remove unused`. On each kind node remove the marked registry.local hosts entry and the two profile-owned files in `/etc/containerd/certs.d/registry.local`. Remove only the corresponding workstation hosts entries and dedicated registry trust file. Retain the shared mkcert CA if other services use it. The cluster and Traefik remain available throughout.
 
 ## References
 
