@@ -14,9 +14,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 ### 1.1. Prerequisites
 
 > [!TIP]
-> [Alpine Linux Collection](https://hub.docker.com/u/alpine)
->
-> Verified tools for local Kubernetes workflows based on a security-oriented, lightweight Linux distribution image.
+> [Alpine Linux Collection](https://hub.docker.com/u/alpine) of verified tools for local Kubernetes workflows based on a security-oriented, lightweight Linux distribution image.
 
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
   > Command-line tool for interacting with Kubernetes clusters.
@@ -33,7 +31,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 - [Docker](https://www.docker.com/)
   > Containerization platform for building, shipping, and running containerized applications.
 
-- [Make](https://www.gnu.org/software/make)
+- [Make](https://www.gnu.org/software/make/)
   > Task automation tool to manage build processes and workflows.
 
   ```bash
@@ -48,7 +46,7 @@ Orchestration platform for automating deployment, scaling, and management of con
       > High-level overview of the system's structure, components, and interactions.
 
     - [Project Layout](docs/project-layout.md)
-      > Helm and Kustomize repository structure for development, stage, and production environments.
+      > Overview of the project's directory structure and organization.
 
 2. Usage and Instructions
 
@@ -58,79 +56,19 @@ Orchestration platform for automating deployment, scaling, and management of con
       uses: sentenz/actions/kind@latest
       ```
 
-    - Local development
-
-      `K8S_ENV` defaults to `dev`, so the local Kind workflow uses `clusters/dev/kind-cluster.yaml`, deploys `clusters/dev`, and stores its generated kubeconfig at `.local/kubeconfig/dev.yaml`.
-
-      Before rendering or deploying, [prepare the development TLS files](apps/dependency-track/README.md#2-development) in `clusters/dev/secrets/` by decrypting the fixtures or generating a fresh local certificate.
+    - Tasks
 
       ```bash
-      make k8s-setup
-      make k8s-render
+      # Local Kubernetes Cluster using KinD
+      make k8s-bootstrap
       make k8s-deploy
       make k8s-destroy
       make k8s-teardown
       ```
 
-    - Other environments
-
-      Select another cluster composition explicitly. Rendering does not require a kubeconfig; deploy and destroy use `.local/kubeconfig/<environment>.yaml` unless `K8S_KUBECONFIG` is overridden.
-
-      ```bash
-      make k8s-render K8S_ENV=stage
-      make k8s-render K8S_ENV=prod
-      ```
-
-    - Canonical environment rendering
-
-      ```bash
-      kustomize build clusters/dev --enable-helm --load-restrictor=LoadRestrictionsNone
-      kustomize build clusters/stage --enable-helm --load-restrictor=LoadRestrictionsNone
-      kustomize build clusters/prod --enable-helm --load-restrictor=LoadRestrictionsNone
-      ```
-
 ## 2. Contribution
 
 [CONTRIBUTING.md](CONTRIBUTING.md) provides guidance and instructions for contributing to the project.
-
-- [AI Agents](CONTRIBUTING.md#1-ai-agents)
-  > Automated tools that assist in various development tasks such as code generation, testing, and documentation.
-
-- [Skills Manager](CONTRIBUTING.md#2-skills-manager)
-  > CLI tool for managing AI agent skills in development projects.
-
-- [Task Runner](CONTRIBUTING.md#3-task-runner)
-  > Make automation tool that defines and manages tasks to streamline development workflows.
-
-- [Bootstrap](CONTRIBUTING.md#4-bootstrap)
-  > Scripts to bootstrap, setup, and teardown a software development workspace with requisites.
-
-- [Secrets Manager](CONTRIBUTING.md#9-secrets-manager)
-  > Manage and secure sensitive information such as API keys, passwords, and certificates.
-
-- [Git Hooks Manager](CONTRIBUTING.md#5-git-hooks-manager)
-  > Lefthook configuration for managing Git hooks to automate Git events on commit or push.
-
-- [Dev Containers](CONTRIBUTING.md#6-dev-containers)
-  > Consistent development environments using Docker containers.
-
-- [Release Manager](CONTRIBUTING.md#7-release-manager)
-  > Semantic-Release automates the release process by analyzing commit messages.
-
-- [Update Manager](CONTRIBUTING.md#8-update-manager)
-  > Renovate and Dependabot automate dependency updates by creating pull requests.
-
-- [Policy Manager](CONTRIBUTING.md#11-policy-manager)
-  > Conftest for policy-as-code enforcement.
-
-- [SAST Manager](CONTRIBUTING.md#12-sast-manager)
-  > Identifying security vulnerabilities and issues in source code, container images, and artifacts.
-
-- [Supply Chain Manager](CONTRIBUTING.md#13-supply-chain-manager)
-  > Software Supply Chain Security for identifying vulnerabilities in dependencies by scanning SBOMs, container images, filesystems, and compliance issues.
-
-- [Documentation Generators](CONTRIBUTING.md#14-documentation-generators)
-  > MkDocs for building and serving the documentation site.
 
 ## 3. Troubleshoot
 
