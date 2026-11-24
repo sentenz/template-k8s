@@ -1,3 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: tuf-web, namespace: tuf-system}
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      root /usr/share/nginx/html;
+      location /targets/ {
+        alias /var/run/tuf-targets/;
+      }
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: tuf, namespace: tuf-system}
@@ -17,20 +30,19 @@ spec:
           livenessProbe: {tcpSocket: {port: 8080}}
           volumeMounts:
             - {name: metadata, mountPath: /usr/share/nginx/html, readOnly: true}
+            - {name: targets, mountPath: /var/run/tuf-targets, readOnly: true}
+            - {name: web, mountPath: /etc/nginx/conf.d, readOnly: true}
       volumes:
         - name: metadata
-          projected:
-            sources:
-              - configMap: {name: tuf-metadata}
-              - configMap:
-                  name: tuf-targets
-                  items:
-                    - {key: trusted_root.json, path: targets/trusted_root.json}
-                    - {key: signing_config.v0.2.json, path: targets/signing_config.v0.2.json}
+          configMap: {name: tuf-metadata}
+        - name: targets
+          configMap: {name: tuf-targets}
+        - name: web
+          configMap: {name: tuf-web}
 ---
 apiVersion: v1
 kind: Service
 metadata: {name: tuf, namespace: tuf-system}
 spec:
   selector: {app: tuf}
-  ports: [{port: 80, targetPort: 8080}]
+  ports: [{name: http, port: 80, targetPort: 8080}]

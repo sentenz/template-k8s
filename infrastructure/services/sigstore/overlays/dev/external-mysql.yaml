@@ -1,6 +1,0 @@
-# An operator-managed MySQL database dedicated to the two Trillian trees.
-trillian:
-  mysql:
-    enabled: false
-    auth:
-      existingSecret: sigstore-mysql

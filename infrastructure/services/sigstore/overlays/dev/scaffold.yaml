@@ -2,6 +2,21 @@
 fulcio:
   createcerts: {enabled: false}
   namespace: {create: false}
+  config:
+    contents:
+      OIDCIssuers:
+        https://kubernetes.default.svc:
+          IssuerURL: https://kubernetes.default.svc
+          ClientID: sigstore
+          Type: kubernetes
+        https://kubernetes.default.svc.cluster.local:
+          IssuerURL: https://kubernetes.default.svc.cluster.local
+          ClientID: sigstore
+          Type: kubernetes
+        https://dex.sigstore.local:
+          IssuerURL: https://dex.sigstore.local
+          ClientID: sigstore
+          Type: email
   server:
     logging: {production: true}
     ingress:
@@ -23,6 +38,8 @@ ctlog:
 trillian:
   namespace: {create: false}
   mysql:
+    auth:
+      existingSecret: trillian-mysql
     image:
       version: sha256:763dfa45405724b466dbaf980d0410e170019afd8747650b8af878538dcea1e2
     args: []

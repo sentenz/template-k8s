@@ -84,4 +84,4 @@ Orchestration platform for automating deployment, scaling, and management of con
 
 ### Private signing on the development cluster
 
-The optional [self-hosted Sigstore profile](infrastructure/services/sigstore/README.md) reuses the kind cluster and Traefik for keyless signing, private transparency logs and admission verification in a dedicated test namespace.
+The development deployment includes [self-hosted Sigstore](infrastructure/services/sigstore/README.md) for keyless signing, private transparency logs, and signature verification in a dedicated test namespace.

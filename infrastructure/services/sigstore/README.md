@@ -1,162 +1,174 @@
 # Private Sigstore on kind
 
-This opt-in development overlay extends the repository’s existing `template-k8s` cluster. Traefik terminates HTTPS on the existing loopback port mapping. Fulcio issues short-lived certificates to identities from the cluster service-account issuer and a separate interactive issuer. Rekor and the Fulcio CT log use separate Trillian trees backed by MySQL. Only the `sigstore-test` namespace enforces image signatures. The stage and production overlays have no dependency on this installation.
+The development Kustomize composition includes Sigstore. The standard `make k8s-deploy K8S_ENV=dev` command applies the pinned scaffold and Policy Controller charts, the TUF mirror, Dex, the OCI registry, and the Traefik routes. The stage and production compositions are independent of this development overlay.
 
-## Inventory and prerequisites
+## Prerequisites and networking
 
-Run from the repository root on the workstation that owns the cluster, with Bash 4+, Linux utilities (`flock`, GNU coreutils), Docker, kind, Helm 3, a compatible kubectl, mkcert, OpenSSL, jq, curl, Python 3.10+, Go and Cosign **3.1.4**. The release pipeline also uses ORAS 1.2+. On Docker Desktop the daemon must resolve and trust the selected registry from its VM. Use a workstation-accessible TLS registry if the VM cannot reach the repository’s loopback Traefik mapping. Allow space for two 5 Gi claims, supporting volumes and container images, and capacity for a MySQL container with a 1 Gi memory limit.
+Use the existing kind cluster with Traefik’s HTTPS NodePort 30443 mapped to host loopback port 443, a default StorageClass, and the repository’s usual development configuration and Secrets. Install Docker, kubectl, GNU Make, Bash, jq, OpenSSL, mkcert, flock and htpasswd. Signing uses Cosign 3.1.4. TUF publication uses a TUF repository publisher such as [tuftool](https://github.com/awslabs/tough/tree/develop/tuftool).
+
+Set `K8S_KUBECONFIG` and `KIND_CLUSTER_NAME` on the Make command line when using a different kubeconfig or cluster. Confirm that the existing cluster, ingress and storage are available.
 
 ```bash
-export S=infrastructure/services/sigstore
-export KIND_CLUSTER_NAME=template-k8s
-python3 -m venv .local/sigstore-venv
-source .local/sigstore-venv/bin/activate
-pip install -r "$S/requirements.txt"
-make k8s-sigstore-inspect
+kind get clusters
+kubectl --kubeconfig .local/kubeconfig/dev.yaml get nodes,ingressclass,storageclass
+kubectl --kubeconfig .local/kubeconfig/dev.yaml -n traefik get service traefik
+mkcert -install
 ```
 
-Inspect namespaces, ready nodes, workload replicas, Helm releases, default StorageClass, ingress classes, Gateway resources, certificate issuers, Docker networks and registry discovery before installation. Save the inventory as a baseline. Make uses `K8S_KUBECONFIG` and `KIND_CLUSTER_NAME` from the existing Kubernetes targets. The profile requires the selected context to be `kind-$KIND_CLUSTER_NAME`, an existing Traefik Service in `traefik` and the development overlay’s port mapping. Resolve differences with the live environment before applying this profile. A disposable registry used by another Make target can have a different hostname, protocol and lifetime.
-
-## Network and endpoint TLS
-
-| Client | Resolution and route |
+| Clients | Route |
 | --- | --- |
-| Workstation | Explicit hosts entries to 127.0.0.1, host port 443 → kind node port 30443 → Traefik |
-| Pods and cluster CI | Exact CoreDNS server block for the selected private hostnames → Traefik Service ClusterIP on 443 |
-| kind containerd, bundled registry | Per-node registry.local hosts entry → Traefik ClusterIP on 443, registry-specific CA under /etc/containerd/certs.d |
-| Internal services | Kubernetes Service DNS. Trillian gRPC, MySQL, Redis and CT stay internal. |
+| Workstation | Map private hostnames to `127.0.0.1` in the workstation hosts file. Traefik serves TLS over the existing kind port mapping. |
+| Pods and CI | Resolve the private hostnames to the Traefik Service ClusterIP. |
+| kind image pulls | Configure `registry.local` resolution and CA trust in each node’s containerd registry configuration. |
 
-For the bundled profile, add this line to the workstation hosts file. Omit `registry.local` or `dex.sigstore.local` when using external services. Explicit entries also avoid multicast DNS ambiguity for the .local suffix.
+Add this entry to the workstation hosts file.
 
 ```text
 127.0.0.1 fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local dex.sigstore.local registry.local
 ```
 
-Initialize or reuse the workstation mkcert CA with `mkcert -install`. Each ingress receives its own key, DNS SAN and namespaced TLS Secret. In relevant runner containers, install **only** the public `$(mkcert -CAROOT)/rootCA.pem` in the CA bundle, or set `SSL_CERT_FILE` to a bundle containing it and any other required roots. For an external registry using a separate private CA, add its public CA to the host, Docker daemon, nodes and the controller’s `endpoint-ca` bundle via `REGISTRY_CA_FILE`. The bundled registry runs inside kind, so it needs no second Docker network or host port. Nodes use kind’s containerd certs.d support. Check `docker exec NODE containerd config dump` for the active registry config path. With a pre-existing Docker registry container, retain its kind network attachment and existing per-authority containerd routing. The reference used for signing must also be usable by the admission webhook and kubelet.
+Use existing private DNS or append a separate zone block to the CoreDNS Corefile. Replace `TRAEFIK_SERVICE_IP` with the ClusterIP of `traefik/traefik`. Retain the existing CoreDNS blocks and allow the normal reload interval.
 
-CoreDNS edits are confined to a delimited server block and use an optimistic concurrency check. Set `MANAGE_CLUSTER_DNS=0` when existing DNS already resolves all selected private names to the Traefik service. Allow the CoreDNS reload interval. Registry authentication uses bcrypt htpasswd over TLS. On a Linux Docker host that needs explicit registry CA configuration, install the public CA as `/etc/docker/certs.d/registry.local/ca.crt` using the daemon’s normal trust procedure. Check `curl -i https://registry.local/v2/` for the expected authenticated registry challenge (HTTP 401).
+```text
+fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local dex.sigstore.local registry.local {
+    hosts {
+        TRAEFIK_SERVICE_IP fulcio.sigstore.local rekor.sigstore.local tuf.sigstore.local dex.sigstore.local registry.local
+        ttl 30
+    }
+}
+```
 
-If an existing registry already uses `registry.local`, set `USE_EXISTING_REGISTRY=1` to retain its routing, credentials and storage.
+Add `TRAEFIK_SERVICE_IP registry.local` to each kind node’s hosts file when the node resolver does not already resolve that hostname. Copy the public mkcert CA to `/etc/containerd/certs.d/registry.local/ca.crt` on each node. Set this authority-specific `hosts.toml` when the node does not already have a registry configuration. Use the existing registry configuration for other authorities.
 
-## Install
+```toml
+server = "https://registry.local"
+[host."https://registry.local"]
+  capabilities = ["pull", "resolve"]
+  ca = "/etc/containerd/certs.d/registry.local/ca.crt"
+```
+
+Docker clients may also need the CA under the daemon’s `/etc/docker/certs.d/registry.local/`. Install the public CA in any CI runner trust store. The bundled registry runs in kind. An organization registry can be used for signing and image pulls if all clients and the webhook can reach it and trust its CA. Supply registry-scoped pull credentials in the test workload’s `imagePullSecrets`.
+
+## Deploy and publish private TUF
 
 ```bash
-export REGISTRY=registry.local       # Or the existing TLS registry authority
-# Optional existing interactive OIDC provider, registered as public client "sigstore":
-# export OIDC_ISSUER=https://identity.example.org OIDC_CA_FILE=/path/to/issuer-ca.pem
-make k8s-sigstore-deploy
-make k8s-sigstore-status
+make k8s-deploy K8S_ENV=dev
 ```
 
-The installer verifies package SHA-256 digests for official **scaffold 0.6.125** and **policy-controller 0.10.8** (controller 0.13.1). The scaffold lock selects Fulcio 2.11.7, Rekor 1.8.15, Trillian 0.5.0 and CT Log 0.2.71 chart versions. The Trillian-backed Rekor v1 API provides signing time and transparency evidence for this profile. The scaffold’s temporary TUF server is replaced by a read-only HTTP service serving host-signed TUF metadata over the existing ingress. Chart downloads and container pulls require upstream access unless mirrored. Signing, verification and admission use private trust services.
+On first deployment, Make creates the runtime Secrets and generates per-host endpoint certificates signed by the workstation CA. Fulcio’s CA, Rekor’s signing key, the CT Log credentials and the database credentials are independent. The CT Log and Rekor share a dedicated Trillian database with separate trees. Signing keys and database credentials persist in Kubernetes Secrets across redeployments.
 
-Helm waits for the component deployments and initialization Jobs. Namespaces, default resource limits, database access policies, the issuer configuration, persistent signing keys, trust publication and admission installation are ordered explicitly. Kubernetes OIDC discovery supplies the exact issuer. The issuer and the audience `sigstore` bind a projected token to a Fulcio certificate. A Kubernetes certificate SAN includes the namespace and service account. The development signer has the exact URI `https://kubernetes.io/namespaces/sigstore-ci/serviceaccounts/release`. Interactive Dex login uses a verified email SAN. Only the release service account is authorized for admission. Restrict access to creating Pods and TokenRequests in `sigstore-ci` to trusted operators.
-
-When an existing policy-controller owns the cluster CRDs, installation stops before installing another controller. Integrate the private TrustRoot and authority with that controller after reviewing its global policies and webhook selectors. The dedicated namespace selector is the explicit system-workload exception. Only an administrator should extend it. Keep existing workloads in their original namespaces.
-
-Set `K8S_KUBECONFIG` on the Make command line to select a non-default kubeconfig. A normal `make k8s-deploy` manages the existing cluster composition independently of the opt-in Sigstore target.
-
-## Dedicated MySQL
-
-The default uses the scaffold’s dedicated MySQL deployment and PVC. An operator-managed MySQL 8.4 service can provide the same separation. Before the first install, provision a database for Trillian and grant a dedicated user schema creation and read/write permissions only for that database. The Helm initialization Job creates the tables and indexes. Keep the database on a private network and limit ingress to the Trillian namespace when the CNI supports it.
-
-Create and label the dedicated `trillian-system` namespace before the first install. If it already exists, confirm ownership before proceeding. Create the Secret `sigstore-mysql` in `trillian-system` through the existing secrets process. It must contain `mysql-user`, `mysql-password` and `mysql-database`. Start with an empty schema, or restore a coordinated backup of the trees and signing state before migration.
+The first run starts the backends and creates the TUF mirror workload. The mirror becomes ready once signed metadata is available. Wait for Fulcio, Rekor and CT Log to become ready before building the TUF targets.
 
 ```bash
-kubectl --kubeconfig .local/kubeconfig/dev.yaml --context "kind-$KIND_CLUSTER_NAME" create namespace trillian-system
-kubectl --kubeconfig .local/kubeconfig/dev.yaml --context "kind-$KIND_CLUSTER_NAME" \
-  label namespace trillian-system sigstore.local/owner=template-k8s
-# Provision the sigstore-mysql Secret before running the deploy target.
-make k8s-sigstore-deploy TRILLIAN_MYSQL_HOST=mysql.db.svc.cluster.local
+export KUBECONFIG="$PWD/.local/kubeconfig/dev.yaml"
+export SIGSTORE_STATE="$PWD/.local/sigstore/template-k8s"
+export SSL_CERT_FILE="$(mkcert -CAROOT)/rootCA.pem"
+umask 077
+mkdir -p "$SIGSTORE_STATE/targets"
+kubectl -n fulcio-system rollout status deployment/fulcio-server
+kubectl -n rekor-system rollout status deployment/rekor-server
+kubectl -n ctlog-system rollout status deployment/ctlog
+kubectl -n fulcio-system get secret fulcio-server-secret -o jsonpath='{.data.cert}' |
+  base64 -d > "$SIGSTORE_STATE/fulcio.pem"
+kubectl -n ctlog-system get secret ctlog-public-key -o jsonpath='{.data.public}' |
+  base64 -d > "$SIGSTORE_STATE/ctfe.pub"
+curl --fail --cacert "$SSL_CERT_FILE" https://rekor.sigstore.local/api/v1/log/publicKey \
+  > "$SIGSTORE_STATE/rekor.pub"
+start=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cosign trusted-root create \
+  --fulcio="url=https://fulcio.sigstore.local,certificate-chain=$SIGSTORE_STATE/fulcio.pem" \
+  --rekor="url=https://rekor.sigstore.local,public-key=$SIGSTORE_STATE/rekor.pub,start-time=$start" \
+  --ctfe="url=http://ctlog.ctlog-system.svc/sigstorescaffolding,public-key=$SIGSTORE_STATE/ctfe.pub,start-time=$start" \
+  --out "$SIGSTORE_STATE/targets/trusted_root.json"
+cosign signing-config create \
+  --fulcio="url=https://fulcio.sigstore.local,api-version=1,start-time=$start,operator=kind" \
+  --rekor="url=https://rekor.sigstore.local,api-version=1,start-time=$start,operator=kind" --rekor-config ANY \
+  --oidc-provider="url=https://dex.sigstore.local,api-version=1,start-time=$start,operator=kind" \
+  --out "$SIGSTORE_STATE/targets/signing_config.v0.2.json"
 ```
 
-Repeat the host setting on subsequent deployments. The installer records the database endpoint and blocks accidental changes to it. The Rekor search index uses the scaffold’s default Redis backend. Existing standalone Fulcio or Rekor deployments require an explicit migration covering Helm ownership, keys, database contents and tree IDs before this profile can take over their namespaces.
-
-## Trust bootstrap and signing
-
-State is under `.local/sigstore/$KIND_CLUSTER_NAME` with owner-only permissions. The Fulcio file CA, Rekor ECDSA key, CT key, TUF role keys and endpoint TLS keys have distinct purposes. Chart initialization creates the CT key and trees. The installer retains the Fulcio and Rekor keys across upgrades. The TUF publication host stores separate Ed25519 keys for root, targets, snapshot and timestamp. Only public metadata and targets go to the TUF service. Distribute `metadata/1.root.json` through an authenticated, independent channel. Confirm its SHA-256 fingerprint with the operator. Never bootstrap a runner solely by downloading a first root from the mirror.
+Create and sign a TUF repository with the two targets above. The following development example uses separate keys for each TUF role. Run root creation once, then retain the keys and root for subsequent publication. The signed repository contains `metadata/1.root.json`, `metadata/timestamp.json`, snapshot and targets metadata, plus the two files under `targets/`. Keep all keys outside the published repository.
 
 ```bash
-state="$PWD/.local/sigstore/$KIND_CLUSTER_NAME"
-sha256sum "$state/metadata/1.root.json"
-source "$S/tools/client.sh"
-sigstore_client "$state/metadata/1.root.json"
-printf 'local artifact\n' > "$state/example.txt"
-cosign sign-blob --yes --oidc-disable-ambient-providers \
-  --oidc-redirect-url http://localhost:5555/auth/callback \
-  --signing-config "$SIGSTORE_SIGNING_CONFIG" --trusted-root "$SIGSTORE_TRUSTED_ROOT" \
-  --bundle "$state/example.sigstore.json" "$state/example.txt"
-cosign verify-blob --trusted-root "$SIGSTORE_TRUSTED_ROOT" \
-  --certificate-identity developer@sigstore.local --certificate-oidc-issuer https://dex.sigstore.local \
-  --bundle "$state/example.sigstore.json" "$state/example.txt"
+mkdir -p "$SIGSTORE_STATE/tuf-keys"
+root="$SIGSTORE_STATE/root.json"
+tuftool root init "$root"
+tuftool root expire "$root" 'in 1 year'
+keys=()
+for role in root targets snapshot timestamp; do
+  key="$SIGSTORE_STATE/tuf-keys/$role.pem"
+  tuftool root set-threshold "$root" "$role" 1
+  tuftool root gen-rsa-key "$root" "$key" --role "$role"
+  keys+=(--key "$key")
+done
+tuftool root sign "$root" --key "$SIGSTORE_STATE/tuf-keys/root.pem"
+tuftool create --root "$root" "${keys[@]}" --add-targets "$SIGSTORE_STATE/targets" \
+  --targets-version 1 --targets-expires 'in 30 days' \
+  --snapshot-version 1 --snapshot-expires 'in 14 days' \
+  --timestamp-version 1 --timestamp-expires 'in 7 days' \
+  --outdir "$SIGSTORE_STATE/tuf"
+cp "$root" "$SIGSTORE_STATE/tuf/metadata/1.root.json"
+make k8s-deploy K8S_ENV=dev
 ```
 
-The development Dex password for `developer@sigstore.local` is in `$state/dex.password`. An existing interactive provider must return a verified email and allow the registered loopback callback. The client initializes an isolated TUF cache and requires both authenticated targets. All sign and verify commands reference those targets explicitly.
+Make publishes the signed files, waits for the TUF service and controller, and applies private trust and signature policy. Use `SIGSTORE_TUF_REPO=/path/to/repository` to publish a repository from another signing environment. Run `make k8s-sigstore-status` to check endpoint and policy readiness. Only the `sigstore-test` namespace uses the image admission policy.
 
-For an image already published by digest, the repository’s signing targets initialize private TUF automatically. Set `TOKEN_FILE` to a projected token on a runner. An operator with TokenRequest access can mint a short-lived token for the release account on demand.
+## End-to-end verification
+
+Distribute `1.root.json` independently and verify its SHA-256 fingerprint before trusting the mirror. Use a private cache and the targets authenticated by Cosign. Replace the root path on runners with the independently distributed file.
 
 ```bash
-make sscs-cosign-sign IMAGE="$IMAGE_DIGEST_REF"
-make sscs-cosign-verify-image IMAGE="$IMAGE_DIGEST_REF"
+export TUF_ROOT="$(mktemp -d)"
+mirror=https://tuf.sigstore.local
+cosign initialize --mirror "$mirror" --root "$SIGSTORE_STATE/tuf/metadata/1.root.json"
+trusted=$(find "$TUF_ROOT" -path '*/targets/trusted_root.json' -type f)
+signing=$(find "$TUF_ROOT" -path '*/targets/signing_config.v0.2.json' -type f)
+test -f "$trusted" && test -f "$signing"
+issuer=$(kubectl get --raw /.well-known/openid-configuration | jq -er .issuer)
+identity=https://kubernetes.io/namespaces/sigstore-ci/serviceaccounts/release
+token="$SIGSTORE_STATE/release.token"
+kubectl -n sigstore-ci create token release --audience sigstore --duration 10m |
+  tr -d '\n' > "$token"
+sign=(--yes --identity-token "$token" --signing-config "$signing" --trusted-root "$trusted")
+verify=(--trusted-root "$trusted" --certificate-identity "$identity" --certificate-oidc-issuer "$issuer")
 ```
 
-## End-to-end acceptance
+Build the sample from `infrastructure/services/sigstore/sample`. Copy its Dockerfile and build a Linux executable named `hello` into the same temporary build context. Push to an OCI registry, then resolve the exact digest from the registry using `oras resolve`. For the bundled registry, authenticate as `publisher` using `$SIGSTORE_STATE/registry.password`. Provision a registry pull Secret in `sigstore-test` before validating admission.
 
 ```bash
-make k8s-sigstore-test
-make k8s-sigstore-inspect
+cosign sign "${sign[@]}" --bundle image.sigstore.json "$SIGNED_IMAGE_DIGEST"
+cosign verify "${verify[@]}" "$SIGNED_IMAGE_DIGEST"
+cosign sign-blob "${sign[@]}" --bundle artifact.sigstore.json hello
+cosign verify-blob "${verify[@]}" --bundle artifact.sigstore.json hello
+cp hello hello.modified
+printf 'modified\n' >> hello.modified
+! cosign verify-blob "${verify[@]}" --bundle artifact.sigstore.json hello.modified
+rm -f "$token"
 ```
 
-The test runs the native sample, cross-compiles the OCI executable, pushes three distinct manifests and resolves their digests. It signs the approved image and binary, verifies the registry-hosted signature, checks the blob bundle, changes a byte sequence and requires verification to fail. It verifies that both bundles contain Rekor inclusion proofs and looks up their entries in the private log. A second short-lived token produces a valid signature from an unauthorized identity. Server-side admission must reject both that image and the unsigned control with a policy-specific error. The approved Pod must run to completion and print the expected output. Evidence stays under the printed test directory. Compare workload readiness with the baseline inventory.
-
-With an existing registry, use `IMAGE_REPOSITORY` for an authorized repository and Docker’s existing login for pushes. For private pulls, set `PULL_CONFIG` to a **registry-scoped, read-only** dockerconfigjson file with usable credentials for the webhook and test Pod. Credential-helper references require a runner-local helper and are unsuitable for a Kubernetes pull Secret. The bundled registry uses one development publisher account; separate pull and push principals are appropriate for a shared deployment.
-
-## CI release gate
-
-`make sscs-sigstore-release` is a pipeline entry point for a trusted runner with network access to this cluster, a builder, ORAS, kubectl and Cosign. It builds and tests the sample, publishes the image and raw binary, signs and verifies both, attaches verification evidence to the immutable image and submits a Job to admission. A failed check terminates the release stage. Replace the sample build/test commands with the project’s own release commands. Use a runner isolated from untrusted pull requests.
-
-Run the runner Pod as `release` in `sigstore-ci`. Mount its signing token using the following Pod-spec fragment. Kubernetes refreshes the token. Grant optional Job submission privileges with `kubectl apply -f "$S/overlays/dev/ci-access.yaml"`. Keep the runner’s Kubernetes API identity and its Sigstore-audience token in distinct mounts. Provide registry credentials separately, and provision `registry-pull` in the test namespace.
-
-```yaml
-serviceAccountName: release
-automountServiceAccountToken: true  # API identity for submitting gated Jobs
-volumes:
-  - name: signing-identity
-    projected:
-      sources:
-        - serviceAccountToken: {path: token, audience: sigstore, expirationSeconds: 600}
-# Add to the trusted release container:
-# volumeMounts:
-#   - {name: signing-identity, mountPath: /var/run/signing, readOnly: true}
-```
+The automated verification checks accept already published image digests and a signed blob bundle.
 
 ```bash
-export TOKEN_FILE=/var/run/signing/token TUF_ANCHOR=/etc/private-sigstore/1.root.json
-export SIGNER_ISSUER=https://kubernetes.default.svc.cluster.local  # match cluster discovery exactly
-export SIGNER_IDENTITY=https://kubernetes.io/namespaces/sigstore-ci/serviceaccounts/release
-export IMAGE_REPOSITORY=registry.local/sigstore/release RELEASE_TAG="build-$BUILD_ID"
-make sscs-sigstore-release
+make k8s-sigstore-test SIGNED_IMAGE="$SIGNED_IMAGE_DIGEST" \
+  UNSIGNED_IMAGE="$UNSIGNED_IMAGE_DIGEST" ARTIFACT=hello ARTIFACT_BUNDLE=artifact.sigstore.json
 ```
 
-## Operations and recovery
+Use the bundle’s `verificationMaterial.tlogEntries[0].logIndex` to retrieve the entry from the private Rekor API at `/api/v1/log/entries?logIndex=INDEX`. Submit a Pod using the verified digest to `sigstore-test` and check that it runs. Repeat with a distinct unsigned digest and with a digest signed by the `unapproved` account. Each negative case should fail admission with the `sigstore-kind-signer` policy. Use `kubectl run --dry-run=server` to exercise the admission policy without starting a Pod.
 
-- Check `make k8s-sigstore-status` for health, private trust readiness, tree sizes, signed heads and TUF expiry. Alert on failed probes, unavailable replicas, stalled Jobs, PVC pressure, unexpected key fingerprints, decreasing tree sizes or conflicting roots at the same tree size. Collect Rekor and CT signed heads outside the cluster. Bundle verification authenticates per-signature evidence. A production monitor should independently verify successive signed checkpoints and Merkle consistency proofs.
-- Use `kubectl logs` for component and Job logs. Fulcio and Rekor use production log formatting. Chart annotations expose metrics on Rekor 2112 and CT 6963. Limit access to internal metrics. The database and Redis ingress policies require an enforcing CNI. Standard kind networking alone should not be assumed to enforce them.
-- Refresh TUF before its seven-day timestamp expiry with `make k8s-sigstore-refresh-trust` with the same `OIDC_ISSUER` as the installation. Snapshot and targets expire after 14 and 30 days. Keep the publisher state and its version counter together. Run one publisher at a time. Check that both targets initialize from a clean cache after each change.
-- Back up the Fulcio, Rekor and CT signing Secrets, all tree configuration ConfigMaps, MySQL database, registry and Dex volumes, chart values, operator state and public evidence. Encrypt backups, restrict access and test coherent restoration into an isolated environment. Restore the original log state and keys as a set, check old bundles and compare independent checkpoints before reopening signing. A fresh tree or new signing key requires an explicit trust transition.
-- For service-key rotation, retain old verification material with bounded validity, add new public keys and certificates to the trusted-root target, stage signer changes, publish and verify old and new bundles. The refresh script stops on unexpected key changes. For TUF root rotation produce sequential versioned roots signed by the old and new root thresholds and retain the complete root chain. Coordinate changes to the local publisher, controller, clients and independently distributed anchors before expiry. Renewing endpoint leaves uses the mkcert CA and does not require a Sigstore root rotation.
-- For production use an external HA database and durable registry, a production OIDC provider, HSM/KMS-backed signing, offline threshold TUF roots and delegated online roles, managed TLS renewal, secret encryption and audit logging. Plan log sharding, tree retention, independent witnesses, disaster recovery and highly available fail-closed admission. The single-workstation publisher and local development passwords have a narrower trust boundary.
+For interactive signing pass `--oidc-disable-ambient-providers --oidc-redirect-url http://localhost:5555/auth/callback` in place of the token option. Dex accepts `developer@sigstore.local` with the generated password in `$SIGSTORE_STATE/dex.password`. Verify against that email and issuer `https://dex.sigstore.local`. Admission continues to require the release service account.
 
-## Troubleshooting and cleanup
+In CI, run build and tests, publish by digest, then sign and verify using the same private TUF targets. Run the trusted runner as `sigstore-ci/release` and project a service account token with audience `sigstore` and expiration `600` seconds. Pass its mounted path to Cosign. Publish the OCI signature and the artifact bundle with verification evidence. Submit the deployment by digest only after signature verification succeeds. The optional `overlays/dev/ci-access.yaml` grants the release service account access to submit and observe test Jobs.
 
-A TLS hostname error usually indicates that the client resolves the name to the wrong ingress or lacks the endpoint CA. Compare DNS inside a runner with the Traefik ClusterIP. For a pending PVC inspect the default provisioner and scheduling events. For a stalled CT job inspect Fulcio readiness, tree IDs and Trillian connectivity. For an OIDC failure compare discovery issuer, audience and verified SAN. For admission errors distinguish registry authorization, private TrustRoot readiness, identity mismatch and missing OCI referrers. Preserve exact digests and bundle JSON during diagnosis.
+## Operations
 
-For removal, archive the state and PVC contents first. Delete the named policy and TrustRoot, then uninstall `kind-policy` from `sigstore-policy` and `kind-sigstore` from `sigstore-system`. Review **all** ClusterImagePolicies and TrustRoots before uninstalling the controller because its Helm release owns their CRDs. Inspect namespaces with `kubectl get ns -l sigstore.local/owner=template-k8s`; deleting those namespaces deletes the associated local storage. Remove only the marked CoreDNS block with `python3 "$S/tools/dns.py" "kind-$KIND_CLUSTER_NAME" remove unused`. On each kind node remove the marked registry.local hosts entry and the two profile-owned files in `/etc/containerd/certs.d/registry.local`. Remove only the corresponding workstation hosts entries and dedicated registry trust file. Retain the shared mkcert CA if other services use it. The cluster and Traefik remain available throughout.
+- Inspect the certificate issuance, CT and Rekor deployments, log initialization Jobs, database and PVCs through kubectl. Rekor exposes metrics on 2112 and CT Log on 6963. Monitor signed tree heads and consistency proofs independently of the cluster. NetworkPolicy enforcement depends on the CNI.
+- Refresh signed timestamp metadata before expiry. Increment metadata versions, use the original root and role keys, and rerun the standard deploy command to publish. Distribute root rotations using a sequential old-key and new-key signed root chain. Retain historical verification keys when rotating Fulcio, Rekor or CT Log.
+- Back up Helm values, input and signing Secrets, both tree IDs, TUF publisher state and databases or volumes. Restore keys and log data together. Avoid applying this composition over a previous Helm-managed Sigstore installation until ownership and backups have been reviewed.
+- `make k8s-destroy K8S_ENV=dev` removes the development composition, including Sigstore namespaces and their state. Back up signing keys and storage first. Remove the endpoint-specific host, DNS and registry configuration separately if it is no longer needed.
+- For persistent deployments, use managed TLS, production OIDC, external key protection, durable HA state, offline threshold TUF roots and independently monitored logs.
 
 ## References
 
 - [Sigstore local architecture](https://blog.sigstore.dev/a-guide-to-running-sigstore-locally-f312dfac0682/)
-- [Local endpoint and trust configuration](https://flxw.de/post/2022-11-10-standing-up-sigstore-locally/)
 - [Official Helm charts](https://github.com/sigstore/helm-charts)
 - [kind registry networking](https://kind.sigs.k8s.io/docs/user/local-registry/)
-- [Sigstore signing and verification](https://docs.sigstore.dev/)

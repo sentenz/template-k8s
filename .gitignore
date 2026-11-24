@@ -38,3 +38,6 @@ logs/
 *.cer
 *.der
 *.priv
+
+# Local Helm inflation cache for the Sigstore development overlay
+/infrastructure/services/sigstore/overlays/dev/charts/

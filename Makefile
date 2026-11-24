@@ -159,8 +159,16 @@ k8s-render: k8s-validate
 
 ## Deploy the selected Kubernetes cluster composition
 k8s-deploy: k8s-validate k8s-confirm
-	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f -
+	@manifest="$$(mktemp)"
+	trap 'rm -f "$$manifest"' EXIT
+	$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$$manifest"
+	if [[ "$(K8S_ENV)" == dev ]]; then
+		$(SIGSTORE_SUBMAKE) -s k8s-sigstore-inputs
+		$(SIGSTORE_KUBECTL) apply -f "$$manifest"
+		$(SIGSTORE_SUBMAKE) -s k8s-sigstore-admission
+	else
+		kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f "$$manifest"
+	fi
 .PHONY: k8s-deploy
 
 ## Destroy the selected Kubernetes cluster composition
@@ -201,49 +209,7 @@ k8s-observability:
 	@$(MAKE) -s k8s-observability-pod
 .PHONY: k8s-observability
 
-# ─── Private Sigstore ───────────────────────────────────────────────────────────────────────────
-
-SIGSTORE_DIR := infrastructure/services/sigstore
-SIGSTORE_TOOLS := $(SIGSTORE_DIR)/tools
-SIGSTORE_RUN = KUBECONFIG="$(K8S_KUBECONFIG)" KIND_CLUSTER_NAME="$(KIND_CLUSTER_NAME)"
-SIGSTORE_REGISTRY ?= $(or $(REGISTRY),registry.local)
-
-k8s-sigstore-validate: k8s-validate
-	@if [[ "$(K8S_ENV)" != dev ]]; then
-		echo "The Sigstore profile targets the existing kind development cluster." >&2
-		exit 1
-	fi
-.PHONY: k8s-sigstore-validate
-
-## Inspect the existing kind cluster for the private Sigstore profile
-k8s-sigstore-inspect: k8s-sigstore-validate
-	@$(SIGSTORE_RUN) "$(SIGSTORE_TOOLS)/inspect.sh"
-.PHONY: k8s-sigstore-inspect
-
-## Deploy the opt-in private Sigstore profile
-k8s-sigstore-deploy: k8s-sigstore-validate
-	@$(SIGSTORE_RUN) REGISTRY="$(SIGSTORE_REGISTRY)" "$(SIGSTORE_TOOLS)/install.sh"
-.PHONY: k8s-sigstore-deploy
-
-## Report private Sigstore endpoint and trust health
-k8s-sigstore-status: k8s-sigstore-validate
-	@$(SIGSTORE_RUN) "$(SIGSTORE_TOOLS)/status.sh"
-.PHONY: k8s-sigstore-status
-
-## Refresh signed private TUF metadata
-k8s-sigstore-refresh-trust: k8s-sigstore-validate
-	@$(SIGSTORE_RUN) "$(SIGSTORE_TOOLS)/publish-trust.sh" "$${OIDC_ISSUER:-https://dex.sigstore.local}"
-.PHONY: k8s-sigstore-refresh-trust
-
-## Exercise private image and artifact signing and admission
-k8s-sigstore-test: k8s-sigstore-validate
-	@$(SIGSTORE_RUN) REGISTRY="$(SIGSTORE_REGISTRY)" "$(SIGSTORE_TOOLS)/e2e.sh"
-.PHONY: k8s-sigstore-test
-
-## Build, sign, verify and deploy a sample from an authorized release runner
-sscs-sigstore-release:
-	@"$(SIGSTORE_TOOLS)/ci.sh"
-.PHONY: sscs-sigstore-release
+include infrastructure/services/sigstore/deploy.mk
 
 # ─── Helm Charts ─────────────────────────────────────────────────────────────────────────────────
 
@@ -1092,22 +1058,6 @@ sscs-cosign-verify:
 
 	$(SSCS_COSIGN_ALIAS) verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
 .PHONY: sscs-cosign-verify
-
-## Mint a short-lived signing token for the private Sigstore release identity
-sscs-cosign-token: k8s-sigstore-validate
-	@kubectl --kubeconfig "$(K8S_KUBECONFIG)" --context "kind-$(KIND_CLUSTER_NAME)" \
-		-n sigstore-ci create token release --audience=sigstore --duration=10m
-.PHONY: sscs-cosign-token
-
-## Sign an immutable OCI image with the private Sigstore profile (IMAGE=repository@sha256:digest)
-sscs-cosign-sign: k8s-sigstore-validate
-	@$(SIGSTORE_RUN) "$(SIGSTORE_TOOLS)/image.sh" sign "$${IMAGE:?Set IMAGE to an immutable OCI digest}"
-.PHONY: sscs-cosign-sign
-
-## Verify an OCI image against private TUF and the approved identity (IMAGE=repository@sha256:digest)
-sscs-cosign-verify-image: k8s-sigstore-validate
-	@$(SIGSTORE_RUN) "$(SIGSTORE_TOOLS)/image.sh" verify "$${IMAGE:?Set IMAGE to an immutable OCI digest}"
-.PHONY: sscs-cosign-verify-image
 
 # ─── Container Manager ───────────────────────────────────────────────────────────────────────────
 

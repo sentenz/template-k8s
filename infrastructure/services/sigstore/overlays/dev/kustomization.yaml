@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - dex.yaml
+  - network-policy.yaml
+  - registry.yaml
+  - workloads.yaml
+  - ingress.yaml
+
+helmCharts:
+  - name: scaffold
+    version: 0.6.125
+    repo: https://sigstore.github.io/helm-charts
+    releaseName: kind-sigstore
+    namespace: sigstore-system
+    valuesFile: scaffold.yaml
+  - name: policy-controller
+    version: 0.10.8
+    repo: https://sigstore.github.io/helm-charts
+    releaseName: kind-policy
+    namespace: sigstore-policy
+    valuesFile: controller.yaml
+
+patches:
+  - target:
+      kind: Deployment
+      name: fulcio-server
+      namespace: fulcio-system
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: endpoint-ca
+          configMap:
+            name: endpoint-ca
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: endpoint-ca
+          mountPath: /etc/sigstore-ca
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: SSL_CERT_DIR
+          value: /etc/sigstore-ca:/etc/ssl/certs
