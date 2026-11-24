@@ -49,16 +49,22 @@ help:
 
 # ─── Setup & Teardown ────────────────────────────────────────────────────────────────────────────
 
+# NOTE Privileged task may require elevated permissions (e.g., sudo) to execute.
+#
 ## Initialize a software development workspace with requisites
 bootstrap:
 	cd $(@D)/scripts && ./bootstrap.sh
 .PHONY: bootstrap
 
+# NOTE Privileged task may require elevated permissions (e.g., sudo) to execute.
+#
 ## Install and configure all dependencies essential for development
 setup:
 	cd $(@D)/scripts && ./setup.sh
 .PHONY: setup
 
+# NOTE Privileged task may require elevated permissions (e.g., sudo) to execute.
+#
 ## Remove development artifacts and restore the host to its pre-setup state
 teardown:
 	cd $(@D)/scripts && ./teardown.sh
@@ -105,8 +111,8 @@ k8s-validate:
 	fi
 .PHONY: k8s-validate
 
-## Setup the selected local Kubernetes cluster using Kind
-k8s-setup: k8s-validate
+## Bootstrap the selected local Kubernetes cluster using Kind
+k8s-bootstrap: k8s-validate
 	@if [[ ! -f "$(KIND_CONFIG)" ]]; then \
 		echo "error: Kind cluster configuration not found for '$(K8S_ENV)': $(KIND_CONFIG)" >&2; \
 		exit 1; \
@@ -119,7 +125,7 @@ k8s-setup: k8s-validate
 
 	docker run --rm --user root --network host --volume /var/run/docker.sock:/var/run/docker.sock --volume "$(CURDIR):/workspace" --workdir /workspace \
 		"$(K8S_KIND_IMAGE)" kind create cluster --name "$(KIND_CLUSTER_NAME)" --config "$(KIND_CONFIG)" --kubeconfig "$(K8S_KUBECONFIG)" --wait 5m
-.PHONY: k8s-setup
+.PHONY: k8s-bootstrap
 
 ## Tear down the selected local Kubernetes Kind cluster
 k8s-teardown:
@@ -134,7 +140,6 @@ K8S_TOOLS_ALIAS := docker run --rm --network host --volume "$(CURDIR):/workspace
 
 # Interactive user confirmation before proceeding with Kubernetes Deploy & Destroy
 k8s-confirm:
-	@echo ""
 	@read -r -p "Confirm: Proceed with Kubernetes environment '$(K8S_ENV)' from '$(K8S_CLUSTER_PATH)'? [yes-$(K8S_ENV) / no] " confirm; \
 		if [[ "$$confirm" != "yes-$(K8S_ENV)" ]]; then \
 			echo "Aborted."; \
@@ -200,9 +205,15 @@ k8s-observability:
 
 K8S_HELM_IMAGE ?= alpine/helm:4.3.2@sha256:a3b9d617c0c30a6c488cebb429c4ba83995a26dc2184599af5fd408a361b2e67
 K8S_HELM_ALIAS := docker run --rm -v "$(CURDIR):/workspace" -w /workspace "$(K8S_HELM_IMAGE)"
+# Extra `helm template` --set arguments. Defaults to pinning `image.tag`; charts
+# that pin images by digest (e.g. the Sigstore charts) override this to empty.
+HELM_SET_ARGS ?= --set image.tag=$(K8S_IMAGE_TAG)
 HELM_DEPENDENCY_TRACK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/dependency-track-*/dependency-track))
 HELM_POSTGRESQL_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/postgresql-*/postgresql))
 HELM_TRAEFIK_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/traefik-*/traefik))
+HELM_FULCIO_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/fulcio-*/fulcio))
+HELM_REKOR_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/rekor-*/rekor))
+HELM_MYSQL_CHART_DIR = $(firstword $(wildcard $(HELM_VENDOR_DIR)/mysql-*/mysql))
 
 ## Vendor a Helm chart into Kustomize-compatible local storage
 helm-vendor:
@@ -240,7 +251,7 @@ helm-render:
 		$(HELM_CHART_DIR) \
 		--namespace=$(K8S_NAMESPACE) \
 		--values=$(HELM_VALUES_FILE) \
-		--set image.tag=$(K8S_IMAGE_TAG) \
+		$(HELM_SET_ARGS) \
 		--output-dir=./render/charts
 .PHONY: helm-render
 
@@ -274,11 +285,43 @@ helm-render-postgresql:
 		K8S_IMAGE_TAG="v16.0.0"
 .PHONY: helm-render-postgresql
 
+# Render vendored Helm chart for Fulcio
+helm-render-fulcio:
+	@$(MAKE) helm-render \
+		HELM_RELEASE_NAME=fulcio \
+		HELM_CHART_DIR="$(HELM_FULCIO_CHART_DIR)" \
+		HELM_VALUES_FILE="$(HELM_FULCIO_CHART_DIR)/values.yaml" \
+		K8S_NAMESPACE=fulcio-system \
+		HELM_SET_ARGS=""
+.PHONY: helm-render-fulcio
+
+# Render vendored Helm chart for Rekor
+helm-render-rekor:
+	@$(MAKE) helm-render \
+		HELM_RELEASE_NAME=rekor \
+		HELM_CHART_DIR="$(HELM_REKOR_CHART_DIR)" \
+		HELM_VALUES_FILE="$(HELM_REKOR_CHART_DIR)/values.yaml" \
+		K8S_NAMESPACE=rekor-system \
+		HELM_SET_ARGS=""
+.PHONY: helm-render-rekor
+
+# Render vendored Helm chart for the dedicated Sigstore MySQL instance
+helm-render-mysql-sigstore:
+	@$(MAKE) helm-render \
+		HELM_RELEASE_NAME=mysql-sigstore \
+		HELM_CHART_DIR="$(HELM_MYSQL_CHART_DIR)" \
+		HELM_VALUES_FILE="$(HELM_MYSQL_CHART_DIR)/values.yaml" \
+		K8S_NAMESPACE=mysql-sigstore
+.PHONY: helm-render-mysql-sigstore
+
 ## Render all vendored Helm charts
 helm-render-charts:
 	@$(MAKE) -s helm-render-dependency-track
 	@$(MAKE) -s helm-render-traefik
 	@$(MAKE) -s helm-render-postgresql
+	@$(MAKE) -s helm-render-fulcio
+	@$(MAKE) -s helm-render-rekor
+	@$(MAKE) -s helm-render-mysql-sigstore
 .PHONY: helm-render-charts
 
 # ─── Dependency Manager ──────────────────────────────────────────────────────────────────────────
@@ -293,10 +336,271 @@ dependency-renovate-update:
 	$(DEPENDENCY_RENOVATE_ALIAS) renovate --platform=local --repository-cache=reset > logs/dependency/renovate.log 2>&1
 .PHONY: dependency-renovate-update
 
+# ─── SBOM Manager ────────────────────────────────────────────────────────────────────────────────
+
+SBOM_CONTAINER_IMAGE ?= ghcr.io/sentenz/sbom-cli:v1.0.6@sha256:6ba64640f06b7505fc4566e7ae0ae880fb727db62aa3e58ae04258f98bfc3ff0
+SBOM_CONTAINER_ALIAS := docker run --rm --network=host -v "${PWD}:/workspace" -w /workspace "$(SBOM_CONTAINER_IMAGE)"
+
+SBOM_FILE_ENV ?= .env
+SBOM_FILE_CDX ?= logs/sbom/sbom-image.cdx.json
+
+# Usage: make sbom-upload SBOM_FILE_ENV=".env.stage" SBOM_FILE_CDX="logs/sbom/sbom-image.cdx.json"
+#
+## Upload SBOM to the SCA platform and generate a report
+sbom-upload:
+	@mkdir -p logs/sbom
+
+	$(SBOM_CONTAINER_ALIAS) --env-file "$(SBOM_FILE_ENV)" upload --file "$(SBOM_FILE_CDX)" 2>&1 | tee logs/sbom/upload.log
+.PHONY: sbom-upload
+
+# ─── Dependency-Track Manager ────────────────────────────────────────────────────────────────────
+
+DTRACK_TOOLS_DIR ?= apps/dependency-track/tools
+DTRACK_TOOLS_FILE ?= $(DTRACK_TOOLS_DIR)/portfolio-export.json
+DTRACK_USERS_FILE ?= $(DTRACK_TOOLS_DIR)/users.json
+DTRACK_OSV_FILE ?= $(DTRACK_TOOLS_DIR)/osv-config-export.json
+DTRACK_POLICIES_FILE ?= $(DTRACK_TOOLS_DIR)/policies-export.json
+DTRACK_VULN_POLICIES_FILE ?= $(DTRACK_TOOLS_DIR)/vuln-policies-export.json
+DTRACK_VIOLATION_AUDIT_FILE ?= $(DTRACK_TOOLS_DIR)/violation-audit-export.json
+DTRACK_NOTIFICATIONS_FILE ?= $(DTRACK_TOOLS_DIR)/notifications-export.json
+DTRACK_SERVICE_ACCOUNTS_FILE ?= $(DTRACK_TOOLS_DIR)/service-accounts-export.json
+DTRACK_PROJECT ?=
+DTRACK_URL ?= https://dependency-track.localhost
+DTRACK_TOKEN ?= odt_SbZ5Borx_MhFRguK1eTES4L7d1Tu3NQcja1r7jzSH
+
+# Usage: make dtrack-validate DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+# Validate Dependency-Track connection variables are provided
+dtrack-validate:
+	@if [[ -z "$(DTRACK_URL)" ]]; then \
+		echo "error: DTRACK_URL is required (e.g. https://dependency-track.localhost)" >&2; \
+		exit 1; \
+	fi
+	@if [[ -z "$(DTRACK_TOKEN)" ]]; then \
+		echo "error: DTRACK_TOKEN is required (admin API token)" >&2; \
+		exit 1; \
+	fi
+.PHONY: dtrack-validate
+
+# Usage: make dtrack-export DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Export the Dependency-Track portfolio (projects, teams, permissions, ACLs, tags, users) to JSON
+dtrack-export: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/export-portfolio.py" --out "$(DTRACK_TOOLS_FILE)"
+.PHONY: dtrack-export
+
+# Usage: make dtrack-export DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Preview importing the Dependency-Track portfolio into the target instance (no changes)
+dtrack-import-dry-run: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-portfolio.py" --export "$(DTRACK_TOOLS_FILE)" --dry-run
+.PHONY: dtrack-import-dry-run
+
+# Usage: make dtrack-import DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Import the Dependency-Track portfolio (projects, teams, permissions, ACLs, tags) into the target instance
+dtrack-import: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-portfolio.py" --export "$(DTRACK_TOOLS_FILE)"
+.PHONY: dtrack-import
+
+# Usage: make dtrack-import-users DTRACK_URL=<base-url> DTRACK_TOKEN=<token> DTRACK_USERS_FILE=<users-file>
+#
+## Import the Dependency-Track portfolio including managed users (requires DTRACK_USERS_FILE)
+dtrack-import-users: dtrack-validate
+	@if [[ ! -f "$(DTRACK_USERS_FILE)" ]]; then \
+		echo "error: users file not found: $(DTRACK_USERS_FILE) (copy users.template.json and set passwords)" >&2; \
+		exit 1; \
+	fi
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-portfolio.py" --export "$(DTRACK_TOOLS_FILE)" --users "$(DTRACK_USERS_FILE)"
+.PHONY: dtrack-import-users
+
+# Usage: make dtrack-import-service-accounts DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Import the Dependency-Track portfolio including service accounts (5.2.0+).
+## Re-issues one API key per service account; the plain-text key is printed once to stderr.
+dtrack-import-service-accounts: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-portfolio.py" --export "$(DTRACK_TOOLS_FILE)" --service-accounts
+.PHONY: dtrack-import-service-accounts
+
+# Usage: make dtrack-create-service-accounts DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Create a service account for each automation (CI) team and issue one API key each.
+## Idempotent; the plain-text key is printed once to stderr. Add --rotate to re-issue existing keys.
+dtrack-create-service-accounts: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/create-service-accounts.py"
+.PHONY: dtrack-create-service-accounts
+
+# Usage: make dtrack-service-accounts-export DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Export the Dependency-Track service accounts (v2) to JSON
+dtrack-service-accounts-export: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/export-service-accounts.py" --out "$(DTRACK_SERVICE_ACCOUNTS_FILE)"
+.PHONY: dtrack-service-accounts-export
+
+# Usage: make dtrack-service-accounts-dry-run DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Preview applying the Dependency-Track service accounts (no changes)
+dtrack-service-accounts-dry-run: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-service-accounts.py" --export "$(DTRACK_SERVICE_ACCOUNTS_FILE)" --dry-run
+.PHONY: dtrack-service-accounts-dry-run
+
+# Usage: make dtrack-service-accounts-import DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Apply the Dependency-Track service accounts (v2) to the target instance.
+## Re-issues one API key per created account; the plain-text key is printed once to stderr.
+dtrack-service-accounts-import: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-service-accounts.py" --export "$(DTRACK_SERVICE_ACCOUNTS_FILE)"
+.PHONY: dtrack-service-accounts-import
+
+# Usage: make dtrack-osv-export DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Export the OSV vulnerability data source config (ecosystems + settings) to JSON
+dtrack-osv-export: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/export-osv-config.py" --out "$(DTRACK_OSV_FILE)"
+.PHONY: dtrack-osv-export
+
+# Usage: make dtrack-osv-import-dry-run DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Preview applying the OSV data source config to the target instance (no changes)
+dtrack-osv-import-dry-run: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-osv-config.py" --export "$(DTRACK_OSV_FILE)" --dry-run
+.PHONY: dtrack-osv-import-dry-run
+
+# Usage: make dtrack-osv-import DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Apply the OSV data source config to the target instance and trigger a mirror
+dtrack-osv-import: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-osv-config.py" --export "$(DTRACK_OSV_FILE)" --mirror
+.PHONY: dtrack-osv-import
+
+# Usage: make dtrack-policies-export DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Export the Dependency-Track policies (e.g. CVE alarms) to JSON
+dtrack-policies-export: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/export-policies.py" --out "$(DTRACK_POLICIES_FILE)"
+.PHONY: dtrack-policies-export
+
+# Usage: make dtrack-policies-dry-run DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Preview applying the Dependency-Track policies (e.g. CVE alarms) to the target instance (no changes)
+dtrack-policies-dry-run: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-policies.py" --export "$(DTRACK_POLICIES_FILE)" --dry-run
+.PHONY: dtrack-policies-dry-run
+
+# Usage: make dtrack-policies-import DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Apply the Dependency-Track policies (e.g. CVE alarms) to the target instance
+dtrack-policies-import: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-policies.py" --export "$(DTRACK_POLICIES_FILE)"
+.PHONY: dtrack-policies-import
+
+# Usage: make dtrack-notifications-export DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Export the Dependency-Track notification rules to JSON
+dtrack-notifications-export: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/export-notifications.py" --out "$(DTRACK_NOTIFICATIONS_FILE)"
+.PHONY: dtrack-notifications-export
+
+# Usage: make dtrack-notifications-dry-run DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Preview applying the Dependency-Track notification rules (no changes)
+dtrack-notifications-dry-run: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-notifications.py" --export "$(DTRACK_NOTIFICATIONS_FILE)" --dry-run
+.PHONY: dtrack-notifications-dry-run
+
+# Usage: make dtrack-notifications-import DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Apply the Dependency-Track notification rules (e.g. policy violation email alerts)
+dtrack-notifications-import: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-notifications.py" --export "$(DTRACK_NOTIFICATIONS_FILE)"
+.PHONY: dtrack-notifications-import
+
+# ─── Vulnerability policies (v2) ─────────────────────────────────────────────────────────────────
+
+# Usage: make dtrack-vuln-policies-export DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Export the Dependency-Track vulnerability policies (v2, CEL-based) to JSON
+dtrack-vuln-policies-export: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/export-vuln-policies.py" --out "$(DTRACK_VULN_POLICIES_FILE)"
+.PHONY: dtrack-vuln-policies-export
+
+# Usage: make dtrack-vuln-policies-dry-run DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Preview applying the Dependency-Track vulnerability policies (no changes)
+dtrack-vuln-policies-dry-run: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-vuln-policies.py" --export "$(DTRACK_VULN_POLICIES_FILE)" --dry-run
+.PHONY: dtrack-vuln-policies-dry-run
+
+# Usage: make dtrack-vuln-policies-import DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Apply the Dependency-Track vulnerability policies (v2, CEL-based) to the target instance
+dtrack-vuln-policies-import: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-vuln-policies.py" --export "$(DTRACK_VULN_POLICIES_FILE)"
+.PHONY: dtrack-vuln-policies-import
+
+# ─── Policy violation audit (triage) ─────────────────────────────────────────────────────────────
+
+# Usage: make dtrack-violation-audit-export DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Export the policy-violation audit trail (analysis state, suppression, comments) to JSON
+dtrack-violation-audit-export: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/export-violation-audit.py" --out "$(DTRACK_VIOLATION_AUDIT_FILE)"
+.PHONY: dtrack-violation-audit-export
+
+# Usage: make dtrack-violation-audit-dry-run DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Preview re-applying the recorded violation analysis decisions (no changes)
+dtrack-violation-audit-dry-run: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-violation-audit.py" --export "$(DTRACK_VIOLATION_AUDIT_FILE)" --dry-run
+.PHONY: dtrack-violation-audit-dry-run
+
+# Usage: make dtrack-violation-audit-import DTRACK_URL=<base-url> DTRACK_TOKEN=<token>
+#
+## Re-apply the recorded violation analysis decisions (state, suppression, comments)
+dtrack-violation-audit-import: dtrack-validate
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/import-violation-audit.py" --export "$(DTRACK_VIOLATION_AUDIT_FILE)"
+.PHONY: dtrack-violation-audit-import
+
+# Usage: make dtrack-project-violations DTRACK_URL=<base-url> DTRACK_TOKEN=<token> DTRACK_PROJECT=<name>
+#
+## Export a single project's policy violations as a JSON report (read-only)
+dtrack-project-violations: dtrack-validate
+	@if [[ -z "$(DTRACK_PROJECT)" ]]; then \
+		echo "error: DTRACK_PROJECT is required (project name)" >&2; \
+		exit 1; \
+	fi
+	DTRACK_URL="$(DTRACK_URL)" DTRACK_TOKEN="$(DTRACK_TOKEN)" \
+		python3 "$(DTRACK_TOOLS_DIR)/export-project-violations.py" --project "$(DTRACK_PROJECT)"
+.PHONY: dtrack-project-violations
+
 # ─── Secrets Manager ─────────────────────────────────────────────────────────────────────────────
 
 SECRETS_SOPS_IMAGE ?= ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea
-SECRETS_SOPS_ALIAS ?= docker run --rm -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/root/.gnupg" -w /workspace "$(SECRETS_SOPS_IMAGE)"
+SECRETS_SOPS_ALIAS ?= docker run --rm --user "$(shell id -u):$(shell id -g)" -e GNUPGHOME=/tmp/.gnupg -v "${PWD}:/workspace" -v "$${HOME}/.gnupg:/tmp/.gnupg" -w /workspace "$(SECRETS_SOPS_IMAGE)"
 SECRETS_SOPS_UID ?= sops-$(notdir $(CURDIR))
 
 # Usage: make secrets-gpg-generate SECRETS_SOPS_UID=<uid>
@@ -694,109 +998,212 @@ sast-trufflehog-git:
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_TRUFFLEHOG)" git file:///workspace --no-update --json > logs/sast/trufflehog-git.json 2> logs/sast/trufflehog-git.log
 .PHONY: sast-trufflehog-git
 
-# ─── Software Supply Chain Security (SSCS) ─────────────────────────────────────────────────────────
+# ─── Software Supply Chain Security (SSCS) ───────────────────────────────────────────────────────
 
-# Install Cosign v3.1.4 (matching the CI action) on the host. Native execution
-# preserves registry credentials and supports browser OIDC locally or ambient OIDC in CI.
-SSCS_COSIGN ?= cosign
-SSCS_COSIGN_IMAGE ?=
-SSCS_COSIGN_IDENTITY ?=
-SSCS_COSIGN_ISSUER ?= https://token.actions.githubusercontent.com
-SSCS_COSIGN_SBOM ?= logs/sbom/sbom-image.cdx.json
-SSCS_COSIGN_BUNDLE ?= logs/sscs/image.sigstore.json
-SSCS_COSIGN_ATTESTATION_BUNDLE ?= logs/sscs/sbom.sigstore.json
-SSCS_COSIGN_TRUSTED_ROOT ?=
-SSCS_COSIGN_SIGNING_CONFIG ?=
-export SSCS_COSIGN SSCS_COSIGN_IMAGE SSCS_COSIGN_IDENTITY SSCS_COSIGN_ISSUER
-export SSCS_COSIGN_SBOM SSCS_COSIGN_BUNDLE SSCS_COSIGN_ATTESTATION_BUNDLE
-export SSCS_COSIGN_TRUSTED_ROOT SSCS_COSIGN_SIGNING_CONFIG
+SSCS_COSIGN_IMAGE ?= ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d
+# --network host: cosign must reach the local registry (localhost:5000) and the
+# self-hosted Sigstore endpoints (fulcio.localhost / rekor.localhost) by name.
+# --add-host: *.localhost does not resolve inside containers (WSL2-only DNS), so
+# map the Sigstore hostnames to the local proxy that fronts the Kind cluster.
+SSCS_COSIGN_ADD_HOSTS ?= --add-host fulcio.localhost:127.0.0.1 --add-host rekor.localhost:127.0.0.1
+# Self-signed ingress certificates (fulcio.localhost + rekor.localhost) that cosign must trust
+# to reach the self-hosted endpoints over TLS. Built from clusters/<env>/secrets/.
+SSCS_COSIGN_TRUST_BUNDLE ?= logs/sast/sigstore-ingress-ca.pem
+# Pass the TLS trust bundle into the cosign container (mounted at /workspace).
+# Go falls back to the system roots if the file is absent, so this is safe for
+# all cosign targets (key-based flows included).
+SSCS_COSIGN_TLS_ENV ?= -e SSL_CERT_FILE=/workspace/$(SSCS_COSIGN_TRUST_BUNDLE)
+# Run as the host user so cosign can write artifacts (signing config, bundles)
+# into the workspace; the image's default nonroot user cannot.
+SSCS_COSIGN_ALIAS := docker run --rm --user "$(shell id -u):$(shell id -g)" --network host $(SSCS_COSIGN_ADD_HOSTS) $(SSCS_COSIGN_TLS_ENV) -v "${PWD}:/workspace" -w /workspace "$(SSCS_COSIGN_IMAGE)"
+# Self-hosted Sigstore endpoints (see infrastructure/services/sigstore).
+SAST_FULCIO_URL ?= https://fulcio.localhost
+SAST_REKOR_URL ?= https://rekor.localhost
+# Kubernetes ServiceAccount identity for Fulcio (see infrastructure/services/sigstore/base/serviceaccount.yaml).
+# Fulcio's default config trusts Kubernetes SA tokens, so a minted token is a valid signing identity.
+SSCS_COSIGN_SA ?= cosign-dev
+SSCS_COSIGN_SA_NAMESPACE ?= fulcio-system
+# Fulcio CA chain secret (key `cert`) created by the chart's createcerts Job; used to verify signatures.
+SAST_FULCIO_CA_SECRET ?= fulcio-server-secret
+SAST_FULCIO_CA_NAMESPACE ?= fulcio-system
+SSCS_COSIGN_CA_FILE ?= logs/sast/fulcio-ca.pem
+# CT-log (ctlog) public key secret, used to build the TrustedRoot for verification.
+SAST_CTLOG_PUBLIC_KEY_SECRET ?= ctlog-public-key
+SAST_CTLOG_NAMESPACE ?= ctlog-system
+# Sigstore TrustedRoot JSON bundling the self-hosted Fulcio CA, Rekor public key, and CT-log key.
+SSCS_COSIGN_TRUSTED_ROOT ?= logs/sast/trusted-root.json
+# Sigstore signing config (cosign 3.x) pointing at the self-hosted Fulcio/Rekor endpoints.
+SSCS_COSIGN_SIGNING_CONFIG ?= logs/sast/signing-config.json
+# Fulcio expects identity tokens minted for audience `sigstore`.
+SSCS_COSIGN_AUDIENCE ?= sigstore
+# The OIDC issuer this cluster mints SA tokens with (verify with
+# `kubectl get --raw /.well-known/openid-configuration`).
+SSCS_COSIGN_OIDC_ISSUER ?= https://kubernetes.default.svc.cluster.local
+# The Fulcio certificate identity for the signing ServiceAccount, asserted at verify time.
+SSCS_COSIGN_IDENTITY = https://kubernetes.io/namespaces/$(SSCS_COSIGN_SA_NAMESPACE)/serviceaccounts/$(SSCS_COSIGN_SA)
 
-# Shared validation runs in each recipe's shell; values are passed through the
-# environment, not interpolated into shell source. Exact identity, never a regexp.
-define SSCS_COSIGN_OPTIONS
-command -v "$$SSCS_COSIGN" >/dev/null || { echo "error: install Cosign v3.1.4" >&2; exit 1; }
-[[ "$$SSCS_COSIGN_IMAGE" =~ ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$$ ]] || { echo "error: SSCS_COSIGN_IMAGE must include a sha256 digest" >&2; exit 1; }
-[[ -n "$$SSCS_COSIGN_IDENTITY" && -n "$$SSCS_COSIGN_ISSUER" ]] || { echo "error: set an exact SSCS_COSIGN_IDENTITY and SSCS_COSIGN_ISSUER" >&2; exit 1; }
-verification=(--certificate-identity "$$SSCS_COSIGN_IDENTITY" --certificate-oidc-issuer "$$SSCS_COSIGN_ISSUER")
-trust=()
-[[ -z "$$SSCS_COSIGN_SIGNING_CONFIG" || -n "$$SSCS_COSIGN_TRUSTED_ROOT" ]] || { echo "error: signing config requires a trusted root" >&2; exit 1; }
-if [[ -n "$$SSCS_COSIGN_TRUSTED_ROOT" ]]; then
-    [[ -s "$$SSCS_COSIGN_TRUSTED_ROOT" ]] || { echo "error: trusted root file is missing or empty" >&2; exit 1; }
-    trust=(--trusted-root "$$SSCS_COSIGN_TRUSTED_ROOT")
-fi
-endef
+## Generate Cosign key pair
+sscs-cosign-generate-key-pair:
+	$(SSCS_COSIGN_ALIAS) generate-key-pair
+.PHONY: sscs-cosign-generate-key-pair
 
-# Public Sigstore is the default and discloses signing metadata. Private signing
-# requires BOTH approved configuration files; verification needs only the root.
-define SSCS_COSIGN_SIGNING_OPTIONS
-signing=(--yes "$${trust[@]}")
-if [[ -n "$$SSCS_COSIGN_SIGNING_CONFIG" || -n "$$SSCS_COSIGN_TRUSTED_ROOT" ]]; then
-    [[ -s "$$SSCS_COSIGN_SIGNING_CONFIG" && -s "$$SSCS_COSIGN_TRUSTED_ROOT" ]] || { echo "error: private signing requires signing config and trusted root files" >&2; exit 1; }
-    signing+=(--signing-config "$$SSCS_COSIGN_SIGNING_CONFIG")
-fi
-if [[ "$${GITHUB_ACTIONS:-}" == true ]]; then
-    signing+=(--oidc-provider github-actions --oidc-client-id sigstore)
-fi
-endef
-
-# Usage: make sscs-cosign-sign SSCS_COSIGN_IMAGE=<image@sha256:digest> SSCS_COSIGN_IDENTITY=<exact-identity>
-## Sign an immutable image keylessly, retain its bundle, and require verification
-sscs-cosign-sign:
-	@$(SSCS_COSIGN_OPTIONS)
-	$(SSCS_COSIGN_SIGNING_OPTIONS)
-	[[ -n "$$SSCS_COSIGN_BUNDLE" && ! -L "$$SSCS_COSIGN_BUNDLE" ]] || { echo "error: invalid signature bundle path" >&2; exit 1; }
-	mkdir -p -- "$$(dirname -- "$$SSCS_COSIGN_BUNDLE")"
-	"$$SSCS_COSIGN" sign "$${signing[@]}" --bundle "$$SSCS_COSIGN_BUNDLE" "$$SSCS_COSIGN_IMAGE"
-	test -s "$$SSCS_COSIGN_BUNDLE"
-	"$$SSCS_COSIGN" verify "$${trust[@]}" "$${verification[@]}" "$$SSCS_COSIGN_IMAGE"
-.PHONY: sscs-cosign-sign
-
-# Usage: make sscs-cosign-verify SSCS_COSIGN_IMAGE=<image@sha256:digest> SSCS_COSIGN_IDENTITY=<exact-identity>
-## Verify an image signature against its digest, trusted certificate identity, and issuer
-sscs-cosign-verify:
-	@$(SSCS_COSIGN_OPTIONS)
-	"$$SSCS_COSIGN" verify "$${trust[@]}" "$${verification[@]}" "$$SSCS_COSIGN_IMAGE"
-.PHONY: sscs-cosign-verify
-
-# SSCS_COSIGN_SBOM must describe this exact image, not an unrelated filesystem.
-# The default path matches the existing sast-trivy-sbom-cyclonedx-image output.
-## Attest an image with a CycloneDX SBOM, retain its bundle, and require verification
+# Usage: make sscs-cosign-attest <image_name>
+#
+## Attest an image with the generated SBOM using Cosign
 sscs-cosign-attest:
-	@$(SSCS_COSIGN_OPTIONS)
-	$(SSCS_COSIGN_SIGNING_OPTIONS)
-	[[ -s "$$SSCS_COSIGN_SBOM" && -f "$$SSCS_COSIGN_SBOM" ]] || { echo "error: SSCS_COSIGN_SBOM must name a nonempty CycloneDX SBOM for this image" >&2; exit 1; }
-	[[ -n "$$SSCS_COSIGN_ATTESTATION_BUNDLE" && ! -L "$$SSCS_COSIGN_ATTESTATION_BUNDLE" ]] || { echo "error: invalid attestation bundle path" >&2; exit 1; }
-	mkdir -p -- "$$(dirname -- "$$SSCS_COSIGN_ATTESTATION_BUNDLE")"
-	"$$SSCS_COSIGN" attest "$${signing[@]}" --type cyclonedx --predicate "$$SSCS_COSIGN_SBOM" --bundle "$$SSCS_COSIGN_ATTESTATION_BUNDLE" "$$SSCS_COSIGN_IMAGE"
-	test -s "$$SSCS_COSIGN_ATTESTATION_BUNDLE"
-	"$$SSCS_COSIGN" verify-attestation "$${trust[@]}" "$${verification[@]}" --type cyclonedx "$$SSCS_COSIGN_IMAGE"
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "usage: make sscs-cosign-attest <image_name>"; \
+		exit 1; \
+	fi
+	@if [ ! -f cosign.key ]; then \
+		echo "Error: cosign.key not found. Run 'make sscs-cosign-generate-key-pair' first."; \
+		exit 1; \
+	fi
+	@if [ ! -f logs/sbom/sbom.cdx.json ]; then \
+		echo "Error: logs/sbom/sbom.cdx.json not found. Run 'make sast-trivy-sbom-cyclonedx <image_name>' first."; \
+		exit 1; \
+	fi
+
+	$(SSCS_COSIGN_ALIAS) attest --key cosign.key --type cyclonedx --predicate logs/sbom/sbom.cdx.json "$(filter-out $@,$(MAKECMDGOALS))"
 .PHONY: sscs-cosign-attest
 
-## Verify a CycloneDX attestation (distinct from an image signature); emit verified envelopes to stdout
-sscs-cosign-verify-attestation:
-	@$(SSCS_COSIGN_OPTIONS)
-	"$$SSCS_COSIGN" verify-attestation "$${trust[@]}" "$${verification[@]}" --type cyclonedx "$$SSCS_COSIGN_IMAGE"
-.PHONY: sscs-cosign-verify-attestation
+# Usage: make sscs-cosign-verify <image_name>
+#
+## Verify SBOM attestation for an image using Cosign
+sscs-cosign-verify:
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "usage: make sscs-cosign-verify <image_name>"; \
+		exit 1; \
+	fi
+	@if [ ! -f cosign.pub ]; then \
+		echo "Error: cosign.pub not found. Run 'make sscs-cosign-generate-key-pair' first."; \
+		exit 1; \
+	fi
+
+	@mkdir -p logs/sast
+
+	$(SSCS_COSIGN_ALIAS) verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
+.PHONY: sscs-cosign-verify
+
+# Usage: make sscs-cosign-token [SSCS_COSIGN_SA=<sa>] [SSCS_COSIGN_SA_NAMESPACE=<ns>]
+#
+## Mint a short-lived OIDC token for the Kubernetes ServiceAccount identity (default 1h)
+sscs-cosign-token:
+	@kubectl --kubeconfig "$(K8S_KUBECONFIG)" create token "$(SSCS_COSIGN_SA)" -n "$(SSCS_COSIGN_SA_NAMESPACE)" --audience="$(SSCS_COSIGN_AUDIENCE)"
+.PHONY: sscs-cosign-token
+
+# Usage: make sscs-cosign-trust-bundle
+#
+## Build the TLS trust bundle (self-signed fulcio.localhost + rekor.localhost certs)
+## that cosign uses to reach the self-hosted endpoints over TLS. Requires the
+## SOPS-decrypted certs under clusters/<env>/secrets/ (run secrets-sops-decrypt first).
+sscs-cosign-trust-bundle:
+	@mkdir -p "$(dir $(SSCS_COSIGN_TRUST_BUNDLE))"
+	@cat "$(K8S_CLUSTER_PATH)/secrets/fulcio.localhost+1.pem" "$(K8S_CLUSTER_PATH)/secrets/rekor.localhost+1.pem" > "$(SSCS_COSIGN_TRUST_BUNDLE)"
+.PHONY: sscs-cosign-trust-bundle
+
+# Usage: make sscs-cosign-trusted-root
+#
+## Build a Sigstore TrustedRoot JSON for the self-hosted Sigstore stack, bundling
+## the Fulcio CA, the Rekor public key, and the CT-log (ctlog) public key. cosign
+## 3.x verify requires this (the new bundle format rejects --certificate-chain).
+sscs-cosign-trusted-root:
+	@mkdir -p "$(dir $(SSCS_COSIGN_TRUSTED_ROOT))"
+	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT
+	kubectl --kubeconfig "$(K8S_KUBECONFIG)" get secret "$(SAST_FULCIO_CA_SECRET)" -n "$(SAST_FULCIO_CA_NAMESPACE)" -o jsonpath='{.data.cert}' | base64 -d > "$$tmp/fulcio.pem"
+	openssl x509 -in "$$tmp/fulcio.pem" -outform DER | base64 -w0 > "$$tmp/fulcio.b64"
+	curl -sk "$(SAST_REKOR_URL)/api/v1/log/publicKey" > "$$tmp/rekor.pem"
+	openssl pkey -pubin -in "$$tmp/rekor.pem" -outform DER | base64 -w0 > "$$tmp/rekor.b64"
+	kubectl --kubeconfig "$(K8S_KUBECONFIG)" get secret "$(SAST_CTLOG_PUBLIC_KEY_SECRET)" -n "$(SAST_CTLOG_NAMESPACE)" -o jsonpath='{.data.public}' | base64 -d > "$$tmp/tlog.pem"
+	openssl pkey -pubin -in "$$tmp/tlog.pem" -outform DER | base64 -w0 > "$$tmp/tlog.b64"
+	python3 -c 'import sys,hashlib,base64,json,os; tmp=sys.argv[1]; fu=sys.argv[2]; re=sys.argv[3]; out=sys.argv[4]; b=lambda n: open(os.path.join(tmp,n)).read().strip(); k=lambda x: base64.b64encode(hashlib.sha256(base64.b64decode(x)).digest()).decode(); f,r,t=b("fulcio.b64"),b("rekor.b64"),b("tlog.b64"); tr={"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1","tlogs":[{"baseUrl":re,"hashAlgorithm":"SHA2_256","publicKey":{"rawBytes":r,"keyDetails":"PKIX_ECDSA_P256_SHA_256","validFor":{"start":"2020-01-01T00:00:00.000Z"}},"logId":{"keyId":k(r)}}],"certificateAuthorities":[{"subject":{"organization":"Linux Foundation","commonName":"fulcio-ca"},"uri":fu,"certChain":{"certificates":[{"rawBytes":f}]},"validFor":{"start":"2020-01-01T00:00:00.000Z"}}],"ctlogs":[{"baseUrl":fu,"hashAlgorithm":"SHA2_256","publicKey":{"rawBytes":t,"keyDetails":"PKIX_ECDSA_P256_SHA_256","validFor":{"start":"2020-01-01T00:00:00.000Z"}},"logId":{"keyId":k(t)}}]}; open(out,"w").write(json.dumps(tr,indent=2)); print("wrote "+out)' "$$tmp" "$(SAST_FULCIO_URL)" "$(SAST_REKOR_URL)" "$(SSCS_COSIGN_TRUSTED_ROOT)"
+.PHONY: sscs-cosign-trusted-root
+
+# Usage: make sscs-cosign-signing-config
+#
+## Create a Sigstore signing config (cosign 3.x) pointing at the self-hosted
+## Fulcio/Rekor endpoints and the cluster's OIDC issuer. cosign 3.x sign no
+## longer accepts --fulcio-url/--rekor-url; the endpoints come from this file.
+sscs-cosign-signing-config:
+	@mkdir -p "$(dir $(SSCS_COSIGN_SIGNING_CONFIG))"
+
+	$(SSCS_COSIGN_ALIAS) signing-config create \
+		--no-default-fulcio --no-default-rekor --no-default-oidc \
+		--fulcio="url=$(SAST_FULCIO_URL),api-version=1,start-time=2020-01-01T00:00:00Z,operator=self-hosted" \
+		--rekor="url=$(SAST_REKOR_URL),api-version=1,start-time=2020-01-01T00:00:00Z,operator=self-hosted" \
+		--rekor-config="ANY" \
+		--oidc-provider="url=$(SSCS_COSIGN_OIDC_ISSUER),api-version=1,start-time=2020-01-01T00:00:00Z,operator=kubernetes" \
+		--out "/workspace/$(SSCS_COSIGN_SIGNING_CONFIG)"
+.PHONY: sscs-cosign-signing-config
+
+# Usage: make sscs-cosign-sign <image_name>
+#
+## Sign an image against the self-hosted Fulcio/Rekor endpoints using the
+## Kubernetes ServiceAccount identity. Mints a fresh SA token (audience
+## `sigstore`) automatically; or pass COSIGN_TOKEN=<token> to reuse one.
+##
+## cosign 3.x notes:
+##   --signing-config  endpoints (Fulcio/Rekor/OIDC) come from the signing config,
+##                     not from --fulcio-url/--rekor-url (removed in 3.x)
+##   --trusted-root    verifies the signature against the self-hosted root after
+##                     signing (SCT + Rekor inclusion), instead of the public root
+##   --yes             auto-accept the Rekor immutable-record consent prompt
+sscs-cosign-sign: sscs-cosign-trust-bundle sscs-cosign-signing-config sscs-cosign-trusted-root
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "usage: make sscs-cosign-sign <image_name>"; \
+		exit 1; \
+	fi
+	@if [ -z "$${COSIGN_TOKEN:-}" ]; then \
+		COSIGN_TOKEN=$$(kubectl --kubeconfig "$(K8S_KUBECONFIG)" create token "$(SSCS_COSIGN_SA)" -n "$(SSCS_COSIGN_SA_NAMESPACE)" --audience="$(SSCS_COSIGN_AUDIENCE)"); \
+	fi
+
+	$(SSCS_COSIGN_ALIAS) sign \
+		--yes \
+		--signing-config "/workspace/$(SSCS_COSIGN_SIGNING_CONFIG)" \
+		--trusted-root "/workspace/$(SSCS_COSIGN_TRUSTED_ROOT)" \
+		--identity-token "$$COSIGN_TOKEN" \
+		"$(filter-out $@,$(MAKECMDGOALS))"
+.PHONY: sscs-cosign-sign
+
+# Usage: make sscs-cosign-verify-image <image_name>
+#
+## Verify an image signature against the self-hosted Rekor transparency log,
+## trusting the self-hosted Sigstore root (Fulcio CA + Rekor + CT-log keys) and
+## asserting the signing ServiceAccount identity.
+sscs-cosign-verify-image: sscs-cosign-trust-bundle sscs-cosign-trusted-root
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "usage: make sscs-cosign-verify-image <image_name>"; \
+		exit 1; \
+	fi
+
+	@mkdir -p logs/sast
+
+	$(SSCS_COSIGN_ALIAS) verify \
+		--trusted-root "/workspace/$(SSCS_COSIGN_TRUSTED_ROOT)" \
+		--certificate-identity "$(SSCS_COSIGN_IDENTITY)" \
+		--certificate-oidc-issuer "$(SSCS_COSIGN_OIDC_ISSUER)" \
+		"$(filter-out $@,$(MAKECMDGOALS))" 2> logs/sast/cosign-verify-image.log
+.PHONY: sscs-cosign-verify-image
 
 # ─── Container Manager ───────────────────────────────────────────────────────────────────────────
 
-CONTAINER_DOCKER_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null))
-CONTAINER_DOCKER_TAG ?= $(or $(shell git tag --sort=-creatordate | head -n 1),latest)
-CONTAINER_DOCKER_CONTEXT ?= .
-CONTAINER_DOCKER_FILE ?= container/k8s/Dockerfile
+CONTAINER_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null))
+CONTAINER_TAG ?= $(or $(shell git tag --sort=-creatordate | head -n 1),latest)
+CONTAINER_CONTEXT ?= .
+CONTAINER_FILE ?= container/k8s/Dockerfile
 
-# Usage: make container-docker-build [CONTAINER_DOCKER_IMAGE=<name>] [CONTAINER_DOCKER_TAG=<tag>] [CONTAINER_DOCKER_FILE=<file>] [CONTAINER_DOCKER_CONTEXT=<context>]
+# Usage: make container-docker-build [CONTAINER_IMAGE=<name>] [CONTAINER_TAG=<tag>] [CONTAINER_FILE=<file>] [CONTAINER_CONTEXT=<context>]
 #
 ## Build the Docker container image with the specified name, tag, and context
 container-docker-build:
-	docker build -f "$(CONTAINER_DOCKER_FILE)" -t "$(CONTAINER_DOCKER_IMAGE):$(CONTAINER_DOCKER_TAG)" "$(CONTAINER_DOCKER_CONTEXT)"
+	docker build -f "$(CONTAINER_FILE)" -t "$(CONTAINER_IMAGE):$(CONTAINER_TAG)" "$(CONTAINER_CONTEXT)"
 .PHONY: container-docker-build
 
-# Usage: make container-docker-run [CONTAINER_DOCKER_IMAGE=<name>] [CONTAINER_DOCKER_TAG=<tag>]
+# Usage: make container-docker-run [CONTAINER_IMAGE=<name>] [CONTAINER_TAG=<tag>]
 #
 ## Run the Docker container image with the specified name and tag
 container-docker-run:
-	docker run --rm "$(CONTAINER_DOCKER_IMAGE):$(CONTAINER_DOCKER_TAG)"
+	docker run --rm "$(CONTAINER_IMAGE):$(CONTAINER_TAG)"
 .PHONY: container-docker-run
 
 ## Teardown Docker containers and remove all unused images, containers, volumes, and networks
