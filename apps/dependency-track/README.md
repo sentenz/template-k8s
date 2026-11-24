@@ -15,6 +15,8 @@ dependency-track/
 
 - [1. Details](#1-details)
   - [1.1. Insights](#11-insights)
+  - [1.2. Instructions](#12-instructions)
+  - [1.3. Usage](#13-usage)
 - [2. Development](#2-development)
 - [3. Stage and production secrets](#3-stage-and-production-secrets)
 - [4. Troubleshooting](#4-troubleshooting)
@@ -26,9 +28,43 @@ dependency-track/
 - [SBOM Organisation](docs/sbom-organisation.md)
   > Project hierarchy, release and environment modelling, metadata conventions, and access-control model for Dependency-Track.
 
+### 1.2. Instructions
+
+- Deploy Workloads
+  > Deploy the Dependency-Track workloads to the current environment.
+
+  ```bash
+  make k8s-deploy
+  ```
+
+- Destroy Workloads
+  > Destroy the Dependency-Track workloads in the current environment.
+
+  ```bash
+  make k8s-destroy
+  ```
+
+### 1.3. Usage
+
+1. Development Environment (Dev)
+
+    - Port Forwarding
+      > Access the Dependency-Track application in the current environment.
+
+      ```bash
+      kubectl --kubeconfig=.local/kubeconfig/dev.yaml -n dependency-track port-forward svc/dependency-track 8080:8080
+      ```
+
+    - Browser Access
+      > Access the Dependency-Track application in the browser for the current environment.
+
+      ```bash
+      https://dependency-track.localhost
+      ```
+
 ## 2. Development
 
-The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local TLS fixtures live in `clusters/dev/secrets/` and are owned by the development cluster composition.
+The development overlay is intended for the local Kind workflow. It uses disposable database credentials and a development-only KEK fixture. Cluster-local topology and TLS material are owned by `clusters/dev`.
 
 Before rendering the dev environment, decrypt the certificate fixtures:
 
@@ -38,17 +74,7 @@ make secrets-sops-decrypt \
   clusters/dev/secrets/dependency-track.localhost+1-key.pem.enc
 ```
 
-Decryption writes sibling `.pem` files, which Git ignores. Kustomize does not decrypt SOPS files: `clusters/dev/apps/kustomization.yaml` reads the plaintext files and generates the `dependency-track-tls` Secret in the `dependency-track` namespace. Its stable name matches the ingress reference in the development Helm values.
-
-Alternatively, generate a fresh local self-signed certificate without accessing the encrypted fixtures:
-
-```bash
-make cert-certificate-generate CERT_HOSTNAME=dependency-track.localhost CERT_DIR=clusters/dev/secrets
-```
-
-`CERT_DIR` defaults to `$(K8S_CLUSTER_PATH)/secrets` (`clusters/dev/secrets` for the default environment); override it when generating material for another cluster. The Kind CI action generates an ephemeral pair at the same location, uses the certificate for its HTTPS checks, and restores any pre-existing plaintext files during cleanup. Commit only encrypted fixtures; remove plaintext files after use. Rendered manifests also contain Secret data and must be treated as sensitive.
-
-`clusters/dev` remains the canonical development entry point. The Kind topology for this environment is defined by `clusters/dev/kind-cluster.yaml`.
+The `clusters/dev` kustomization generates the `dependency-track-tls` Secret from the decrypted files and is the canonical development entry point. The Kind topology for this environment is defined by `clusters/dev/kind-cluster.yaml`.
 
 ## 3. Stage and production secrets
 
@@ -74,6 +100,8 @@ For local path-based routing:
 
 ```bash
 curl -I -k --max-time 15 https://dependency-track.localhost/
-curl -I -k --max-time 15 https://dependency-track.localhost/api
-curl -I -k --max-time 15 https://dependency-track.localhost/health
+curl -I -k --max-time 15 https://dependency-track.localhost/api/version
+curl -I -k --max-time 15 https://dependency-track.localhost/health/ready
 ```
+
+The chart routes `/api` to the api-server, but the bare `/api` path is not a guaranteed application endpoint. Use `/api/version` when validating API reachability.

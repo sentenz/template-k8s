@@ -1,0 +1,188 @@
+{
+  "exportedAt": "",
+  "source": "https://dependency-track.localhost",
+  "policies": [
+    {
+      "name": "Blocked CVE identifiers",
+      "operator": "ANY",
+      "violationState": "FAIL",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "EXPRESSION",
+          "operator": "MATCHES",
+          "value": "vulns.exists(vuln, vuln.id.matches(\".*(CVE-2017-5638|CVE-2021-44228|CVE-2022-22965|CVE-2026-109618|CVE-2026-109619|CVE-2026-111497)$\"))",
+          "violationType": "SECURITY"
+        }
+      ]
+    },
+    {
+      "name": "Known exploited vulnerabilities (KEV)",
+      "operator": "ANY",
+      "violationState": "FAIL",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "EXPRESSION",
+          "operator": "MATCHES",
+          "value": "vulns.exists(vuln, has(vuln.is_kev) && vuln.is_kev)",
+          "violationType": "SECURITY"
+        }
+      ]
+    },
+    {
+      "name": "High exploitation probability (EPSS >= 0.5)",
+      "operator": "ANY",
+      "violationState": "FAIL",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "EPSS",
+          "operator": "NUMERIC_GREATER_THAN_OR_EQUAL",
+          "value": "0.5"
+        }
+      ]
+    },
+    {
+      "name": "Public-facing: high or critical network vulnerabilities (CVSSv3)",
+      "operator": "ANY",
+      "violationState": "FAIL",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "EXPRESSION",
+          "operator": "MATCHES",
+          "value": "\"public-facing\" in project.tags && vulns.exists(vuln, has(vuln.severity) && vuln.severity in [\"HIGH\", \"CRITICAL\"] && has(vuln.cvssv3_vector) && vuln.cvssv3_vector.matches(\".*/AV:N/.*\"))",
+          "violationType": "SECURITY"
+        }
+      ]
+    },
+    {
+      "name": "Artifact hash mismatch with upstream repository",
+      "operator": "ANY",
+      "violationState": "FAIL",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "EXPRESSION",
+          "operator": "MATCHES",
+          "value": "component.has_package_artifact_hash_mismatch()",
+          "violationType": "SECURITY"
+        }
+      ]
+    },
+    {
+      "name": "High-impact weakness classes (CWE)",
+      "operator": "ANY",
+      "violationState": "WARN",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "CWE",
+          "operator": "CONTAINS_ANY",
+          "value": "CWE-78, CWE-79, CWE-89, CWE-502, CWE-787"
+        }
+      ]
+    },
+    {
+      "name": "Vulnerabilities requiring severity assessment",
+      "operator": "ANY",
+      "violationState": "WARN",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "SEVERITY",
+          "operator": "IS",
+          "value": "UNASSIGNED"
+        }
+      ]
+    },
+    {
+      "name": "Component releases at least two years old",
+      "operator": "ANY",
+      "violationState": "WARN",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "AGE",
+          "operator": "NUMERIC_GREATER_THAN_OR_EQUAL",
+          "value": "P2Y"
+        }
+      ]
+    },
+    {
+      "name": "Components at least one major version behind",
+      "operator": "ANY",
+      "violationState": "WARN",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "EXPRESSION",
+          "operator": "MATCHES",
+          "value": "component.version_distance(\">=\", v1.VersionDistance{major: \"1\"})",
+          "violationType": "OPERATIONAL"
+        }
+      ]
+    },
+    {
+      "name": "GPL or AGPL license requires legal review",
+      "operator": "ANY",
+      "violationState": "WARN",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "EXPRESSION",
+          "operator": "MATCHES",
+          "value": "!component.is_internal && ((has(component.license_expression) && spdx_expr_requires_any(component.license_expression, [\"GPL-2.0-only\", \"GPL-3.0-only\", \"GPL-3.0-or-later\", \"AGPL-3.0-only\", \"AGPL-3.0-or-later\"])) || (!has(component.license_expression) && has(component.resolved_license) && spdx_expr_requires_any(component.resolved_license.id, [\"GPL-2.0-only\", \"GPL-3.0-only\", \"GPL-3.0-or-later\", \"AGPL-3.0-only\", \"AGPL-3.0-or-later\"])))",
+          "violationType": "LICENSE"
+        }
+      ]
+    },
+    {
+      "name": "Missing or unresolved component licenses",
+      "operator": "ANY",
+      "violationState": "WARN",
+      "includeChildren": true,
+      "onlyLatestProjectVersion": false,
+      "projects": [],
+      "tags": [],
+      "conditions": [
+        {
+          "subject": "LICENSE",
+          "operator": "IS",
+          "value": "unresolved"
+        }
+      ]
+    }
+  ]
+}

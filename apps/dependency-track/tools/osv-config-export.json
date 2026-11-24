@@ -1,0 +1,29 @@
+{
+  "exportedAt": "2026-10-27T09:10:34Z",
+  "source": "https://dependency-track.localhost",
+  "dataSource": "osv",
+  "config": {
+    "enabled": true,
+    "dataUrl": "https://storage.googleapis.com/osv-vulnerabilities",
+    "ecosystems": [
+      "npm",
+      "Go",
+      "Maven",
+      "NuGet",
+      "PyPI",
+      "Debian",
+      "Packagist",
+      "Linux",
+      "CRAN",
+      "Hackage",
+      "Hex",
+      "Pub",
+      "Alpine",
+      "RubyGems",
+      "crates.io",
+      "Ubuntu"
+    ],
+    "aliasSyncEnabled": true,
+    "incrementalMirroringEnabled": true
+  }
+}

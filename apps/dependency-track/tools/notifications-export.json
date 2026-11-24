@@ -1,0 +1,36 @@
+{
+  "source": "https://dependency-track.localhost",
+  "rules": [
+    {
+      "name": "Policy Violations -> DevOps DE (email)",
+      "scope": "PORTFOLIO",
+      "level": "INFORMATIONAL",
+      "publisher": "Email",
+      "enabled": true,
+      "notifyOn": [
+        "POLICY_VIOLATION"
+      ],
+      "projects": [],
+      "tags": [],
+      "config": {
+        "recipientAddresses": [
+          "devops@group.com"
+        ],
+        "subjectPrefix": "[Dependency-Track]"
+      }
+    },
+    {
+      "name": "Policy Violations -> Console (validation)",
+      "scope": "PORTFOLIO",
+      "level": "INFORMATIONAL",
+      "publisher": "Console",
+      "enabled": true,
+      "notifyOn": [
+        "POLICY_VIOLATION"
+      ],
+      "projects": [],
+      "tags": [],
+      "config": {}
+    }
+  ]
+}

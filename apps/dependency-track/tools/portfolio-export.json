@@ -1,0 +1,698 @@
+{
+  "exportedAt": "",
+  "source": "https://dependency-track.localhost",
+  "projects": [
+    {
+      "uuid": "da2e82d4-08ef-495b-9290-9ed3521d22be",
+      "name": "Devops",
+      "version": null,
+      "classifier": null,
+      "collectionLogic": "AGGREGATE_DIRECT_CHILDREN",
+      "isLatest": false,
+      "active": true,
+      "parent": {
+        "uuid": "07337717-1edc-467b-a82e-53822878930e",
+        "name": "Org Group"
+      },
+      "tags": null
+    },
+    {
+      "uuid": "aa3073d0-fa50-4eb9-9574-e30cc688b5b3",
+      "name": "A",
+      "version": null,
+      "classifier": null,
+      "collectionLogic": "AGGREGATE_LATEST_VERSION_CHILDREN",
+      "isLatest": false,
+      "active": true,
+      "parent": {
+        "uuid": "0caae44d-3024-4997-99de-1db06b81438a",
+        "name": "A"
+      },
+      "tags": null
+    },
+    {
+      "uuid": "3baf43f0-d384-44ff-81d8-4e1b5287e16b",
+      "name": "A",
+      "version": "1.0.0",
+      "classifier": "CONTAINER",
+      "collectionLogic": null,
+      "isLatest": true,
+      "active": true,
+      "parent": {
+        "uuid": "aa3073d0-fa50-4eb9-9574-e30cc688b5b3",
+        "name": "A"
+      },
+      "tags": null
+    },
+    {
+      "uuid": "0caae44d-3024-4997-99de-1db06b81438a",
+      "name": "A",
+      "version": null,
+      "classifier": null,
+      "collectionLogic": "AGGREGATE_DIRECT_CHILDREN",
+      "isLatest": false,
+      "active": true,
+      "parent": {
+        "uuid": "da2e82d4-08ef-495b-9290-9ed3521d22be",
+        "name": "Devops"
+      },
+      "tags": null
+    },
+    {
+      "uuid": "6a05f05b-3688-421a-bad2-92dc7839d771",
+      "name": "Positioner",
+      "version": null,
+      "classifier": null,
+      "collectionLogic": "AGGREGATE_DIRECT_CHILDREN",
+      "isLatest": false,
+      "active": true,
+      "parent": {
+        "uuid": "07337717-1edc-467b-a82e-53822878930e",
+        "name": "A Group"
+      },
+      "tags": null
+    },
+    {
+      "uuid": "07337717-1edc-467b-a82e-53822878930e",
+      "name": "A Group",
+      "version": null,
+      "classifier": null,
+      "collectionLogic": "AGGREGATE_DIRECT_CHILDREN",
+      "isLatest": false,
+      "active": true,
+      "parent": null,
+      "tags": null
+    }
+  ],
+  "teams": [
+    {
+      "uuid": "a5c89d25-35b3-485f-886f-1562116911f8",
+      "name": "Administrators",
+      "permissions": [
+        {
+          "name": "ACCESS_MANAGEMENT",
+          "description": "Allows the management of users, teams, and API keys"
+        },
+        {
+          "name": "ACCESS_MANAGEMENT_CREATE",
+          "description": "Allows create permissions of users, teams, and API keys"
+        },
+        {
+          "name": "ACCESS_MANAGEMENT_DELETE",
+          "description": "Allows delete permissions of users, teams, and API keys"
+        },
+        {
+          "name": "ACCESS_MANAGEMENT_READ",
+          "description": "Allows read permissions of users, teams, and API keys"
+        },
+        {
+          "name": "ACCESS_MANAGEMENT_UPDATE",
+          "description": "Allows update permissions of users, teams, and API keys"
+        },
+        {
+          "name": "BOM_UPLOAD",
+          "description": "Allows the ability to upload CycloneDX Software Bill of Materials (SBOM)"
+        },
+        {
+          "name": "POLICY_MANAGEMENT",
+          "description": "Allows the creation, modification, and deletion of policy"
+        },
+        {
+          "name": "POLICY_MANAGEMENT_CREATE",
+          "description": "Allows the creation of a policy"
+        },
+        {
+          "name": "POLICY_MANAGEMENT_DELETE",
+          "description": "Allows the deletion of a policy"
+        },
+        {
+          "name": "POLICY_MANAGEMENT_READ",
+          "description": "Allows reading of policies"
+        },
+        {
+          "name": "POLICY_MANAGEMENT_UPDATE",
+          "description": "Allows the modification of a policy"
+        },
+        {
+          "name": "POLICY_VIOLATION_ANALYSIS",
+          "description": "Provides the ability to make analysis decisions on policy violations"
+        },
+        {
+          "name": "PORTFOLIO_ACCESS_CONTROL_BYPASS",
+          "description": "Provides the ability to bypass portfolio access control, granting access to all projects"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT",
+          "description": "Allows the creation, modification, and deletion of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_CREATE",
+          "description": "Allows the creation of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_DELETE",
+          "description": "Allows the deletion of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_READ",
+          "description": "Allows the reading of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_UPDATE",
+          "description": "Allows the updating of data in the portfolio"
+        },
+        {
+          "name": "PROJECT_CREATION_UPLOAD",
+          "description": "Provides the ability to optionally create project (if non-existent) on BOM or scan upload"
+        },
+        {
+          "name": "SECRET_MANAGEMENT",
+          "description": "Grants full secret management access"
+        },
+        {
+          "name": "SECRET_MANAGEMENT_CREATE",
+          "description": "Grants the ability to create secrets"
+        },
+        {
+          "name": "SECRET_MANAGEMENT_DELETE",
+          "description": "Grants the ability to delete secrets"
+        },
+        {
+          "name": "SECRET_MANAGEMENT_UPDATE",
+          "description": "Grants the ability to update secrets"
+        },
+        {
+          "name": "SYSTEM_CONFIGURATION",
+          "description": "Allows all access to configuration of the system including notifications, repositories, and email settings"
+        },
+        {
+          "name": "SYSTEM_CONFIGURATION_CREATE",
+          "description": "Allows creating configuration of the system including notifications, repositories, and email settings"
+        },
+        {
+          "name": "SYSTEM_CONFIGURATION_DELETE",
+          "description": "Allows deleting the configuration of the system including notifications, repositories, and email settings"
+        },
+        {
+          "name": "SYSTEM_CONFIGURATION_READ",
+          "description": "Allows reading the configuration of the system including notifications, repositories, and email settings"
+        },
+        {
+          "name": "SYSTEM_CONFIGURATION_UPDATE",
+          "description": "Allows updating the configuration of the system including notifications, repositories, and email settings"
+        },
+        {
+          "name": "TAG_MANAGEMENT",
+          "description": "Allows the modification and deletion of tags"
+        },
+        {
+          "name": "TAG_MANAGEMENT_DELETE",
+          "description": "Allows the deletion of a tag"
+        },
+        {
+          "name": "VIEW_POLICY_VIOLATION",
+          "description": "Provides the ability to view policy violations"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        },
+        {
+          "name": "VULNERABILITY_ANALYSIS",
+          "description": "Provides all abilities to make analysis decisions on vulnerabilities"
+        },
+        {
+          "name": "VULNERABILITY_ANALYSIS_CREATE",
+          "description": "Provides the ability to upload supported VEX documents to a project"
+        },
+        {
+          "name": "VULNERABILITY_ANALYSIS_READ",
+          "description": "Provides the ability read the VEX document for a project"
+        },
+        {
+          "name": "VULNERABILITY_ANALYSIS_UPDATE",
+          "description": "Provides the ability to make analysis decisions on vulnerabilities and upload supported VEX documents for a project"
+        },
+        {
+          "name": "VULNERABILITY_MANAGEMENT",
+          "description": "Allows all management permissions of internally-defined vulnerabilities"
+        },
+        {
+          "name": "VULNERABILITY_MANAGEMENT_CREATE",
+          "description": "Allows creation of internally-defined vulnerabilities"
+        },
+        {
+          "name": "VULNERABILITY_MANAGEMENT_DELETE",
+          "description": "Allows management of internally-defined vulnerabilities"
+        },
+        {
+          "name": "VULNERABILITY_MANAGEMENT_READ",
+          "description": "Allows reading internally-defined vulnerabilities"
+        },
+        {
+          "name": "VULNERABILITY_MANAGEMENT_UPDATE",
+          "description": "Allows updating internally-defined vulnerabilities and vulnerability tags"
+        }
+      ],
+      "aclProjects": []
+    },
+    {
+      "uuid": "bd4e7ab1-0751-4673-8b76-9f89a3b05d03",
+      "name": "Auditor",
+      "permissions": [
+        {
+          "name": "VIEW_POLICY_VIOLATION",
+          "description": "Provides the ability to view policy violations"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        },
+        {
+          "name": "VULNERABILITY_ANALYSIS_READ",
+          "description": "Provides the ability read the VEX document for a project"
+        }
+      ],
+      "aclProjects": []
+    },
+    {
+      "uuid": "9ec22a11-c3ca-4e41-9289-7494da2dceba",
+      "name": "Automation",
+      "permissions": [
+        {
+          "name": "BOM_UPLOAD",
+          "description": "Allows the ability to upload CycloneDX Software Bill of Materials (SBOM)"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        }
+      ],
+      "aclProjects": []
+    },
+    {
+      "uuid": "84fe41b8-24be-439e-9a57-cfcd5017b73d",
+      "name": "Developer",
+      "permissions": [
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        }
+      ],
+      "aclProjects": []
+    },
+    {
+      "uuid": "92a279d6-d80e-4129-be2f-888c035034c3",
+      "name": "Group Lead",
+      "permissions": [
+        {
+          "name": "PORTFOLIO_MANAGEMENT_CREATE",
+          "description": "Allows the creation of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_UPDATE",
+          "description": "Allows the updating of data in the portfolio"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        },
+        {
+          "name": "VULNERABILITY_ANALYSIS_UPDATE",
+          "description": "Provides the ability to make analysis decisions on vulnerabilities and upload supported VEX documents for a project"
+        }
+      ],
+      "aclProjects": []
+    },
+    {
+      "uuid": "67ae40f6-44c1-4af6-b528-917ac688fab3",
+      "name": "Maintainer",
+      "permissions": [
+        {
+          "name": "POLICY_VIOLATION_ANALYSIS",
+          "description": "Provides the ability to make analysis decisions on policy violations"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_UPDATE",
+          "description": "Allows the updating of data in the portfolio"
+        },
+        {
+          "name": "VIEW_POLICY_VIOLATION",
+          "description": "Provides the ability to view policy violations"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        },
+        {
+          "name": "VULNERABILITY_ANALYSIS_UPDATE",
+          "description": "Provides the ability to make analysis decisions on vulnerabilities and upload supported VEX documents for a project"
+        }
+      ],
+      "aclProjects": []
+    },
+    {
+      "uuid": "123393b2-373d-49b5-9c2d-dadb3ae0884a",
+      "name": "Portfolio Managers",
+      "permissions": [
+        {
+          "name": "PORTFOLIO_MANAGEMENT",
+          "description": "Allows the creation, modification, and deletion of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_CREATE",
+          "description": "Allows the creation of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_DELETE",
+          "description": "Allows the deletion of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_READ",
+          "description": "Allows the reading of data in the portfolio"
+        },
+        {
+          "name": "PORTFOLIO_MANAGEMENT_UPDATE",
+          "description": "Allows the updating of data in the portfolio"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        }
+      ],
+      "aclProjects": []
+    },
+    {
+      "uuid": "5f0cb0a0-afdc-4f2a-8966-f219a67894c4",
+      "name": "Product Owner",
+      "permissions": [
+        {
+          "name": "PORTFOLIO_MANAGEMENT_UPDATE",
+          "description": "Allows the updating of data in the portfolio"
+        },
+        {
+          "name": "VIEW_POLICY_VIOLATION",
+          "description": "Provides the ability to view policy violations"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        }
+      ],
+      "aclProjects": []
+    },
+    {
+      "uuid": "85813534-9e47-4b18-ba9d-c87dd4204a86",
+      "name": "org-group-auditors",
+      "permissions": [
+        {
+          "name": "VIEW_POLICY_VIOLATION",
+          "description": "Provides the ability to view policy violations"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        }
+      ],
+      "aclProjects": [
+        {
+          "uuid": "07337717-1edc-467b-a82e-53822878930e",
+          "name": "Org Group",
+          "isLatest": false,
+          "lastInheritedRiskScore": 1757.0,
+          "collectionLogic": "AGGREGATE_DIRECT_CHILDREN",
+          "hasChildren": true,
+          "active": true
+        }
+      ]
+    },
+    {
+      "uuid": "ee29f3a2-758d-4e5c-8ee8-768d32d31bd8",
+      "name": "org-group-devops-leads",
+      "permissions": [
+        {
+          "name": "VIEW_POLICY_VIOLATION",
+          "description": "Provides the ability to view policy violations"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        }
+      ],
+      "aclProjects": [
+        {
+          "uuid": "da2e82d4-08ef-495b-9290-9ed3521d22be",
+          "name": "E-Devops",
+          "isLatest": false,
+          "lastInheritedRiskScore": 1757.0,
+          "collectionLogic": "AGGREGATE_DIRECT_CHILDREN",
+          "parent": {
+            "uuid": "07337717-1edc-467b-a82e-53822878930e",
+            "name": "Org Group"
+          },
+          "hasChildren": true,
+          "active": true
+        }
+      ]
+    },
+    {
+      "uuid": "d419a54c-b8d2-4e6d-9de9-c241a834e029",
+      "name": "org-group-a-leads",
+      "permissions": [
+        {
+          "name": "VIEW_POLICY_VIOLATION",
+          "description": "Provides the ability to view policy violations"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        }
+      ],
+      "aclProjects": [
+        {
+          "uuid": "0caae44d-3024-4997-99de-1db06b81438a",
+          "name": "A",
+          "isLatest": false,
+          "lastInheritedRiskScore": 1209.0,
+          "collectionLogic": "AGGREGATE_DIRECT_CHILDREN",
+          "parent": {
+            "uuid": "da2e82d4-08ef-495b-9290-9ed3521d22be",
+            "name": "E-Devops"
+          },
+          "hasChildren": true,
+          "active": true
+        }
+      ]
+    },
+    {
+      "uuid": "42239084-1280-43ad-b07c-b9df26399ae5",
+      "name": "org-group-a-ci",
+      "permissions": [],
+      "aclProjects": [
+        {
+          "uuid": "aa3073d0-fa50-4eb9-9574-e30cc688b5b3",
+          "name": "A",
+          "isLatest": false,
+          "lastInheritedRiskScore": 1209.0,
+          "collectionLogic": "AGGREGATE_LATEST_VERSION_CHILDREN",
+          "parent": {
+            "uuid": "0caae44d-3024-4997-99de-1db06b81438a",
+            "name": "A"
+          },
+          "hasChildren": true,
+          "active": true
+        },
+        {
+          "uuid": "3baf43f0-d384-44ff-81d8-4e1b5287e16b",
+          "name": "A",
+          "version": "1.0.0",
+          "classifier": "CONTAINER",
+          "directDependencies": "[{\"name\": \"debian\", \"uuid\": \"34d51382-9df9-471e-87d0-107ce4a8bf3a\", \"version\": \"12.11\", \"objectType\": \"COMPONENT\"}, {\"name\": \"var/www/html/vendor/composer/installed.json\", \"uuid\": \"6247e0fb-7203-4763-a2da-1a1beccbe5c3\", \"objectType\": \"COMPONENT\"}]",
+          "isLatest": true,
+          "lastBomImport": 1792671330335,
+          "lastBomImportFormat": "CycloneDX 1.7",
+          "lastVulnerabilityAnalysis": 1793601611044,
+          "lastInheritedRiskScore": 1209.0,
+          "authors": [],
+          "metadata": {
+            "tools": {
+              "components": [
+                {
+                  "authors": [],
+                  "group": "aquasecurity",
+                  "name": "trivy",
+                  "version": "0.75.0",
+                  "classifier": "APPLICATION",
+                  "expandDependencyGraph": false,
+                  "isInternal": false
+                }
+              ]
+            }
+          },
+          "parent": {
+            "uuid": "aa3073d0-fa50-4eb9-9574-e30cc688b5b3",
+            "name": "A"
+          },
+          "hasChildren": false,
+          "active": true
+        }
+      ]
+    },
+    {
+      "uuid": "ce2de2b3-7509-454e-9e11-d25f1d2f5d05",
+      "name": "org-group-a-team",
+      "permissions": [
+        {
+          "name": "VIEW_POLICY_VIOLATION",
+          "description": "Provides the ability to view policy violations"
+        },
+        {
+          "name": "VIEW_PORTFOLIO",
+          "description": "Provides the ability to view the portfolio of projects, components, and licenses"
+        },
+        {
+          "name": "VIEW_VULNERABILITY",
+          "description": "Provides the ability to view the vulnerabilities projects are affected by"
+        },
+        {
+          "name": "VULNERABILITY_ANALYSIS_UPDATE",
+          "description": "Provides the ability to make analysis decisions on vulnerabilities and upload supported VEX documents for a project"
+        }
+      ],
+      "aclProjects": [
+        {
+          "uuid": "aa3073d0-fa50-4eb9-9574-e30cc688b5b3",
+          "name": "A",
+          "isLatest": false,
+          "lastInheritedRiskScore": 1209.0,
+          "collectionLogic": "AGGREGATE_LATEST_VERSION_CHILDREN",
+          "parent": {
+            "uuid": "0caae44d-3024-4997-99de-1db06b81438a",
+            "name": "A"
+          },
+          "hasChildren": true,
+          "active": true
+        }
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "team-a-type",
+      "projects": []
+    },
+    {
+      "name": "team-b-type",
+      "projects": []
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "fullname": null,
+      "email": "admin@localhost",
+      "teams": [
+        {
+          "uuid": "a5c89d25-35b3-485f-886f-1562116911f8",
+          "name": "Administrators"
+        }
+      ],
+      "suspended": false
+    },
+    {
+      "username": "sentenz",
+      "fullname": "Sentenz",
+      "email": "sentenz@group.com",
+      "teams": [],
+      "suspended": false
+    }
+  ],
+  "serviceAccounts": [
+    {
+      "name": "group-a-ci",
+      "username": "svc:group-a-ci",
+      "email": "group-a-ci@example.com",
+      "suspended": false,
+      "permissions": [
+        "BOM_UPLOAD",
+        "PROJECT_CREATION_UPLOAD"
+      ],
+      "teams": [
+        {
+          "uuid": "42239084-1280-43ad-b07c-b9df26399ae5",
+          "name": "group-a-ci"
+        }
+      ],
+      "apiKeys": [
+        {
+          "public_id": "VfaEMgcQ",
+          "comment": "created for team group-a-ci",
+          "created_at": 1793604548058,
+          "last_used_at": null,
+          "expires_at": 1825140548042
+        }
+      ]
+    },
+    {
+      "name": "group-b-ci",
+      "username": "svc:group-b-ci",
+      "email": "group-b-ci@example.com",
+      "suspended": false,
+      "permissions": [
+        "BOM_UPLOAD",
+        "PROJECT_CREATION_UPLOAD"
+      ],
+      "teams": [
+        {
+          "uuid": "6eb8bd7f-98da-4eea-bf5e-d685a5cf196b",
+          "name": "group-b-ci"
+        }
+      ],
+      "apiKeys": [
+        {
+          "public_id": "dyc79VIU",
+          "comment": "created for team group-b-ci",
+          "created_at": 1793604548157,
+          "last_used_at": null,
+          "expires_at": 1825140548153
+        }
+      ]
+    }
+  ]
+}
