@@ -14,19 +14,7 @@ source ./../scripts/shell/pkg.sh
 # Constant Variables
 
 readonly -A GO_PACKAGES=(
-  ["tflint"]=""
-  ["sops"]=""
-)
-
-readonly -A APT_PACKAGES=(
-  ["make"]=""
-  ["git"]=""
-  ["jq"]=""
-  ["bash"]=""
-  ["ca-certificates"]=""
-  ["snapd"]=""
-  ["python3-pip"]=""
-  ["go"]=""
+  [""]=""
 )
 
 # Control Flow Logic
@@ -40,12 +28,6 @@ function teardown() {
   ((retval |= $?))
 
   pkg_go_clean
-  ((retval |= $?))
-
-  pkg_apt_uninstall_list APT_PACKAGES
-  ((retval |= $?))
-
-  pkg_apt_clean
   ((retval |= $?))
 
   return "${retval}"

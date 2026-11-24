@@ -13,8 +13,8 @@ source ./../scripts/shell/pkg.sh
 
 # Constant Variables
 
-readonly -A GO_PACKAGES=(
-  ["go.mozilla.org/sops/cmd/sops"]="3.4.0"
+readonly -A NPM_PACKAGES=(
+  ["lefthook"]="2.1.6"
 )
 
 # Control Flow Logic
@@ -22,10 +22,10 @@ readonly -A GO_PACKAGES=(
 function setup() {
   local -i retval=0
 
-  pkg_go_install_list GO_PACKAGES
+  pkg_npm_install_list NPM_PACKAGES
   ((retval |= $?))
 
-  pkg_go_clean
+  pkg_npm_clean
   ((retval |= $?))
 
   return "${retval}"
