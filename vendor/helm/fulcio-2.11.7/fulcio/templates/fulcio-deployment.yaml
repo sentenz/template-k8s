@@ -1,0 +1,205 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fulcio.fullname" . }}
+{{ include "fulcio.namespace" . | indent 2 }}
+  labels:
+    {{- include "fulcio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "fulcio.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/fulcio-configmap.yaml") . | sha256sum }}
+        {{- if .Values.server.podAnnotations }}
+        {{- toYaml .Values.server.podAnnotations | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "fulcio.labels" . | nindent 8 }}
+        {{- if .Values.server.podLabels }}
+        {{- toYaml .Values.server.podLabels | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ template "fulcio.serviceAccountName" . }}
+      # This doesn't actually use Kubernetes credentials, so don't mount them in.
+      automountServiceAccountToken: {{ .Values.server.serviceAccount.mountToken }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+{{- if and (not .Values.server.args.disable_ct_log) .Values.init.enabled }}
+      initContainers:
+        - name: "check-ctlog-health"
+          image: "{{ template "fulcio.image" (dict "image" .Values.init.image.curl "global" .Values.global) }}"
+          imagePullPolicy: {{ .Values.init.image.curl.imagePullPolicy }}
+          command: ["sh", "-c", "until curl --max-time 10 {{ template "fulcio.ctlog.url" . }}/ct/v1/get-roots ; do echo waiting for {{ .Values.ctlog.name }}; sleep 5; done;"]
+{{- if .Values.init.containerSecurityContext }}
+          securityContext:
+{{ toYaml .Values.init.containerSecurityContext | indent 12 }}
+{{- end }}
+          resources:
+{{ toYaml .Values.init.containerResources | indent 12 }}
+      {{- if .Values.init.extraInitContainers }}
+{{ toYaml .Values.init.extraInitContainers | indent 8 }}
+      {{- end }}
+{{- end }}
+      containers:
+        - name: {{ template "fulcio.fullname" . }}
+          image: "{{ template "fulcio.image" (dict "image" .Values.server.image "global" .Values.global) }}"
+          imagePullPolicy: "{{ .Values.server.image.pullPolicy }}"
+          ports:
+{{- include "fulcio.containerPorts" .Values.server.service.ports | indent 12 }}
+          args:
+            - "serve"
+            - "--port={{ .Values.server.args.port }}"
+            - "--grpc-port={{ .Values.server.args.grpcPort }}"
+            - "--ca={{ .Values.server.args.certificateAuthority }}"
+            {{- if eq .Values.server.args.certificateAuthority "googleca" }}
+            - "--gcp_private_ca_parent={{ .Values.server.args.gcp_private_ca_parent }}"
+            {{- end }}
+            {{- if eq .Values.server.args.certificateAuthority "pkcs11ca" }}
+            - "--hsm-caroot-id={{ .Values.server.args.hsm_caroot_id }}"
+            {{- with .Values.server.args.aws_hsm_root_ca_path }}
+            - "--aws-hsm-root-ca-path={{ . }}"
+            {{- end }}
+            {{- end }}
+            {{- if eq .Values.server.args.certificateAuthority "fileca" }}
+            - "--fileca-key"
+            - "/var/run/fulcio-secrets/key.pem"
+            - "--fileca-cert"
+            - "/var/run/fulcio-secrets/cert.pem"
+            - "--fileca-key-passwd"
+            - "$(PASSWORD)"
+            {{- end }}
+            {{- if .Values.server.logging.production }}
+            - "--log_type=prod"
+            {{- end -}}
+            {{- if eq .Values.server.args.certificateAuthority "kmsca" }}
+            - "--kms-resource={{ .Values.server.args.kms_resource }}"
+            - "--kms-cert-chain-path=/etc/fulcio-config/chain.pem"
+            {{- end }}
+            {{- if eq .Values.server.args.certificateAuthority "tinkca" }}
+            - "--tink-kms-resource={{ .Values.server.args.tink_kms_resource }}"
+            - "--tink-cert-chain-path=/etc/fulcio-config/chain.pem"
+            - "--tink-keyset-path=/etc/fulcio-config/tink.keyset.enc"
+            {{- end }}
+            - "--ct-log-url={{ template "fulcio.ctlog.url" . }}"
+            {{- if .Values.server.args.ct_log_origin }}
+            - "--ct-log-origin={{ .Values.server.args.ct_log_origin }}"
+            {{- end }}
+            - '--config-path=/etc/fulcio-config/config.{{- if eq .Values.config.format "yaml"}}yaml{{- else }}json{{- end }}'
+            {{- if .Values.server.grpcSvcTLS }}
+            - "--grpc-tls-certificate=/var/run/grpc-tls/cert.pem"
+            - "--grpc-tls-key=/var/run/grpc-tls/key.pem"
+            {{- end }}
+            {{- range .Values.server.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            {{- if eq .Values.server.args.certificateAuthority "fileca" }}
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.secret }}
+                  key: password
+            {{- end }}
+            {{- if and (eq .Values.server.args.certificateAuthority "kmsca") (eq .Values.server.kmsType "aws") }}
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.server.awsKmsRegion }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.awsKmsCredentialsSecretName }}
+                  key: accessKeyId
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.awsKmsCredentialsSecretName }}
+                  key: secretAccessKey
+            {{- end }}
+            {{- with .Values.server.extraEnv }}
+              {{- . | toYaml | nindent 12 }}
+            {{- end }}
+{{- if .Values.server.livenessProbe }}
+          livenessProbe:
+{{ toYaml .Values.server.livenessProbe | indent 12 }}
+{{- end }}
+{{- if .Values.server.readinessProbe }}
+          readinessProbe:
+{{ toYaml .Values.server.readinessProbe | indent 12 }}
+{{- end }}
+          volumeMounts:
+            - name: fulcio-config
+              mountPath: /etc/fulcio-config
+            - name: oidc-info
+              mountPath: /var/run/fulcio
+           {{- if eq .Values.server.args.certificateAuthority "fileca" }}
+            - name: fulcio-cert
+              mountPath: "/var/run/fulcio-secrets"
+              readOnly: true
+           {{- end }}
+           {{- if .Values.server.grpcSvcTLS }}
+            - name: grpc-tls
+              mountPath: "/var/run/grpc-tls"
+              readOnly: true
+           {{- end }}
+    {{- if .Values.server.resources }}
+          resources:
+{{ toYaml .Values.server.resources | indent 12 }}
+    {{- end }}
+    {{- if .Values.server.containerSecurityContext }}
+          securityContext:
+{{ toYaml .Values.server.containerSecurityContext | indent 12 }}
+    {{- end }}
+    {{- if .Values.server.securityContext }}
+      securityContext:
+{{ toYaml .Values.server.securityContext | indent 8 }}
+    {{- end }}
+      volumes:
+        - name: fulcio-config
+          configMap:
+            name: {{ template "fulcio.config" . }}
+        - name: oidc-info
+          projected:
+            sources:
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+                      mode: 0666
+        {{- if eq .Values.server.args.certificateAuthority "fileca" }}
+        - name: fulcio-cert
+          secret:
+            secretName: {{ .Values.server.secret }}
+            items:
+              - key: private
+                path: key.pem
+              - key: cert
+                path: cert.pem
+        {{- end }}
+        {{- if .Values.server.grpcSvcTLS }}
+        - name: grpc-tls
+          secret:
+            secretName: {{ .Values.server.grpcSvcTLS.secretName }}
+            items:
+              - key: {{ .Values.server.grpcSvcTLS.certField }}
+                path: cert.pem
+              - key: {{ .Values.server.grpcSvcTLS.keyField }}
+                path: key.pem
+        {{- end }}
+    {{- if .Values.server.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.server.nodeSelector | indent 8 }}
+    {{- end }}
+    {{- if .Values.server.tolerations }}
+      tolerations:
+{{ toYaml .Values.server.tolerations | indent 8 }}
+    {{- end }}
+    {{- if .Values.server.affinity }}
+      affinity:
+{{ toYaml .Values.server.affinity | indent 8 }}
+    {{- end }}

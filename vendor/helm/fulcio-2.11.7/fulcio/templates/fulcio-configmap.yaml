@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "fulcio.config" . }}
+{{ include "fulcio.namespace" . | indent 2 }}
+  labels:
+    {{- include "fulcio.labels" . | nindent 4 }}
+data:
+# We now expect a new field "format" for checking the format of the
+# config's content.
+# If the field format is empty, the default case is consider that is a
+# json or is empty and should use the defaults as defined on the file _helpers.tpl
+{{- if eq .Values.config.format "yaml"}}
+  config.yaml: |-
+{{ include "fulcio.configmap.yaml" . | indent 4 }}
+{{- else }}
+  config.json: |-
+{{ include "fulcio.configmap.contents" . | indent 4 }}
+{{- end }}
+  {{- if (eq .Values.server.args.certificateAuthority "kmsca")}}
+  chain.pem: {{.Values.server.args.kms_cert_chain | quote }}
+  {{- end }}
+  {{- if (eq .Values.server.args.certificateAuthority "tinkca")}}
+  chain.pem: {{ .Values.server.args.tink_kms_cert_chain | quote }}
+  tink.keyset.enc: {{ .Values.server.args.tink_enc_keyset | quote }}
+  {{- end }}

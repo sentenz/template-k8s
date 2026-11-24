@@ -1,0 +1,23 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+helmGlobals:
+  chartHome: ../../../../../vendor/helm
+
+helmCharts:
+  - name: fulcio
+    version: 2.11.7
+    repo: https://sigstore.github.io/helm-charts
+    releaseName: fulcio
+    namespace: fulcio-system
+    valuesFile: values-fulcio.yaml
+  - name: rekor
+    version: 1.8.15
+    repo: https://sigstore.github.io/helm-charts
+    releaseName: rekor
+    namespace: rekor-system
+    valuesFile: values-rekor.yaml

@@ -1,0 +1,66 @@
+{{- if .Values.backfillredis.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "rekor.backfillredis.fullname" . }}
+{{ include "rekor.namespace" . | indent 2 }}
+  labels:
+    {{- include "rekor.labels" . | nindent 4 }}
+{{- if .Values.backfillredis.annotations }}
+  annotations:
+{{ toYaml .Values.backfillredis.annotations | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.backfillredis.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ .Values.backfillredis.ttlSecondsAfterFinished }}
+{{- end }}
+  template:
+    metadata:
+    {{- if .Values.backfillredis.podAnnotations }}
+      annotations:
+        {{ toYaml .Values.backfillredis.podAnnotations | nindent 8 }}
+    {{- end }}
+      labels:
+        {{- include "rekor.labels" . | nindent 8 }}
+        {{- if .Values.backfillredis.podLabels }}
+        {{ toYaml .Values.backfillredis.podLabels | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ template "rekor.serviceAccountName.server" . }}
+      restartPolicy: Never
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ template "rekor.backfillredis.fullname" . }}
+          image: "{{ template "rekor.image" (dict "image" .Values.backfillredis.image "global" .Values.global) }}"
+          imagePullPolicy: "{{ .Values.backfillredis.image.pullPolicy }}"
+          args: [
+            "--hostname={{ template "redis.hostname" . }}",
+            "--port={{ .Values.redis.port }}",
+            "--rekor-address={{ .Values.backfillredis.rekorAddress }}",
+            "--start={{ .Values.backfillredis.startIndex }}",
+            "--end={{ .Values.backfillredis.endIndex }}",
+          ]
+    {{- if .Values.backfillredis.containerSecurityContext }}
+          securityContext:
+{{ toYaml .Values.backfillredis.containerSecurityContext | indent 12 }}
+    {{- end }}
+    {{- if .Values.backfillredis.securityContext }}
+      securityContext:
+{{ toYaml .Values.backfillredis.securityContext | indent 8 }}
+    {{- end }}
+    {{- if .Values.backfillredis.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.backfillredis.nodeSelector | indent 8 }}
+    {{- end }}
+    {{- if .Values.backfillredis.tolerations }}
+      tolerations:
+{{ toYaml .Values.backfillredis.tolerations | indent 8 }}
+    {{- end }}
+    {{- if .Values.backfillredis.affinity }}
+      affinity:
+{{ toYaml .Values.backfillredis.affinity | indent 8 }}
+    {{- end }}
+{{- end }}

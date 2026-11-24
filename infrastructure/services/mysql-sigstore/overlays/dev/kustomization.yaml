@@ -1,0 +1,30 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+helmGlobals:
+  chartHome: ../../../../../vendor/helm
+
+helmCharts:
+  - name: mysql
+    version: 14.0.3
+    repo: https://charts.bitnami.com/bitnami
+    releaseName: mysql-sigstore
+    namespace: mysql-sigstore
+    valuesFile: values.yaml
+
+secretGenerator:
+  - name: mysql-sigstore-auth
+    namespace: mysql-sigstore
+    literals:
+      - mysql-root-password=longpassword
+      - mysql-password=sigstore
+
+patches:
+  - path: patch-selectors.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true

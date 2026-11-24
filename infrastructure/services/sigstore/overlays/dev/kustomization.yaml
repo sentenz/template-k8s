@@ -1,0 +1,63 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+helmGlobals:
+  chartHome: ../../../../../vendor/helm
+
+helmCharts:
+  - name: fulcio
+    version: 2.11.7
+    repo: https://sigstore.github.io/helm-charts
+    releaseName: fulcio
+    namespace: fulcio-system
+    valuesFile: values-fulcio.yaml
+  - name: rekor
+    version: 1.8.15
+    repo: https://sigstore.github.io/helm-charts
+    releaseName: rekor
+    namespace: rekor-system
+    valuesFile: values-rekor.yaml
+
+# NOTE Development-only credentials.
+#
+# `sigstore-mysql` bridges the dedicated MySQL instance (mysql-sigstore) into
+# the key names the Fulcio/Rekor charts expect. It is created in both
+# `rekor-system` and `trillian-system` because the Rekor server and the Trillian
+# log server/signer each reference it via a namespace-scoped secretKeyRef.
+#
+# `fulcio-tls` and `rekor-tls` are self-signed certificates SOPS-encrypted under
+# `clusters/dev/secrets/` and decrypted in place before rendering.
+#
+# Persistent environments supply all of these Secrets externally.
+secretGenerator:
+  - name: sigstore-mysql
+    namespace: rekor-system
+    literals:
+      - mysql-user=sigstore
+      - mysql-password=sigstore
+      - mysql-database=trillian
+  - name: sigstore-mysql
+    namespace: trillian-system
+    literals:
+      - mysql-user=sigstore
+      - mysql-password=sigstore
+      - mysql-database=trillian
+  - name: fulcio-tls
+    namespace: fulcio-system
+    type: kubernetes.io/tls
+    files:
+      - tls.crt=../../../../../clusters/dev/secrets/fulcio.localhost+1.pem
+      - tls.key=../../../../../clusters/dev/secrets/fulcio.localhost+1-key.pem
+  - name: rekor-tls
+    namespace: rekor-system
+    type: kubernetes.io/tls
+    files:
+      - tls.crt=../../../../../clusters/dev/secrets/rekor.localhost+1.pem
+      - tls.key=../../../../../clusters/dev/secrets/rekor.localhost+1-key.pem
+
+generatorOptions:
+  disableNameSuffixHash: true

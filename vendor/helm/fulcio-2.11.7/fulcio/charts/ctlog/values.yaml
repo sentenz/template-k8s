@@ -1,0 +1,166 @@
+namespace:
+  create: false
+  name: ctlog-system
+
+imagePullSecrets: []
+
+server:
+  replicaCount: 1
+  config:
+    key: treeID
+    treeID: ""
+  image:
+    registry: ghcr.io
+    repository: sigstore/scaffolding/ct_server
+    pullPolicy: IfNotPresent
+    version: v0.7.33@sha256:24293fa1ed5083412e2a8ad4a97c6c2318b3f414fea64c054d0b5b95e39e3233
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 6962
+    initialDelaySeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 6962
+    initialDelaySeconds: 10
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    mountToken: false
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "6963"
+  podLabels: {}
+  portHTTP: 6962
+  portHTTPMetrics: 6963
+  service:
+#    backendConfig:
+#      name: ctlog-backend-config
+#      spec: # https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-configuration#configuring_ingress_features_through_backendconfig_parameters
+#        securityPolicy:
+#          name: ctlog-security-policy
+#        logging:
+#          enable: true
+#        healthCheck:
+#          port: 6962
+#          requestPath: "/healthz"
+#          type: HTTP
+    type: ClusterIP
+    ports:
+      - name: 6962-tcp
+        port: 80
+        protocol: TCP
+        targetPort: 6962
+      - name: 6963-tcp
+        port: 6963
+        protocol: TCP
+        targetPort: 6963
+  ingress:
+    enabled: false
+    className: nginx
+    hosts:
+      - path: /
+    annotations: {}
+    tls: []
+  ingresses:
+    - enabled: false
+      name: "gce-ingress"
+      className: "gce"
+      hosts:
+        - host: fulcio.localhost
+          paths:
+            - path: /test
+              pathType: Prefix
+            - path: /other-shard
+              serviceName: other-shard
+      annotations: {}
+      tls: []
+      staticGlobalIP: lb-ext-ip
+      frontendConfigSpec:   # https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-configuration#configuring_ingress_features_through_frontendconfig_parameters
+        sslPolicy: ctlog-ssl-policy
+        redirectToHttps:
+          enabled: true
+  extraArgs: []
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65533
+  tolerations: []
+  nodeSelector: {}
+  affinity: {}
+
+createtree:
+  enabled: true
+  name: createtree
+  # This must be < 20 characters
+  displayName: ctlog-tree
+  image:
+    registry: ghcr.io
+    repository: sigstore/scaffolding/createtree
+    pullPolicy: IfNotPresent
+    version: v0.7.33@sha256:4c845ced03d86217e61652659d0b9718771eb15265d8251173c94c388f0d0aad
+  ttlSecondsAfterFinished: 3600
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    mountToken: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65533
+  annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  tolerations: []
+  nodeSelector: {}
+  affinity: {}
+
+createctconfig:
+  enabled: true
+  replicaCount: 1
+  backoffLimit: 6
+  name: createctconfig
+  initContainerImage:
+    curl:
+      registry: docker.io
+      repository: curlimages/curl
+      version: 8.17.0@sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
+      imagePullPolicy: IfNotPresent
+  image:
+    registry: ghcr.io
+    repository: sigstore/scaffolding/createctconfig
+    pullPolicy: IfNotPresent
+    version: v0.7.33@sha256:e591f98e3899aa86772a2b033d4a0353ba99db2d17d684970731fb6f829456b6
+  fulcioURL: "http://fulcio-server.fulcio-system.svc"
+  logPrefix: sigstorescaffolding
+  privateKeyPasswordSecretName: ""
+  ttlSecondsAfterFinished: 3600
+  pubkeysecret: "ctlog-public-key"
+  # If there's an existing private key that should be used for ctlog, specify
+  # here. This is important if a key has been created and imported into TUF.
+  privateSecret: ""
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    mountToken: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65533
+  annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  tolerations: []
+  nodeSelector: {}
+  affinity: {}
+
+trillian:
+  namespace: trillian-system
+  logServer:
+    name: trillian-logserver
+    portRPC: 8091
+
+# Force namespace of namespaced resources
+forceNamespace: ""

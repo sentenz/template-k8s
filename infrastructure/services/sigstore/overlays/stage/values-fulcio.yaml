@@ -1,0 +1,39 @@
+---
+# Fulcio — stage. Expects the `fulcio-tls` Secret in `fulcio-system` and the
+# `sigstore-mysql` Secret in `rekor-system` and `trillian-system` to be supplied
+# externally.
+namespace:
+  create: false
+  name: fulcio-system
+forceNamespace: fulcio-system
+
+server:
+  args:
+    certificateAuthority: fileca
+  ingress:
+    http:
+      enabled: true
+      className: traefik
+      annotations:
+        traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+      hosts:
+        - path: /
+          host: fulcio.example.com
+      tls:
+        - secretName: fulcio-tls
+          hosts:
+            - fulcio.example.com
+    grpc:
+      enabled: false
+
+ctlog:
+  enabled: true
+  namespace:
+    create: false
+    name: ctlog-system
+  forceNamespace: ctlog-system
+  trillian:
+    namespace: trillian-system
+    logServer:
+      name: trillian-logserver
+      portRPC: 8091
