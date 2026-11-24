@@ -159,8 +159,16 @@ k8s-render: k8s-validate
 
 ## Deploy the selected Kubernetes cluster composition
 k8s-deploy: k8s-validate k8s-confirm
-	@$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone \
-		| kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f -
+	@manifest="$$(mktemp)"
+	trap 'rm -f "$$manifest"' EXIT
+	$(K8S_TOOLS_ALIAS) kustomize build "$(K8S_CLUSTER_PATH)" --enable-helm --load-restrictor=LoadRestrictionsNone > "$$manifest"
+	if [[ "$(K8S_ENV)" == dev ]]; then
+		$(SIGSTORE_SUBMAKE) -s k8s-sigstore-inputs
+		$(SIGSTORE_KUBECTL) apply -f "$$manifest"
+		$(SIGSTORE_SUBMAKE) -s k8s-sigstore-admission
+	else
+		kubectl apply --kubeconfig "$(K8S_KUBECONFIG)" -f "$$manifest"
+	fi
 .PHONY: k8s-deploy
 
 ## Destroy the selected Kubernetes cluster composition
@@ -200,6 +208,8 @@ k8s-observability:
 	@echo "──── K8s Pods ────────────────────────────────────────────────────────────────────────────"
 	@$(MAKE) -s k8s-observability-pod
 .PHONY: k8s-observability
+
+include infrastructure/services/sigstore/deploy.mk
 
 # ─── Helm Charts ─────────────────────────────────────────────────────────────────────────────────
 
@@ -1001,46 +1011,10 @@ sast-trufflehog-git:
 # ─── Software Supply Chain Security (SSCS) ───────────────────────────────────────────────────────
 
 SSCS_COSIGN_IMAGE ?= ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d
-# --network host: cosign must reach the local registry (localhost:5000) and the
-# self-hosted Sigstore endpoints (fulcio.localhost / rekor.localhost) by name.
-# --add-host: *.localhost does not resolve inside containers (WSL2-only DNS), so
-# map the Sigstore hostnames to the local proxy that fronts the Kind cluster.
-SSCS_COSIGN_ADD_HOSTS ?= --add-host fulcio.localhost:127.0.0.1 --add-host rekor.localhost:127.0.0.1
-# Self-signed ingress certificates (fulcio.localhost + rekor.localhost) that cosign must trust
-# to reach the self-hosted endpoints over TLS. Built from clusters/<env>/secrets/.
-SSCS_COSIGN_TRUST_BUNDLE ?= logs/sast/sigstore-ingress-ca.pem
-# Pass the TLS trust bundle into the cosign container (mounted at /workspace).
-# Go falls back to the system roots if the file is absent, so this is safe for
-# all cosign targets (key-based flows included).
-SSCS_COSIGN_TLS_ENV ?= -e SSL_CERT_FILE=/workspace/$(SSCS_COSIGN_TRUST_BUNDLE)
-# Run as the host user so cosign can write artifacts (signing config, bundles)
-# into the workspace; the image's default nonroot user cannot.
+# This alias supports the existing key-based signing targets.
+SSCS_COSIGN_ADD_HOSTS ?=
+SSCS_COSIGN_TLS_ENV ?=
 SSCS_COSIGN_ALIAS := docker run --rm --user "$(shell id -u):$(shell id -g)" --network host $(SSCS_COSIGN_ADD_HOSTS) $(SSCS_COSIGN_TLS_ENV) -v "${PWD}:/workspace" -w /workspace "$(SSCS_COSIGN_IMAGE)"
-# Self-hosted Sigstore endpoints (see infrastructure/services/sigstore).
-SAST_FULCIO_URL ?= https://fulcio.localhost
-SAST_REKOR_URL ?= https://rekor.localhost
-# Kubernetes ServiceAccount identity for Fulcio (see infrastructure/services/sigstore/base/serviceaccount.yaml).
-# Fulcio's default config trusts Kubernetes SA tokens, so a minted token is a valid signing identity.
-SSCS_COSIGN_SA ?= cosign-dev
-SSCS_COSIGN_SA_NAMESPACE ?= fulcio-system
-# Fulcio CA chain secret (key `cert`) created by the chart's createcerts Job; used to verify signatures.
-SAST_FULCIO_CA_SECRET ?= fulcio-server-secret
-SAST_FULCIO_CA_NAMESPACE ?= fulcio-system
-SSCS_COSIGN_CA_FILE ?= logs/sast/fulcio-ca.pem
-# CT-log (ctlog) public key secret, used to build the TrustedRoot for verification.
-SAST_CTLOG_PUBLIC_KEY_SECRET ?= ctlog-public-key
-SAST_CTLOG_NAMESPACE ?= ctlog-system
-# Sigstore TrustedRoot JSON bundling the self-hosted Fulcio CA, Rekor public key, and CT-log key.
-SSCS_COSIGN_TRUSTED_ROOT ?= logs/sast/trusted-root.json
-# Sigstore signing config (cosign 3.x) pointing at the self-hosted Fulcio/Rekor endpoints.
-SSCS_COSIGN_SIGNING_CONFIG ?= logs/sast/signing-config.json
-# Fulcio expects identity tokens minted for audience `sigstore`.
-SSCS_COSIGN_AUDIENCE ?= sigstore
-# The OIDC issuer this cluster mints SA tokens with (verify with
-# `kubectl get --raw /.well-known/openid-configuration`).
-SSCS_COSIGN_OIDC_ISSUER ?= https://kubernetes.default.svc.cluster.local
-# The Fulcio certificate identity for the signing ServiceAccount, asserted at verify time.
-SSCS_COSIGN_IDENTITY = https://kubernetes.io/namespaces/$(SSCS_COSIGN_SA_NAMESPACE)/serviceaccounts/$(SSCS_COSIGN_SA)
 
 ## Generate Cosign key pair
 sscs-cosign-generate-key-pair:
@@ -1084,106 +1058,6 @@ sscs-cosign-verify:
 
 	$(SSCS_COSIGN_ALIAS) verify-attestation --key cosign.pub --type cyclonedx "$(filter-out $@,$(MAKECMDGOALS))" > logs/sbom/sbom.cdx.intoto.jsonl 2> logs/sast/cosign-verify.log
 .PHONY: sscs-cosign-verify
-
-# Usage: make sscs-cosign-token [SSCS_COSIGN_SA=<sa>] [SSCS_COSIGN_SA_NAMESPACE=<ns>]
-#
-## Mint a short-lived OIDC token for the Kubernetes ServiceAccount identity (default 1h)
-sscs-cosign-token:
-	@kubectl --kubeconfig "$(K8S_KUBECONFIG)" create token "$(SSCS_COSIGN_SA)" -n "$(SSCS_COSIGN_SA_NAMESPACE)" --audience="$(SSCS_COSIGN_AUDIENCE)"
-.PHONY: sscs-cosign-token
-
-# Usage: make sscs-cosign-trust-bundle
-#
-## Build the TLS trust bundle (self-signed fulcio.localhost + rekor.localhost certs)
-## that cosign uses to reach the self-hosted endpoints over TLS. Requires the
-## SOPS-decrypted certs under clusters/<env>/secrets/ (run secrets-sops-decrypt first).
-sscs-cosign-trust-bundle:
-	@mkdir -p "$(dir $(SSCS_COSIGN_TRUST_BUNDLE))"
-	@cat "$(K8S_CLUSTER_PATH)/secrets/fulcio.localhost+1.pem" "$(K8S_CLUSTER_PATH)/secrets/rekor.localhost+1.pem" > "$(SSCS_COSIGN_TRUST_BUNDLE)"
-.PHONY: sscs-cosign-trust-bundle
-
-# Usage: make sscs-cosign-trusted-root
-#
-## Build a Sigstore TrustedRoot JSON for the self-hosted Sigstore stack, bundling
-## the Fulcio CA, the Rekor public key, and the CT-log (ctlog) public key. cosign
-## 3.x verify requires this (the new bundle format rejects --certificate-chain).
-sscs-cosign-trusted-root:
-	@mkdir -p "$(dir $(SSCS_COSIGN_TRUSTED_ROOT))"
-	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT
-	kubectl --kubeconfig "$(K8S_KUBECONFIG)" get secret "$(SAST_FULCIO_CA_SECRET)" -n "$(SAST_FULCIO_CA_NAMESPACE)" -o jsonpath='{.data.cert}' | base64 -d > "$$tmp/fulcio.pem"
-	openssl x509 -in "$$tmp/fulcio.pem" -outform DER | base64 -w0 > "$$tmp/fulcio.b64"
-	curl -sk "$(SAST_REKOR_URL)/api/v1/log/publicKey" > "$$tmp/rekor.pem"
-	openssl pkey -pubin -in "$$tmp/rekor.pem" -outform DER | base64 -w0 > "$$tmp/rekor.b64"
-	kubectl --kubeconfig "$(K8S_KUBECONFIG)" get secret "$(SAST_CTLOG_PUBLIC_KEY_SECRET)" -n "$(SAST_CTLOG_NAMESPACE)" -o jsonpath='{.data.public}' | base64 -d > "$$tmp/tlog.pem"
-	openssl pkey -pubin -in "$$tmp/tlog.pem" -outform DER | base64 -w0 > "$$tmp/tlog.b64"
-	python3 -c 'import sys,hashlib,base64,json,os; tmp=sys.argv[1]; fu=sys.argv[2]; re=sys.argv[3]; out=sys.argv[4]; b=lambda n: open(os.path.join(tmp,n)).read().strip(); k=lambda x: base64.b64encode(hashlib.sha256(base64.b64decode(x)).digest()).decode(); f,r,t=b("fulcio.b64"),b("rekor.b64"),b("tlog.b64"); tr={"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1","tlogs":[{"baseUrl":re,"hashAlgorithm":"SHA2_256","publicKey":{"rawBytes":r,"keyDetails":"PKIX_ECDSA_P256_SHA_256","validFor":{"start":"2020-01-01T00:00:00.000Z"}},"logId":{"keyId":k(r)}}],"certificateAuthorities":[{"subject":{"organization":"Linux Foundation","commonName":"fulcio-ca"},"uri":fu,"certChain":{"certificates":[{"rawBytes":f}]},"validFor":{"start":"2020-01-01T00:00:00.000Z"}}],"ctlogs":[{"baseUrl":fu,"hashAlgorithm":"SHA2_256","publicKey":{"rawBytes":t,"keyDetails":"PKIX_ECDSA_P256_SHA_256","validFor":{"start":"2020-01-01T00:00:00.000Z"}},"logId":{"keyId":k(t)}}]}; open(out,"w").write(json.dumps(tr,indent=2)); print("wrote "+out)' "$$tmp" "$(SAST_FULCIO_URL)" "$(SAST_REKOR_URL)" "$(SSCS_COSIGN_TRUSTED_ROOT)"
-.PHONY: sscs-cosign-trusted-root
-
-# Usage: make sscs-cosign-signing-config
-#
-## Create a Sigstore signing config (cosign 3.x) pointing at the self-hosted
-## Fulcio/Rekor endpoints and the cluster's OIDC issuer. cosign 3.x sign no
-## longer accepts --fulcio-url/--rekor-url; the endpoints come from this file.
-sscs-cosign-signing-config:
-	@mkdir -p "$(dir $(SSCS_COSIGN_SIGNING_CONFIG))"
-
-	$(SSCS_COSIGN_ALIAS) signing-config create \
-		--no-default-fulcio --no-default-rekor --no-default-oidc \
-		--fulcio="url=$(SAST_FULCIO_URL),api-version=1,start-time=2020-01-01T00:00:00Z,operator=self-hosted" \
-		--rekor="url=$(SAST_REKOR_URL),api-version=1,start-time=2020-01-01T00:00:00Z,operator=self-hosted" \
-		--rekor-config="ANY" \
-		--oidc-provider="url=$(SSCS_COSIGN_OIDC_ISSUER),api-version=1,start-time=2020-01-01T00:00:00Z,operator=kubernetes" \
-		--out "/workspace/$(SSCS_COSIGN_SIGNING_CONFIG)"
-.PHONY: sscs-cosign-signing-config
-
-# Usage: make sscs-cosign-sign <image_name>
-#
-## Sign an image against the self-hosted Fulcio/Rekor endpoints using the
-## Kubernetes ServiceAccount identity. Mints a fresh SA token (audience
-## `sigstore`) automatically; or pass COSIGN_TOKEN=<token> to reuse one.
-##
-## cosign 3.x notes:
-##   --signing-config  endpoints (Fulcio/Rekor/OIDC) come from the signing config,
-##                     not from --fulcio-url/--rekor-url (removed in 3.x)
-##   --trusted-root    verifies the signature against the self-hosted root after
-##                     signing (SCT + Rekor inclusion), instead of the public root
-##   --yes             auto-accept the Rekor immutable-record consent prompt
-sscs-cosign-sign: sscs-cosign-trust-bundle sscs-cosign-signing-config sscs-cosign-trusted-root
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sscs-cosign-sign <image_name>"; \
-		exit 1; \
-	fi
-	@if [ -z "$${COSIGN_TOKEN:-}" ]; then \
-		COSIGN_TOKEN=$$(kubectl --kubeconfig "$(K8S_KUBECONFIG)" create token "$(SSCS_COSIGN_SA)" -n "$(SSCS_COSIGN_SA_NAMESPACE)" --audience="$(SSCS_COSIGN_AUDIENCE)"); \
-	fi
-
-	$(SSCS_COSIGN_ALIAS) sign \
-		--yes \
-		--signing-config "/workspace/$(SSCS_COSIGN_SIGNING_CONFIG)" \
-		--trusted-root "/workspace/$(SSCS_COSIGN_TRUSTED_ROOT)" \
-		--identity-token "$$COSIGN_TOKEN" \
-		"$(filter-out $@,$(MAKECMDGOALS))"
-.PHONY: sscs-cosign-sign
-
-# Usage: make sscs-cosign-verify-image <image_name>
-#
-## Verify an image signature against the self-hosted Rekor transparency log,
-## trusting the self-hosted Sigstore root (Fulcio CA + Rekor + CT-log keys) and
-## asserting the signing ServiceAccount identity.
-sscs-cosign-verify-image: sscs-cosign-trust-bundle sscs-cosign-trusted-root
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "usage: make sscs-cosign-verify-image <image_name>"; \
-		exit 1; \
-	fi
-
-	@mkdir -p logs/sast
-
-	$(SSCS_COSIGN_ALIAS) verify \
-		--trusted-root "/workspace/$(SSCS_COSIGN_TRUSTED_ROOT)" \
-		--certificate-identity "$(SSCS_COSIGN_IDENTITY)" \
-		--certificate-oidc-issuer "$(SSCS_COSIGN_OIDC_ISSUER)" \
-		"$(filter-out $@,$(MAKECMDGOALS))" 2> logs/sast/cosign-verify-image.log
-.PHONY: sscs-cosign-verify-image
 
 # ─── Container Manager ───────────────────────────────────────────────────────────────────────────
 

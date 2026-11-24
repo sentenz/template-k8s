@@ -81,3 +81,7 @@ Orchestration platform for automating deployment, scaling, and management of con
 - Sentenz [Template DX](https://github.com/sentenz/template-dx) repository.
 - Sentenz [Actions](https://github.com/sentenz/actions) repository.
 - Sentenz [Manager Tools](https://sentenz.github.io/convention/articles/manager-tools/) article.
+
+### Private signing on the development cluster
+
+The development deployment includes [self-hosted Sigstore](infrastructure/services/sigstore/README.md) for keyless signing, private transparency logs, and signature verification in a dedicated test namespace.

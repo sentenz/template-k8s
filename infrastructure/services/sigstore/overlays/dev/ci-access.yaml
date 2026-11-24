@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: release-jobs, namespace: sigstore-test}
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: release-jobs, namespace: sigstore-test}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: release-jobs}
+subjects: [{kind: ServiceAccount, name: release, namespace: sigstore-ci}]

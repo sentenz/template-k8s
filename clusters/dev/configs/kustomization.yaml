@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - ../../../infrastructure/services/postgresql/overlays/dev
+  - ../../../infrastructure/services/sigstore/overlays/dev
 
 components:
   - ../labels
