@@ -1,0 +1,17 @@
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: sigstore-kind-signer
+spec:
+  images:
+    - glob: "**"
+  authorities:
+    - name: release
+      signatureFormat: bundle
+      keyless:
+        trustRootRef: sigstore-kind
+        identities:
+          - issuer: KUBE_ISSUER
+            subject: https://kubernetes.io/namespaces/sigstore-ci/serviceaccounts/release
+      ctlog:
+        trustRootRef: sigstore-kind

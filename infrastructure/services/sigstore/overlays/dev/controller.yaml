@@ -1,0 +1,11 @@
+webhook:
+  failurePolicy: Fail
+  configData:
+    no-match-policy: deny
+  namespaceSelector:
+    matchExpressions: []
+    matchLabels:
+      kubernetes.io/metadata.name: sigstore-test
+  registryCaBundle: {name: endpoint-ca, key: ca.crt}
+  extraArgs:
+    disable-tuf: "true" # Suppress default public bootstrap. Policy references the private TrustRoot.

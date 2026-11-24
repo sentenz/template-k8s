@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: database-clients, namespace: trillian-system}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/component: mysql}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {}}]
+      ports: [{protocol: TCP, port: 3306}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: redis-clients, namespace: rekor-system}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/component: redis}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {}}]
+      ports: [{protocol: TCP, port: 6379}]

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: dex, namespace: sigstore-oidc}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 256Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: dex, namespace: sigstore-oidc}
+spec:
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: dex}}
+  template:
+    metadata: {labels: {app: dex}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {fsGroup: 1001}
+      containers:
+        - name: dex
+          image: ghcr.io/dexidp/dex:v2.46.1
+          args: [dex, serve, /config/config.json]
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+            - {name: db, mountPath: /data}
+          readinessProbe: {httpGet: {path: /healthz, port: 5558}}
+          livenessProbe: {httpGet: {path: /healthz, port: 5558}}
+          resources: {requests: {cpu: 25m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+      volumes:
+        - {name: config, secret: {secretName: dex-config}}
+        - {name: db, persistentVolumeClaim: {claimName: dex}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: dex, namespace: sigstore-oidc}
+spec:
+  selector: {app: dex}
+  ports: [{port: 80, targetPort: 5556}]

@@ -1,0 +1,41 @@
+# Trillian-backed Rekor v1 and RFC6962 CT are the compatible scaffold pair.
+fulcio:
+  createcerts: {enabled: false}
+  namespace: {create: false}
+  server:
+    logging: {production: true}
+    ingress:
+      http: {enabled: false}
+rekor:
+  namespace: {create: false}
+  server:
+    signer: /var/run/rekor-key/key.pem
+    signerFileSecretOptions:
+      secretName: rekor-signer
+      privateKeySecretKey: key.pem
+      secretMountPath: /var/run/rekor-key
+      secretMountSubPath: key.pem
+    logging: {production: true}
+    ingress: {enabled: false}
+ctlog:
+  createctconfig: {privateKeyPasswordSecretName: ct-key-password}
+  namespace: {create: false}
+trillian:
+  namespace: {create: false}
+  mysql:
+    image:
+      version: sha256:763dfa45405724b466dbaf980d0410e170019afd8747650b8af878538dcea1e2
+    args: []
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {cpu: "1", memory: 1Gi}
+    livenessProbe:
+      exec: {command: [mysqladmin, ping, -h, 127.0.0.1, --silent]}
+      initialDelaySeconds: 90
+      timeoutSeconds: 5
+    readinessProbe:
+      exec: {command: [mysqladmin, ping, -h, 127.0.0.1, --silent]}
+      timeoutSeconds: 5
+# Only signed, public TUF metadata is published to the cluster.
+tuf: {enabled: false}
+tsa: {enabled: false}
