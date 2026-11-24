@@ -1,10 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:best-practices"
   ],
   "semanticCommits": "enabled",
-  "rebaseWhen": "behind-base-branch",
   "minimumReleaseAge": "1 day",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "internalChecksFilter": "strict",
@@ -13,6 +12,7 @@
     "**/vendor/**",
     "**/node_modules/**",
     "**/bower_components/**",
+    "**/charts/**",
     "test/**",
     "tests/**"
   ],
@@ -22,25 +22,21 @@
       "**/tests/**"
     ]
   },
-  "kubernetes": {
-    "managerFilePatterns": [
-      "/^(apps|infrastructure|clusters)/.+\\.ya?ml$/"
-    ]
-  },
-  "helm-values": {
-    "managerFilePatterns": [
-      "/(^|/)values(?:[-.][^/]+)?\\.ya?ml$/"
-    ]
-  },
   "labels": [
     "dependencies"
   ],
   "vulnerabilityAlerts": {
-    "enabled": true,
-    "labels": [
+    "addLabels": [
       "security"
-    ],
-    "automerge": false
+    ]
+  },
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "kubernetes": {
+    "managerFilePatterns": [
+      "/^(apps|infrastructure|clusters)/.+\\.ya?ml$/"
+    ]
   },
   "customManagers": [
     {
@@ -53,9 +49,8 @@
         "**/*.mk",
         "**/kind-cluster.{yml,yaml}"
       ],
-      "matchStringsStrategy": "any",
       "matchStrings": [
-        "(?<depName>(?:(?:[A-Za-z0-9.-]+(?::[0-9]+)?/)?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+)):(?<currentValue>v?\\d[0-9A-Za-z_.-]*)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+        "(?<depName>(?:(?:[A-Za-z0-9.-]+(?::[0-9]+)?/)?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)):(?<currentValue>v?\\d[0-9A-Za-z_.-]*)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
       ],
       "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{else}}{{#if currentDigest}}@{{{currentDigest}}}{{/if}}{{/if}}",
       "datasourceTemplate": "docker",
@@ -65,8 +60,7 @@
       "customType": "regex",
       "description": "Update versions declared by Renovate annotations in Dockerfiles and Containerfiles.",
       "managerFilePatterns": [
-        "/Dockerfile$/",
-        "/Containerfile$/"
+        "/Dockerfile$/"
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z0-9-]+) depName=(?<depName>[a-z0-9._/-]+)(?: packageName=(?<packageName>[a-z0-9._/-]+))?\\s*\\nARG [A-Z][A-Z0-9_]*=(?<currentValue>\\S+)"
@@ -89,6 +83,7 @@
         "major"
       ],
       "groupName": "major versions",
+      "groupSlug": "major-versions",
       "automerge": false
     },
     {
@@ -106,6 +101,7 @@
         "minor"
       ],
       "groupName": "minor versions",
+      "groupSlug": "minor-versions",
       "automerge": false
     },
     {
@@ -123,6 +119,7 @@
         "patch"
       ],
       "groupName": "patch versions",
+      "groupSlug": "patch-versions",
       "automerge": false
     },
     {
@@ -137,8 +134,8 @@
         "major",
         "minor",
         "patch",
-        "pin",
         "digest",
+        "pin",
         "pinDigest"
       ],
       "groupName": "kubernetes dependencies",
@@ -155,7 +152,14 @@
       "matchDatasources": [
         "docker"
       ],
-      "pinDigests": true,
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
       "automerge": false
     },
     {
@@ -170,8 +174,8 @@
         "major",
         "minor",
         "patch",
-        "pin",
         "digest",
+        "pin",
         "pinDigest"
       ],
       "automerge": false
@@ -188,8 +192,8 @@
         "major",
         "minor",
         "patch",
-        "pin",
         "digest",
+        "pin",
         "pinDigest"
       ],
       "groupName": "dockerfile container images",
@@ -207,14 +211,14 @@
         "major",
         "minor",
         "patch",
-        "pin",
         "digest",
+        "pin",
         "pinDigest"
       ],
       "automerge": false
     },
     {
-      "description": "Group Docker image updates in Makefiles.",
+      "description": "Group and pin Docker image updates in Makefiles.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -230,20 +234,22 @@
         "major",
         "minor",
         "patch",
-        "pin",
         "digest",
+        "pin",
         "pinDigest"
       ],
       "groupName": "makefile container images",
       "automerge": true
     },
     {
-      "description": "Group Kind node image updates across Kind configuration and GitHub Action metadata.",
+      "description": "Pin Docker images used to immutable digests.",
       "matchManagers": [
         "custom.regex"
       ],
-      "matchDatasources": [
-        "docker"
+      "matchDepTypes": [
+        "docker",
+        "container",
+        "service"
       ],
       "matchFileNames": [
         "**/action.{yml,yaml}",
@@ -253,12 +259,10 @@
         "major",
         "minor",
         "patch",
-        "pin",
         "digest",
+        "pin",
         "pinDigest"
       ],
-      "groupName": "kind container images",
-      "semanticCommitType": "fix",
       "automerge": false
     },
     {
@@ -288,12 +292,11 @@
         "major",
         "minor",
         "patch",
-        "pin",
         "digest",
+        "pin",
         "pinDigest"
       ],
       "groupName": "github actions container images",
-      "groupSlug": "github-actions-container-images",
       "semanticCommitType": "ci",
       "automerge": true
     },
