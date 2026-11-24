@@ -1,6 +1,6 @@
 # Kubernetes Project Layout
 
-This repository separates application packaging, infrastructure capabilities, environment configuration, cluster composition, and third-party dependencies.
+This repository separates application packaging, platform capabilities, environment configuration, cluster composition, and third-party dependencies.
 
 ```text
 .
@@ -17,7 +17,13 @@ This repository separates application packaging, infrastructure capabilities, en
 │   │       ├── base/
 │   │       └── overlays/{dev,stage,prod}/
 │   ├── services/
-│   │   └── postgresql/
+│   │   ├── postgresql/
+│   │   │   ├── base/
+│   │   │   └── overlays/{dev,stage,prod}/
+│   │   ├── mysql-sigstore/
+│   │   │   ├── base/
+│   │   │   └── overlays/{dev,stage,prod}/
+│   │   └── sigstore/
 │   │       ├── base/
 │   │       └── overlays/{dev,stage,prod}/
 │   ├── configs/
@@ -26,13 +32,7 @@ This repository separates application packaging, infrastructure capabilities, en
 ├── components/
 ├── clusters/
 │   ├── dev/
-│   │   ├── kind-cluster.yaml
-│   │   ├── kustomization.yaml
-│   │   ├── controllers/
-│   │   ├── configs/
-│   │   ├── labels/
-│   │   ├── apps/
-│   │   └── secrets/
+│   │   └── kustomization.yaml
 │   ├── stage/
 │   │   └── kustomization.yaml
 │   └── prod/
@@ -41,42 +41,40 @@ This repository separates application packaging, infrastructure capabilities, en
     └── helm/
         ├── dependency-track-2.0.0/dependency-track/
         ├── postgresql-18.8.5/postgresql/
-        └── traefik-41.1.0/traefik/
+        ├── traefik-41.1.0/traefik/
+        ├── fulcio-2.11.7/fulcio/
+        ├── rekor-1.8.15/rekor/
+        └── mysql-14.0.3/mysql/
 ```
-
-Each cluster root composes `controllers/`, `configs/`, and `apps/` child
-roots. This makes lifecycle boundaries explicit for a reconciler while
-retaining one aggregate path for complete rendering and review; see
-[`reconciliation.md`](reconciliation.md).
 
 Generated local runtime state is not part of the declarative repository tree. The Make workflow stores kubeconfigs under `.local/kubeconfig/<environment>.yaml`, and `.local/` is ignored by Git.
 
 ## Responsibility boundaries
 
-- **Helm** defines the reusable workload or infrastructure package. Environment-specific Helm values live beside the corresponding overlay.
+- **Helm** defines the reusable workload or platform package. Environment-specific Helm values live beside the corresponding overlay.
 - **Kustomize bases** contain stable Kubernetes resources that are common to all environments, such as namespaces.
 - **Kustomize overlays** bind Helm releases to `dev`, `stage`, or `prod` and apply post-render patches only when a Kubernetes-level difference is clearer than a Helm value.
 - **Applications** own product workloads and application-specific deployment configuration.
-- **Infrastructure controllers** own Kubernetes controllers, operators, admission components, and cluster networking/control-plane integrations.
-- **Infrastructure services** own infrastructure-managed runtime services. PostgreSQL is modeled as an infrastructure service in this template.
-- **Infrastructure configs** own shared configuration consumed by infrastructure controllers or services when that configuration has a lifecycle distinct from the capability installation.
-- **Clusters** are the only deployment and GitOps entry points. Each cluster composes the required application and infrastructure overlays plus cluster-local resources and, where applicable, cluster-creation configuration.
+- **Platform controllers** own Kubernetes controllers, operators, admission components, and cluster networking/control-plane integrations.
+- **Platform services** own platform-managed runtime services. PostgreSQL is modeled as a platform service in this template.
+- **Platform configs** own shared configuration consumed by platform controllers or services when that configuration has a lifecycle distinct from the capability installation.
+- **Clusters** are the only deployment and GitOps entry points. Each cluster composes the required application and platform overlays plus cluster-local resources and, where applicable, cluster-creation configuration.
 - **Components** are reserved for reusable, environment-neutral Kustomize components.
 - **Vendor** contains immutable third-party sources. `vendor/helm/` holds the upstream Helm chart copies used by Kustomize and must not contain environment configuration.
 
 The design rule is: **Helm defines what a component is; Kustomize defines how and where that component is deployed; ownership domains define who manages its lifecycle.**
 
-## Infrastructure taxonomy
+## Platform taxonomy
 
 The `infrastructure/` tree is organized by responsibility rather than environment:
 
 - `infrastructure/controllers/<name>/` contains controllers and operators such as Traefik, cert-manager, external-secrets, policy controllers, or database operators.
-- `infrastructure/services/<name>/` contains infrastructure-managed runtime services such as shared databases, observability services, logging services, caches, or other shared capabilities.
+- `infrastructure/services/<name>/` contains platform-managed runtime services such as shared databases, observability services, logging services, caches, or other shared capabilities.
 - `infrastructure/configs/<name>/` contains shared resources consumed by controllers or services, such as `ClusterIssuer`, middleware, secret stores, policy resources, or other controller-specific custom resources.
 
 Each capability owns its own `base/` and `overlays/`. Environment selection remains under `clusters/`; do not create a top-level `infrastructure/dev`, `infrastructure/stage`, or `infrastructure/prod` hierarchy.
 
-A resource belongs under `infrastructure/` when its lifecycle is managed independently of an individual application. In a product-specific repository, an application-exclusive dependency can instead be colocated with the application that owns its lifecycle. This template intentionally keeps PostgreSQL under `infrastructure/services/postgresql/` to demonstrate the infrastructure-service boundary.
+A resource belongs under `infrastructure/` when its lifecycle is managed independently of an individual application. In a product-specific repository, an application-exclusive dependency can instead be colocated with the application that owns its lifecycle. This template intentionally keeps PostgreSQL under `infrastructure/services/postgresql/` to demonstrate the platform-service boundary.
 
 ## Canonical entry points
 
@@ -88,13 +86,13 @@ kustomize build clusters/stage --enable-helm --load-restrictor=LoadRestrictionsN
 kustomize build clusters/prod --enable-helm --load-restrictor=LoadRestrictionsNone
 ```
 
-Aggregate render and review automation should target `clusters/<environment>`. Delivery systems that enforce lifecycle ordering should reconcile its `controllers/`, `configs/`, and `apps/` child roots as described in the reconciliation contract. Application and infrastructure overlays are composition inputs rather than independent deployment entry points.
+All deployment, render, CI, and GitOps automation should target `clusters/<environment>`. Application and platform overlays are composition inputs rather than independent deployment entry points.
 
 The Make interface uses the same boundary. `K8S_ENV` defaults to `dev`, `K8S_CLUSTER_PATH` resolves to `clusters/$(K8S_ENV)`, generated kubeconfig state resolves to `.local/kubeconfig/$(K8S_ENV).yaml`, and rendered output is written to `render/kustomize/$(K8S_ENV).yaml`.
 
 ## Vendored Helm dependencies
 
-Third-party Helm charts live under `vendor/helm/` rather than under applications, infrastructure capabilities, or clusters. This makes the ownership boundary explicit: overlays configure a dependency, but they do not own a copy of its upstream source.
+Third-party Helm charts live under `vendor/helm/` rather than under applications, platform capabilities, or clusters. This makes the ownership boundary explicit: overlays configure a dependency, but they do not own a copy of its upstream source.
 
 The version wrapper directories are intentional. When a Kustomize `helmCharts` entry contains both `repo` and `version`, Kustomize looks for the local chart at:
 
@@ -125,16 +123,16 @@ See `vendor/helm/README.md` for the vendor contract and refresh procedure.
 
 The development environment is backed by Kind. Its version-controlled cluster topology is therefore colocated with its composition at `clusters/dev/kind-cluster.yaml`. This file defines the Kind node topology and local host port mappings, while `clusters/dev/kustomization.yaml` defines what is deployed into that cluster.
 
-Cluster-specific TLS fixtures live under `clusters/dev/secrets/` because their certificate and hostname are properties of the development cluster composition. Their `secretGenerator` remains in `clusters/dev/apps/kustomization.yaml`. The generator reads the decrypted sibling files through `../secrets/`, preserving application reconciliation ownership while grouping cluster-owned TLS inputs at the cluster root.
+Cluster-specific TLS fixtures also remain under `clusters/dev` because their certificate and hostname are properties of the development cluster composition rather than the reusable application overlay.
 
-`secrets/` is a repository convention, not a Kubernetes-reserved directory. Placement follows ownership: application-owned environment secrets can live under `apps/<app>/overlays/<env>/secrets/` with their generator in that overlay; cluster-owned inputs live under `clusters/<cluster>/secrets/`. Platform-owned issuer configuration belongs under `infrastructure/configs/`. This specializes the [project-layout guidance](https://github.com/sentenz/convention/blob/main/content/guides/project-layout-guidance.md#162-project) for cluster-local inputs without copying workload manifests into cluster directories.
+The resulting boundary is:
 
-The existing build commands retain `--load-restrictor=LoadRestrictionsNone`, which permits the generator's `../secrets/` file references outside its `apps/` Kustomization root. Builds using the default load restrictions will reject these references.
-
-The shared infrastructure convention is a `LoadBalancer` ingress Service. The Kind
-profile is the documented local exception: it uses fixed `NodePort` values and
-host port mappings because Kind does not provision an external load balancer.
-Stage and production retain `LoadBalancer`.
+```text
+clusters/dev/
+├── kind-cluster.yaml        # how the dev Kubernetes cluster is created
+├── kustomization.yaml       # what is deployed into the dev cluster
+└── *.enc                    # encrypted dev-only cluster fixtures
+```
 
 ## Environment configuration
 
@@ -152,16 +150,21 @@ This keeps environment deltas explicit and avoids conditional logic such as `if 
 
 ## Secret contract
 
-Development uses disposable fixture credentials and SOPS-encrypted TLS certificate files under `clusters/dev/secrets/`. Follow the [development instructions](../apps/dependency-track/README.md#2-development) to decrypt them or generate a fresh local pair before rendering. Kustomize consumes the ignored plaintext siblings, not the `.enc` files.
+Development uses disposable fixture credentials and the existing SOPS-encrypted TLS certificate files under `clusters/dev`.
 
 Stage and production expect externally managed Secrets:
 
-| Namespace | Secret | Required keys | Consumer |
-| --- | --- | --- | --- |
-| `postgresql` | `postgresql-auth` | `postgres-password`, `password` | PostgreSQL |
-| `dependency-track` | `dependency-track-database` | `username`, `password` | Dependency-Track |
-| `dependency-track` | `dependency-track-kek` | `kek` | Dependency-Track |
-| `dependency-track` | `dependency-track-tls` | `tls.crt`, `tls.key` | Ingress TLS |
+| Namespace          | Secret                      | Required keys                                    | Consumer           |
+| ------------------ | --------------------------- | ------------------------------------------------ | ------------------ |
+| `postgresql`       | `postgresql-auth`           | `postgres-password`, `password`                  | PostgreSQL         |
+| `dependency-track` | `dependency-track-database` | `username`, `password`                           | Dependency-Track   |
+| `dependency-track` | `dependency-track-kek`      | `kek`                                            | Dependency-Track   |
+| `dependency-track` | `dependency-track-tls`      | `tls.crt`, `tls.key`                             | Ingress TLS        |
+| `mysql-sigstore`   | `mysql-sigstore-auth`       | `mysql-root-password`, `mysql-password`          | MySQL (Sigstore)   |
+| `rekor-system`     | `sigstore-mysql`            | `mysql-user`, `mysql-password`, `mysql-database` | Rekor search index |
+| `trillian-system`  | `sigstore-mysql`            | `mysql-user`, `mysql-password`, `mysql-database` | Trillian log       |
+| `fulcio-system`    | `fulcio-tls`                | `tls.crt`, `tls.key`                             | Fulcio ingress TLS |
+| `rekor-system`     | `rekor-tls`                 | `tls.crt`, `tls.key`                             | Rekor ingress TLS  |
 
 These Secrets can be supplied by an external-secret controller, SOPS/Flux, Sealed Secrets, Vault, or a cloud secret manager. Plaintext production credentials should not be added to Helm values.
 
@@ -169,20 +172,20 @@ These Secrets can be supplied by an external-secret controller, SOPS/Flux, Seale
 
 1. Create `apps/<name>/base` for stable Kubernetes resources.
 2. Add `apps/<name>/overlays/{dev,stage,prod}` with the Helm release and environment values.
-3. Add the appropriate overlay to each `clusters/<environment>/apps/kustomization.yaml`.
+3. Add the appropriate overlay to each `clusters/<environment>/kustomization.yaml`.
 4. Put cross-cutting behavior in `components/` rather than duplicating patches.
 
-## Adding an infrastructure capability
+## Adding a platform capability
 
 Classify the capability by responsibility first:
 
 1. Put controllers and operators under `infrastructure/controllers/<name>/`.
-2. Put infrastructure-managed runtime services under `infrastructure/services/<name>/`.
+2. Put platform-managed runtime services under `infrastructure/services/<name>/`.
 3. Put shared controller/service configuration under `infrastructure/configs/<name>/` when it has an independent lifecycle.
 4. Give deployable capabilities their own `base/` and `overlays/{dev,stage,prod}` as needed.
-5. Select the appropriate overlay from each cluster's `controllers/kustomization.yaml` or `configs/kustomization.yaml`, according to its lifecycle.
+5. Select the appropriate overlay from each `clusters/<environment>/kustomization.yaml`.
 
-Do not classify a resource as infrastructure merely because it is used in development. Ownership and lifecycle determine placement; overlays and cluster composition determine where the resource runs.
+Do not classify a resource as platform infrastructure merely because it is used in development. Ownership and lifecycle determine placement; overlays and cluster composition determine where the resource runs.
 
 ## Scaling beyond one cluster per environment
 
@@ -196,6 +199,4 @@ clusters/
 └── prod-us-east-1-01/
 ```
 
-Application and infrastructure overlays remain reusable, while cluster directories capture only cluster-specific composition and deltas. Cluster-creation files such as Kind configuration should only be present for cluster implementations that use them.
-
-`K8S_ENVIRONMENTS` defaults to the directories under `K8S_CLUSTER_DIR` that contain a `kustomization.yaml`. Select a concrete cluster with, for example, `make k8s-render K8S_ENV=prod-us-east-1-01`. For compositions outside that directory, set both `K8S_CLUSTER_PATH` and an explicit `K8S_ENVIRONMENTS` allowlist containing the selected `K8S_ENV`.
+Application and platform overlays remain reusable, while cluster directories capture only cluster-specific composition and deltas. Cluster-creation files such as Kind configuration should only be present for cluster implementations that use them.

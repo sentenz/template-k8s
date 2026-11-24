@@ -5,6 +5,7 @@ Architecture is a high-level overview of the system's structure, components, and
 - [1. Diagrams](#1-diagrams)
 - [2. Definitions](#2-definitions)
 - [3. Order of Precedence](#3-order-of-precedence)
+- [4. Sigstore](#4-sigstore)
 
 ## 1. Diagrams
 
@@ -87,6 +88,35 @@ Kustomize assembles and applies configuration in a defined hierarchy to ensure p
 
 - Generators
   > ConfigMap- and Secret-generators (`configMapGenerator:`, `secretGenerator:`) produce new objects after base resources.
+
+## 4. Sigstore
+
+The cluster runs a self-hosted [Sigstore](https://www.sigstore.dev/) stack under `infrastructure/services/sigstore/` to provide cryptographically verifiable signing and verification of software artifacts and OCI container images.
+
+```mermaid
+flowchart LR
+    cosign[cosign<br/>client]
+    fulcio[Fulcio<br/>signing CA]
+    ctlog[ctlog<br/>CT log]
+    rekor[Rekor<br/>transparency log]
+    trillian[Trillian<br/>log backend]
+    mysql[(MySQL<br/>mysql-sigstore)]
+
+    cosign --> |OIDC identity| fulcio
+    fulcio --> |issued certs| ctlog
+    cosign --> |sign / attest| rekor
+    ctlog --> trillian
+    rekor --> trillian
+    trillian --> mysql
+```
+
+- **Fulcio** (`fulcio-system`) issues short-lived signing certificates to identities authenticated via OIDC. It uses the `fileca` authority; the chart's `createcerts` Job generates the CA on first deploy.
+- **ctlog** (`ctlog-system`) is Fulcio's Certificate Transparency log, backed by the shared Trillian log.
+- **Rekor** (`rekor-system`) is the transparency log and timestamping server for signatures and attestations.
+- **Trillian** (`trillian-system`) is the append-only, verifiable log backend shared by Rekor and ctlog (log server + log signer).
+- **MySQL** (`mysql-sigstore`) is a dedicated database for the Trillian log and the Rekor search index. The Sigstore charts are MySQL-only, so this instance is MySQL rather than the shared PostgreSQL used by Dependency-Track.
+
+`cosign` is pointed at the self-hosted endpoints with `--fulcio-url` and `--rekor-url` (see `make sscs-cosign-sign` / `make sscs-cosign-verify-image`).
 
 - Base Patches
   > Any `patches:` declared within base kustomizations are applied.
