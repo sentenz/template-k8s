@@ -28,7 +28,7 @@ jobs:
 
       - name: Run Semantic Release
         id: release
-        uses: sentenz/actions/semantic-release@ac68a6837f8890c4570767c0d1f21bcfc133ab1a # 1.5.8
+        uses: sentenz/actions/semantic-release@8e2d77bd7bd0c72d8a87d770b7eb8135e29d3c17 # 1.8.2
         with:
           # PAT-authored tags trigger the downstream push.tags workflows.
           github-token: ${{ secrets.RELEASE_TOKEN }}
