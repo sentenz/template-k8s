@@ -34,7 +34,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Docker Build
-        uses: sentenz/actions/docker@23361c53dc10a0980b449d78bb4481e4997da7d3 # 1.7.1
+        uses: sentenz/actions/docker@8e2d77bd7bd0c72d8a87d770b7eb8135e29d3c17 # 1.8.2
         with:
           version: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           context: .
@@ -61,7 +61,7 @@ jobs:
 
       - name: Publish Attested Image
         id: docker-build
-        uses: sentenz/actions/docker@23361c53dc10a0980b449d78bb4481e4997da7d3 # 1.7.1
+        uses: sentenz/actions/docker@8e2d77bd7bd0c72d8a87d770b7eb8135e29d3c17 # 1.8.2
         with:
           version: ${{ github.ref_name }}
           context: .
@@ -75,7 +75,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign and Verify
-        uses: sentenz/actions/sigstore@48508443507cf772331e323ab90665657a1976ac # 1.6.0
+        uses: sentenz/actions/sigstore@8e2d77bd7bd0c72d8a87d770b7eb8135e29d3c17 # 1.8.2
         with:
           image: ${{ steps.docker-build.outputs.image }}@${{ steps.docker-build.outputs.digest }}
           identity: ${{ github.server_url }}/${{ github.workflow_ref }}
