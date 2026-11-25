@@ -97,7 +97,7 @@ skills-agent-update:
 # ─── Kubernetes Manager ──────────────────────────────────────────────────────────────────────────
 
 # K8S_KIND_IMAGE ?= $(notdir $(shell git rev-parse --show-toplevel 2>/dev/null)):$(or $(shell git tag --sort=-creatordate | head -n 1),latest)
-K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.18@sha256:529b91b6e8d384db62fa60ae4c3e040c97c1a46db21aef0f157295110215dba5
+K8S_KIND_IMAGE ?= ghcr.io/sentenz/k8s:2.1.19@sha256:ff6e15627067fc522cb2511f3216dc85bcf7839d6317229a64dec8c56baafbdd
 
 # Validate the selected cluster composition before Kubernetes operations
 k8s-validate:
@@ -326,7 +326,7 @@ helm-render-charts:
 
 # ─── Dependency Manager ──────────────────────────────────────────────────────────────────────────
 
-DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.252.1@sha256:a74eddc5305b4ec5597971b3b30a6b998838a3322edf928e2789ea26af4facbe
+DEPENDENCY_RENOVATE_IMAGE ?= docker.io/renovate/renovate:44.262.2@sha256:2d5cd4c778b9a2c36623302ceec231a813d8eed77cea19da13b73dd4e8e92e54
 DEPENDENCY_RENOVATE_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace -e LOG_LEVEL=debug -e RENOVATE_REPOSITORIES -e RENOVATE_TOKEN=$(RENOVATE_TOKEN) "$(DEPENDENCY_RENOVATE_IMAGE)"
 
 ## Update project dependencies locally using Renovate and generate a report
@@ -770,7 +770,7 @@ policy-regal-lint:
 
 # ─── SAST Manager ────────────────────────────────────────────────────────────────────────────────
 
-SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.185.0@sha256:67518c174185a2043fdbed16c70631b79209499b3671178e7194379b48295a0d
+SAST_SEMGREP_IMAGE ?= semgrep/semgrep:1.186.0@sha256:6e1b04340e60e910fbb4ddbf3c857ab0918f064417ad5ac530014ccb3cf8c8f1
 SAST_SEMGREP_ALIAS := docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_SEMGREP_IMAGE)"
 SAST_SEMGREP_FILES ?= .
 SAST_SEMGREP_FILTER = $(if $(strip $(SAST_SEMGREP_FILES)),$(SAST_SEMGREP_FILES),.)
@@ -982,7 +982,7 @@ sast-gitleaks-staged:
 	docker run --rm -v "${PWD}:/workspace" -w /workspace "$(SAST_IMAGE_GITLEAKS)" protect --redact --staged --source /workspace --report-format json --report-path logs/sast/gitleaks-protect.json 2>&1
 .PHONY: sast-gitleaks-staged
 
-SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.99.9@sha256:2ec535840f860aa27f11fee20222fb790326ecd66325c96bd49d02ec6af46eca
+SAST_IMAGE_TRUFFLEHOG ?= trufflesecurity/trufflehog:3.100.1@sha256:9c7a8325d43a4af2960d3f21d61a08981d8a1bf0542e007efa2e47097e386452
 
 ## Scan local filesystem for leaked secrets using TruffleHog and generate a report
 sast-trufflehog-fs:
@@ -1000,7 +1000,7 @@ sast-trufflehog-git:
 
 # ─── Software Supply Chain Security (SSCS) ───────────────────────────────────────────────────────
 
-SSCS_COSIGN_IMAGE ?= ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d
+SSCS_COSIGN_IMAGE ?= ghcr.io/sigstore/cosign/cosign:v3.1.5@sha256:191099139868a6cd02abae63f2919e0915dcaa7bcc22bda6fbd11fd0dd5599e7
 # --network host: cosign must reach the local registry (localhost:5000) and the
 # self-hosted Sigstore endpoints (fulcio.localhost / rekor.localhost) by name.
 # --add-host: *.localhost does not resolve inside containers (WSL2-only DNS), so
