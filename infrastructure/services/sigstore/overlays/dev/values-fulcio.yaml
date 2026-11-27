@@ -1,0 +1,63 @@
+---
+# Fulcio — self-hosted Sigstore signing Certificate Authority.
+#
+# The CA is `fileca`: the chart's `createcerts` Job generates a short-lived CA
+# and key on first deploy. KMS-backed signing (aws/gcp) is out of scope.
+namespace:
+  create: false
+  name: fulcio-system
+forceNamespace: fulcio-system
+
+# Trust Kubernetes ServiceAccount tokens as the signing identity. The chart's
+# default only trusts issuer `https://kubernetes.default.svc` (and the
+# `https://kubernetes.*.svc` meta-issuer), but this cluster mints tokens with
+# issuer `https://kubernetes.default.svc.cluster.local`, so we add it explicitly.
+# `kubectl create token cosign-dev -n fulcio-system` then yields a valid identity.
+config:
+  contents:
+    OIDCIssuers:
+      https://kubernetes.default.svc:
+        IssuerURL: https://kubernetes.default.svc
+        ClientID: sigstore
+        Type: kubernetes
+      https://kubernetes.default.svc.cluster.local:
+        IssuerURL: https://kubernetes.default.svc.cluster.local
+        ClientID: sigstore
+        Type: kubernetes
+    MetaIssuers:
+      https://kubernetes.*.svc:
+        ClientID: sigstore
+        Type: kubernetes
+
+server:
+  args:
+    certificateAuthority: fileca
+  ingress:
+    http:
+      enabled: true
+      className: traefik
+      annotations:
+        traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+      hosts:
+        - path: /
+          host: fulcio.localhost
+      tls:
+        - secretName: fulcio-tls
+          hosts:
+            - fulcio.localhost
+    grpc:
+      enabled: false
+
+# ctlog is Fulcio's Certificate Transparency log (a Trillian-backed log). It
+# runs in its own namespace and talks to the shared Trillian log server.
+ctlog:
+  enabled: true
+  namespace:
+    create: false
+    name: ctlog-system
+  forceNamespace: ctlog-system
+  trillian:
+    namespace: trillian-system
+    logServer:
+      name: trillian-logserver
+      portRPC: 8091

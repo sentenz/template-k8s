@@ -1,0 +1,66 @@
+{{- if .Values.createcerts.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "fulcio.createcerts.fullname" . }}
+{{ include "fulcio.namespace" . | indent 2 }}
+  labels:
+    {{- include "fulcio.labels" . | nindent 4 }}
+{{- if .Values.createcerts.annotations }}
+  annotations:
+{{ toYaml .Values.createcerts.annotations | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.createcerts.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ .Values.createcerts.ttlSecondsAfterFinished }}
+{{- end }}
+  template:
+    metadata:
+    {{- if .Values.createcerts.podAnnotations }}
+      annotations:
+        {{ toYaml .Values.createcerts.podAnnotations | nindent 8 }}
+    {{- end }}
+      labels:
+        {{- include "fulcio.labels" . | nindent 8 }}
+        {{- if .Values.createcerts.podLabels }}
+        {{ toYaml .Values.createcerts.podLabels | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ template "fulcio.serviceAccountName.createcerts" . }}
+      restartPolicy: Never
+      automountServiceAccountToken: {{ .Values.createcerts.serviceAccount.mountToken }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ template "fulcio.createcerts.fullname" . }}
+          image: "{{ template "fulcio.image" (dict "image" .Values.createcerts.image "global" .Values.global) }}"
+          imagePullPolicy: "{{ .Values.createcerts.image.pullPolicy }}"
+          args: ["--secret={{ .Values.server.secret }}"]
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+    {{- if .Values.createcerts.containerSecurityContext }}
+          securityContext:
+{{ toYaml .Values.createcerts.containerSecurityContext | indent 12 }}
+    {{- end }}
+    {{- if .Values.createcerts.securityContext }}
+      securityContext:
+{{ toYaml .Values.createcerts.securityContext | indent 8 }}
+    {{- end }}
+    {{- if .Values.createcerts.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.createcerts.nodeSelector | indent 8 }}
+    {{- end }}
+    {{- if .Values.createcerts.tolerations }}
+      tolerations:
+{{ toYaml .Values.createcerts.tolerations | indent 8 }}
+    {{- end }}
+    {{- if .Values.createcerts.affinity }}
+      affinity:
+{{ toYaml .Values.createcerts.affinity | indent 8 }}
+    {{- end }}
+{{- end }}

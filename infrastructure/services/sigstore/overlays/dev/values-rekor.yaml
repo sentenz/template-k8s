@@ -1,0 +1,95 @@
+---
+# Rekor — self-hosted Sigstore transparency log.
+#
+# The Rekor server and its Trillian backend both use the dedicated MySQL
+# instance (mysql-sigstore). The `sigstore-mysql` Secret (created by the
+# overlay, or supplied externally in persistent environments) provides the
+# credentials under the key names the charts expect.
+namespace:
+  create: false
+  name: rekor-system
+forceNamespace: rekor-system
+
+server:
+  ingress:
+    enabled: true
+    className: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    hosts:
+      - path: /
+        host: rekor.localhost
+    tls:
+      - secretName: rekor-tls
+        hosts:
+          - rekor.localhost
+  searchIndex:
+    storageProvider: mysql
+    mysql:
+      envCredentials:
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: sigstore-mysql
+              key: mysql-user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sigstore-mysql
+              key: mysql-password
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: sigstore-mysql
+              key: mysql-database
+        - name: MYSQL_HOSTNAME
+          value: mysql-sigstore.mysql-sigstore.svc.cluster.local
+        - name: MYSQL_PORT
+          value: "3306"
+
+# Disable the chart-bundled MySQL; point the search index at the dedicated
+# instance. `auth.existingSecret` suppresses the chart-generated Secret.
+mysql:
+  enabled: false
+  hostname: mysql-sigstore.mysql-sigstore.svc.cluster.local
+  port: 3306
+  auth:
+    existingSecret: sigstore-mysql
+
+# Trillian is the append-only log backend shared by Rekor and ctlog.
+trillian:
+  enabled: true
+  namespace:
+    create: false
+    name: trillian-system
+  forceNamespace: trillian-system
+  mysql:
+    enabled: false
+    hostname: mysql-sigstore.mysql-sigstore.svc.cluster.local
+    port: 3306
+    auth:
+      existingSecret: sigstore-mysql
+  storageSystem:
+    driver: mysql
+    envCredentials:
+      - name: MYSQL_USER
+        valueFrom:
+          secretKeyRef:
+            name: sigstore-mysql
+            key: mysql-user
+      - name: MYSQL_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: sigstore-mysql
+            key: mysql-password
+      - name: MYSQL_DATABASE
+        valueFrom:
+          secretKeyRef:
+            name: sigstore-mysql
+            key: mysql-database
+      - name: MYSQL_HOSTNAME
+        value: mysql-sigstore.mysql-sigstore.svc.cluster.local
+      - name: MYSQL_PORT
+        value: "3306"
+  quotaSystem:
+    driver: mysql

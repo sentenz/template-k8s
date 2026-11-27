@@ -1,0 +1,23 @@
+---
+# NOTE Development-only credentials. The chart renders these into the
+# `mysql-sigstore-auth` Secret. Persistent environments reference an
+# externally managed Secret via `auth.existingSecret`.
+auth:
+  database: trillian
+  username: sigstore
+  existingSecret: mysql-sigstore-auth
+
+# Bitnami migrated its images to the `bitnamilegacy` registry; the chart's
+# default `docker.io/bitnami/mysql` tag no longer resolves.
+image:
+  registry: docker.io
+  repository: bitnamilegacy/mysql
+  tag: 9.4.0-debian-12-r1
+
+primary:
+  resourcesPreset: small
+  service:
+    type: ClusterIP
+
+tls:
+  enabled: false

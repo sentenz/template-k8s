@@ -1,0 +1,215 @@
+namespace:
+  create: false
+  name: fulcio-system
+
+imagePullSecrets: []
+
+init:
+  enabled: false
+  image:
+    curl:
+      registry: docker.io
+      repository: curlimages/curl
+      # -- 8.17.0
+      version: sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
+      imagePullPolicy: IfNotPresent
+  containerResources: {}
+
+config:
+  contents: {}
+  format: json
+
+server:
+  replicaCount: 1
+  name: server
+  svcPort: 80
+  grpcSvcPort: 5554
+  # -- KMS type for signing key (possible values: "" / "none", "aws")
+  kmsType: none
+  secret: fulcio-server-secret
+  # -- kubernetes secret name containing IAM credentials for use with AWS KMS
+  awsKmsCredentialsSecretName: aws-kms-credentials
+  # -- AWS region if using AWS KMS for signing key
+  awsKmsRegion: us-east-1
+  logging:
+    production: false
+  image:
+    registry: ghcr.io
+    repository: sigstore/fulcio
+    pullPolicy: IfNotPresent
+    # crane digest ghcr.io/sigstore/fulcio:v1.10.2
+    version: v1.10.2@sha256:79e6617a9b16e35e9743df3efd51dcc28777b36da49b7bf9940beb0ff79e809f
+  args:
+    port: 5555
+    grpcPort: 5554
+    # Valid values: googleca, pkcs11ca, fileca, kmsca, tinkca
+    certificateAuthority: fileca
+    # kms_resource: gcpkms://....
+    # kms_cert_chain: |-
+    #   << your PEM encoded cert chain here. Order from active intermedate first to root last >>
+    # tink_kms_resource: gcp-kms://...
+    # tink_kms_cert_chain: |-
+    #   << your PEM encoded Tink cert chain here. Order from active intermedate first to root last >>
+    # tink_enc_keyset: |-
+    #   << your encrypted Tink keyset >>
+    # Required when certificateAuthority is pkcs11ca
+    hsm_caroot_id:
+    # Optional with pkcs11ca: path to the root CA on disk (AWS CloudHSM)
+    aws_hsm_root_ca_path:
+    gcp_private_ca_parent: projects/test/locations/us-east1/caPools/test
+    ct_log_url: ""
+    ct_log_origin: ""
+    disable_ct_log: false
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    mountToken: true
+  # -- Liveness probe for the fulcio server container. `httpGet.port` should
+  # match `server.args.port`.
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /healthz
+      port: 5555
+      scheme: HTTP
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 1
+  # -- Readiness probe for the fulcio server container. `httpGet.port` should
+  # match `server.args.port`.
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /healthz
+      port: 5555
+      scheme: HTTP
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 1
+  service:
+    type: ClusterIP
+    ports:
+      - name: http
+        port: 80
+        protocol: TCP
+        targetPort: 5555
+      - name: grpc
+        port: 5554
+        protocol: TCP
+        targetPort: 5554
+      - name: 2112-tcp
+        port: 2112
+        protocol: TCP
+        targetPort: 2112
+  ingress:
+    http:
+      enabled: true
+      className: "nginx"
+      annotations: {}
+      hosts:
+      - path: /
+        host: "fulcio.localhost"
+      tls: []
+    grpc:
+      enabled: false
+      className: ""
+      annotations:
+        nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+      hosts:
+        - host: fulcio.localhost
+          path: /dev.sigstore.fulcio.v2.CA
+      tls:
+        - secretName: fulcio-grpc-ingress-tls
+          hosts:
+            - fulcio.localhost
+  ingresses:
+    - enabled: false
+      grpc: true
+      http: true
+      name: "gce-ingress"
+      className: "gce"
+      hosts:
+        - path: /
+          host: fulcio.localhost
+      annotations: {}
+      tls: []
+      staticGlobalIP: lb-ext-ip
+      frontendConfigSpec:   # https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-configuration#configuring_ingress_features_through_frontendconfig_parameters
+        sslPolicy: fulcio-ssl-policy
+        redirectToHttps:
+          enabled: true
+      backendConfigSpec:   # https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-configuration#configuring_ingress_features_through_backendconfig_parameters
+        securityPolicy:
+          name: fulcio-security-policy
+        logging:
+          enable: true
+        healthCheck:
+          port: 5555
+          requestPath: "/healthz"
+          type: HTTP
+  # -- Additional labels to add to the server pod
+  podLabels: {}
+  extraArgs: []
+  extraEnv: []
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65533
+  tolerations: []
+  nodeSelector: {}
+  affinity: {}
+
+neg:
+  http:
+    name: ""
+    port: 80
+  grpc:
+    name: ""
+    port: 5554
+
+createcerts:
+  enabled: true
+  replicaCount: 1
+  name: createcerts
+  image:
+    registry: ghcr.io
+    repository: sigstore/scaffolding/createcerts
+    pullPolicy: IfNotPresent
+    # v0.7.33
+    version: sha256:4d64dac937e26251327f91a26e188131fc8e9f75ee49bd698d662a3c1bf0d19c
+  ttlSecondsAfterFinished: 3600
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    mountToken: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65533
+  annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  tolerations: []
+  nodeSelector: {}
+  affinity: {}
+
+# Configure ctlog dependency
+ctlog:
+  enabled: true
+  name: ctlog
+  forceNamespace: ctlog-system
+  fullnameOverride: ctlog
+  namespace:
+    name: ctlog-system
+    create: true
+  createtree:
+    name: ctlog-createtree
+    fullnameOverride: ctlog-createtree
+  createcerts:
+    name: ctlog-createcerts
+    fullnameOverride: ctlog-createcerts
+  createctconfig:
+    logPrefix: fulcio
+
+# Force namespace of namespaced resources
+forceNamespace: ""

@@ -1,0 +1,25 @@
+---
+# The shared labels component sets `app.kubernetes.io/part-of: template-k8s`
+# on pod template labels (includeTemplates: true) but not on selectors
+# (includeSelectors: false). The Bitnami MySQL chart includes `part-of: mysql`
+# in its StatefulSet and Service selectors, which then no longer match the
+# pod template labels. This patch removes `part-of` from those selectors so
+# they match the (overridden) template labels.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-sigstore
+  namespace: mysql-sigstore
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: null
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-sigstore
+  namespace: mysql-sigstore
+spec:
+  selector:
+    app.kubernetes.io/part-of: null

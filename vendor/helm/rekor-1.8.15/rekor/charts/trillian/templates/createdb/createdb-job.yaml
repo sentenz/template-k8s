@@ -1,0 +1,131 @@
+{{- if .Values.createdb.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "trillian.createdb.fullname" . }}
+{{ include "trillian.namespace" . | indent 2 }}
+  labels:
+    {{- include "trillian.mysql.labels" . | nindent 4 }}
+{{- if .Values.createdb.annotations }}
+  annotations:
+{{ toYaml .Values.createdb.annotations | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.createdb.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ .Values.createdb.ttlSecondsAfterFinished }}
+{{- end }}
+  template:
+    metadata:
+    {{- if .Values.createdb.podAnnotations }}
+      annotations:
+        {{ toYaml .Values.createdb.podAnnotations | nindent 8 }}
+    {{- end }}
+      labels:
+        {{- include "trillian.mysql.labels" . | nindent 8 }}
+        {{- if .Values.createdb.podLabels }}
+        {{ toYaml .Values.createdb.podLabels | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ template "trillian.serviceAccountName.logServer" . }}
+      restartPolicy: Never
+      automountServiceAccountToken: {{ .Values.createdb.serviceAccount.mountToken }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 8 }}
+      {{- end }}
+{{- if .Values.mysql.gcp.enabled }}
+      initContainers:
+{{ include "trillian.cloudSqlProxy.container" (dict "root" . "resources" (.Values.createdb.cloudSqlProxy).resources) | indent 8 }}
+{{- end }}
+      containers:
+        - name: {{ template "trillian.createdb.fullname" . }}
+          image: "{{ template "trillian.image" (dict "image" .Values.createdb.image "global" .Values.global) }}"
+          imagePullPolicy: "{{ .Values.createdb.image.pullPolicy }}"
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "mysql.secretName" . }}
+                  key: mysql-user
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "mysql.secretName" . }}
+                  key: mysql-password
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "mysql.secretName" . }}
+                  key: mysql-database
+            - name: MYSQL_HOSTNAME
+              value: {{ template "mysql.hostname" . }}
+            - name: MYSQL_PORT
+              value: {{ .Values.mysql.port | quote }}
+          {{- with .Values.createdb.extraEnv }}
+            {{- . | toYaml | nindent 12 }}
+          {{- end }}
+          args:
+            - "--db_name=$(MYSQL_DATABASE)"
+            {{- if and (.Values.mysql.gcp.enabled) (.Values.mysql.gcp.cloudsql.unixDomainSocket.enabled) }}
+            {{- if .Values.mysql.gcp.cloudsql.iamUsername }}
+            - {{ printf "--mysql_uri=%s@unix(%s/%s)/" .Values.mysql.gcp.cloudsql.iamUsername .Values.mysql.gcp.cloudsql.unixDomainSocket.path .Values.mysql.gcp.instance | quote }}
+            {{- else }}
+            - {{ printf "--mysql_uri=$(MYSQL_USER):$(MYSQL_PASSWORD)@unix(%s/%s)/" .Values.mysql.gcp.cloudsql.unixDomainSocket.path .Values.mysql.gcp.instance | quote }}
+            {{- end }}
+            {{- else if and (.Values.mysql.gcp.enabled) (.Values.mysql.gcp.cloudsql.iamUsername) }}
+            - {{ printf "--mysql_uri=%s@tcp($(MYSQL_HOSTNAME):$(MYSQL_PORT))/" .Values.mysql.gcp.cloudsql.iamUsername | quote }}
+            {{- else }}
+            - "--mysql_uri=$(MYSQL_USER):$(MYSQL_PASSWORD)@tcp($(MYSQL_HOSTNAME):$(MYSQL_PORT))/"
+            {{- end }}
+            {{- with .Values.createdb.extraArgs }}
+              {{- . | toYaml | nindent 12 }}
+            {{- end }}
+    {{- if or (and .Values.mysql.gcp.enabled .Values.mysql.gcp.cloudsql.unixDomainSocket.enabled) .Values.createdb.extraVolumeMounts }}
+          volumeMounts:
+    {{- if and .Values.mysql.gcp.enabled .Values.mysql.gcp.cloudsql.unixDomainSocket.enabled }}
+            - mountPath: {{ .Values.mysql.gcp.cloudsql.unixDomainSocket.path }}
+              name: cloud-sql-proxy-unix-domain-socket
+    {{- end }}
+            {{- with .Values.createdb.extraVolumeMounts }}
+              {{- . | toYaml | nindent 12 }}
+            {{- end }}
+    {{- end }}
+    {{- if .Values.createdb.resources }}
+          resources:
+{{ toYaml .Values.createdb.resources | indent 12 }}
+    {{- end }}
+    {{- if .Values.createdb.containerSecurityContext }}
+          securityContext:
+{{ toYaml .Values.createdb.containerSecurityContext | indent 12 }}
+    {{- end }}
+    {{- if .Values.createdb.securityContext }}
+      securityContext:
+{{ toYaml .Values.createdb.securityContext | indent 8 }}
+    {{- end }}
+    {{- if or (and .Values.mysql.gcp.enabled .Values.mysql.gcp.cloudsql.unixDomainSocket.enabled) .Values.createdb.extraVolumes }}
+      volumes:
+    {{- if and .Values.mysql.gcp.enabled .Values.mysql.gcp.cloudsql.unixDomainSocket.enabled }}
+        - name: cloud-sql-proxy-unix-domain-socket
+          emptyDir: {}
+    {{- end }}
+      {{- with .Values.createdb.extraVolumes }}
+        {{- . | toYaml | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.createdb.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.createdb.nodeSelector | indent 8 }}
+    {{- end }}
+    {{- if .Values.createdb.tolerations }}
+      tolerations:
+{{ toYaml .Values.createdb.tolerations | indent 8 }}
+    {{- end }}
+    {{- if .Values.createdb.affinity }}
+      affinity:
+{{ toYaml .Values.createdb.affinity | indent 8 }}
+    {{- end }}
+{{- end }}
